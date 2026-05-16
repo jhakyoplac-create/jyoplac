@@ -1,2 +1,1 @@
-# El backend usa solo librerias estandar de Python.
-# Este archivo permite que Render/Railway detecten el proyecto como Python.
+psycopg[binary]==3.2.3

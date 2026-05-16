@@ -52,17 +52,16 @@ Archivos agregados:
 - `render.yaml`
 - `DESPLIEGUE_RENDER.md`
 
-Primera version recomendada:
+Primera version gratis:
 
-- Render Web Service
-- SQLite en disco persistente
-- Variable `DATA_DIR=/var/data`
+- Render Web Service Free
+- PostgreSQL gratis en Supabase o Neon
 - Variable `HOST=0.0.0.0`
+- Variable `DATABASE_URL` con la conexion PostgreSQL
 - Variable `ADMIN_PASSWORD` con una contrasena segura
 
 Siguiente mejora:
 
-- Migrar de SQLite a PostgreSQL.
 - Activar backups automaticos.
 - Usar dominio propio si deseas.
 

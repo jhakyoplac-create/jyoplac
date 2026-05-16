@@ -1,20 +1,20 @@
 # Despliegue en Render
 
-Esta es la forma mas directa de poner el sistema en la nube y acceder desde cualquier laptop con internet.
+Esta es la forma gratis de poner el sistema en la nube y acceder desde cualquier laptop con internet.
 
 ## Importante
 
-Esta primera version en nube usa SQLite con disco persistente de Render.
+Esta version gratis usa:
+
+- Render Free para publicar la web.
+- PostgreSQL gratis externo en Supabase o Neon.
 
 Ventajas:
 
-- Es mas rapido de desplegar.
+- No requiere tarjeta en Render para el servidor web.
 - No depende de una laptop prendida.
 - Todos entran con una URL web.
-
-Limitacion:
-
-- Para un uso mas grande o con muchas sedes, lo ideal despues sera migrar a PostgreSQL.
+- Los datos quedan en PostgreSQL, no en el disco temporal de Render.
 
 ## Archivos ya preparados
 
@@ -27,20 +27,31 @@ El servidor lee:
 
 - `PORT`: puerto que asigna Render.
 - `HOST`: debe ser `0.0.0.0`.
-- `DATA_DIR`: carpeta donde guardar la base.
+- `DATABASE_URL`: conexion de PostgreSQL de Supabase o Neon.
 - `ADMIN_PASSWORD`: contrasena inicial del administrador cuando la base esta vacia.
 
 ## Pasos
 
-1. Crear una cuenta en Render.
-2. Subir este proyecto a GitHub.
+1. Crear una base gratis en Supabase o Neon.
+2. Copiar el connection string PostgreSQL.
 3. En Render elegir `New +` y luego `Blueprint`.
-4. Conectar el repositorio de GitHub.
+4. Conectar el repositorio `jhakyoplac-create/jyoplac`.
 5. Render detectara `render.yaml`.
-6. En la variable `ADMIN_PASSWORD`, colocar una contrasena segura.
-7. Crear el servicio.
-8. Esperar que termine el despliegue.
-9. Abrir la URL publica que Render entregue.
+6. En la variable `DATABASE_URL`, pegar la conexion PostgreSQL.
+7. En la variable `ADMIN_PASSWORD`, colocar una contrasena segura.
+8. Crear el servicio.
+9. Esperar que termine el despliegue.
+10. Abrir la URL publica que Render entregue.
+
+## DATABASE_URL
+
+Debe tener una forma parecida a:
+
+```text
+postgresql://usuario:contrasena@host:puerto/base?sslmode=require
+```
+
+Supabase y Neon entregan este dato en su panel. Si la contrasena tiene simbolos especiales, usa la URL exacta que entrega el proveedor.
 
 ## Primer ingreso
 
@@ -58,13 +69,7 @@ la que colocaste en ADMIN_PASSWORD
 
 ## Respaldo
 
-En esta etapa, la base vive en el disco persistente de Render:
-
-```text
-/var/data/dental.sqlite3
-```
-
-Cuando pasemos a PostgreSQL, los respaldos se podran automatizar mejor.
+La base vive en Supabase o Neon. Desde esos paneles se pueden descargar respaldos o activar opciones de backup segun el plan.
 
 ## Recomendacion de uso
 
@@ -76,4 +81,4 @@ Para probar la nube:
 4. Confirmar que el paciente aparece.
 5. Probar una cita, historial y pago.
 
-Si todo funciona estable, el siguiente paso recomendado sera migrar la base a PostgreSQL.
+Si todo funciona estable, el siguiente paso recomendado sera activar backups automaticos o pasar a un plan pago cuando el consultorio ya lo use todos los dias.

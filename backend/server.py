@@ -12,12 +12,21 @@ import sqlite3
 import time
 import uuid
 
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:
+    psycopg = None
+    dict_row = None
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_DIR = Path(os.environ.get("DATA_DIR", ROOT / "database"))
 DB_PATH = DB_DIR / "dental.sqlite3"
 SCHEMA_PATH = ROOT / "backend" / "schema.sql"
 SESSION_SECONDS = 60 * 60 * 10
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+USE_POSTGRES = bool(DATABASE_URL)
 
 sessions = {}
 
@@ -26,12 +35,43 @@ def now_id(prefix):
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
 
+class CompatConnection:
+    def __init__(self, conn, postgres=False):
+        self.conn = conn
+        self.postgres = postgres
+
+    def __enter__(self):
+        self.conn.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return self.conn.__exit__(exc_type, exc, tb)
+
+    def execute(self, sql, params=None):
+        if self.postgres:
+            sql = sql.replace("?", "%s")
+        return self.conn.execute(sql, params or ())
+
+    def executescript(self, script):
+        if not self.postgres:
+            return self.conn.executescript(script)
+        statements = [statement.strip() for statement in script.split(";") if statement.strip()]
+        for statement in statements:
+            if statement.upper().startswith("PRAGMA "):
+                continue
+            self.execute(statement)
+
+
 def db():
+    if USE_POSTGRES:
+        if psycopg is None:
+            raise RuntimeError("Instala psycopg para usar DATABASE_URL con PostgreSQL.")
+        return CompatConnection(psycopg.connect(DATABASE_URL, row_factory=dict_row), postgres=True)
     DB_DIR.mkdir(exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return CompatConnection(conn)
 
 
 def hash_password(password, salt=None):
@@ -51,6 +91,8 @@ def verify_password(password, stored):
 
 
 def row_to_dict(row):
+    if isinstance(row, dict):
+        return dict(row)
     return {key: row[key] for key in row.keys()}
 
 
@@ -72,7 +114,10 @@ def init_db():
             "generalCashOpening": "0",
             "generalBankOpening": "0",
         }.items():
-            conn.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)", (key, value))
+            conn.execute(
+                "INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
+                (key, value),
+            )
 
 
 def read_json(handler):
@@ -163,7 +208,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return super().do_GET()
 
         if parsed.path == "/api/health":
-            return send_json(self, {"ok": True, "database": str(DB_PATH)})
+            database = "postgresql" if USE_POSTGRES else str(DB_PATH)
+            return send_json(self, {"ok": True, "database": database})
 
         user = require_auth(self)
         if not user:
