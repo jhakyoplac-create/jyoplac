@@ -1,0 +1,667 @@
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
+from urllib.parse import urlparse
+import base64
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import socket
+import sqlite3
+import time
+import uuid
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DB_DIR = Path(os.environ.get("DATA_DIR", ROOT / "database"))
+DB_PATH = DB_DIR / "dental.sqlite3"
+SCHEMA_PATH = ROOT / "backend" / "schema.sql"
+SESSION_SECONDS = 60 * 60 * 10
+
+sessions = {}
+
+
+def now_id(prefix):
+    return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def db():
+    DB_DIR.mkdir(exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def hash_password(password, salt=None):
+    salt = salt or secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 120000)
+    return base64.b64encode(salt + digest).decode("ascii")
+
+
+def verify_password(password, stored):
+    try:
+        raw = base64.b64decode(stored.encode("ascii"))
+        salt, digest = raw[:16], raw[16:]
+        test = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 120000)
+        return hmac.compare_digest(digest, test)
+    except Exception:
+        return False
+
+
+def row_to_dict(row):
+    return {key: row[key] for key in row.keys()}
+
+
+def init_db():
+    with db() as conn:
+        conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        admin = conn.execute("SELECT id FROM users WHERE username = ?", ("admin",)).fetchone()
+        if not admin:
+            admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+            conn.execute(
+                """
+                INSERT INTO users (id, name, username, password_hash, role, active)
+                VALUES (?, ?, ?, ?, ?, 1)
+                """,
+                ("u-admin", "Administrador principal", "admin", hash_password(admin_password), "ADMIN"),
+            )
+        for key, value in {
+            "clinicName": "CM Odontologia Estetica",
+            "generalCashOpening": "0",
+            "generalBankOpening": "0",
+        }.items():
+            conn.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)", (key, value))
+
+
+def read_json(handler):
+    length = int(handler.headers.get("Content-Length", "0") or 0)
+    if not length:
+        return {}
+    return json.loads(handler.rfile.read(length).decode("utf-8"))
+
+
+def send_json(handler, payload, status=200):
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def auth_user(handler):
+    token = handler.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    session = sessions.get(token)
+    if not session or session["expires"] < time.time():
+        return None
+    with db() as conn:
+      user = conn.execute("SELECT id, name, username, role, active FROM users WHERE id = ? AND active = 1", (session["user_id"],)).fetchone()
+      return row_to_dict(user) if user else None
+
+
+def require_auth(handler):
+    user = auth_user(handler)
+    if not user:
+        send_json(handler, {"error": "No autorizado"}, 401)
+        return None
+    return user
+
+
+def require_role(handler, roles):
+    user = require_auth(handler)
+    if not user:
+        return None
+    if user["role"] not in roles:
+        send_json(handler, {"error": "No tienes permiso para esta accion"}, 403)
+        return None
+    return user
+
+
+def list_table(table, order="created_at DESC"):
+    with db() as conn:
+        return [row_to_dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()]
+
+
+def list_users():
+    with db() as conn:
+        return [
+            row_to_dict(row)
+            for row in conn.execute(
+                "SELECT id, name, username, role, active, created_at, updated_at FROM users ORDER BY name ASC"
+            ).fetchall()
+        ]
+
+
+def app_config():
+    with db() as conn:
+        return {row["key"]: row["value"] for row in conn.execute("SELECT key, value FROM app_config").fetchall()}
+
+
+def set_config(values):
+    with db() as conn:
+        for key, value in values.items():
+            if isinstance(value, (list, dict)):
+                value = json.dumps(value, ensure_ascii=False)
+            conn.execute(
+                "INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, str(value)),
+            )
+
+
+class DentalHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(ROOT), **kwargs)
+
+    def log_message(self, fmt, *args):
+        print(f"[Dental] {self.address_string()} - {fmt % args}")
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if not parsed.path.startswith("/api/"):
+            return super().do_GET()
+
+        if parsed.path == "/api/health":
+            return send_json(self, {"ok": True, "database": str(DB_PATH)})
+
+        user = require_auth(self)
+        if not user:
+            return
+
+        if parsed.path == "/api/me":
+            return send_json(self, {"user": user})
+        if parsed.path == "/api/bootstrap":
+            return send_json(self, {
+                "user": user,
+                "patients": list_table("patients", "name ASC"),
+                "appointments": list_table("appointments", "date DESC, time DESC"),
+                "clinicalHistory": list_table("clinical_history", "date DESC"),
+                "treatments": list_table("treatments", "created_at DESC"),
+                "odontogram": list_table("odontogram", "patient_id ASC, tooth ASC"),
+                "payments": list_table("payments", "date DESC, created_at DESC"),
+                "expenses": list_table("expenses", "date DESC, created_at DESC"),
+                "cashSessions": list_table("cash_sessions", "date DESC"),
+                "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
+                "users": list_users() if user["role"] == "ADMIN" else [],
+                "config": app_config(),
+            })
+        if parsed.path == "/api/patients":
+            return send_json(self, {"patients": list_table("patients", "name ASC")})
+        if parsed.path == "/api/appointments":
+            return send_json(self, {"appointments": list_table("appointments", "date DESC, time DESC")})
+        if parsed.path == "/api/clinical-history":
+            return send_json(self, {"clinicalHistory": list_table("clinical_history", "date DESC, created_at DESC")})
+        if parsed.path == "/api/treatments":
+            return send_json(self, {"treatments": list_table("treatments", "created_at DESC")})
+        if parsed.path == "/api/odontogram":
+            return send_json(self, {"odontogram": list_table("odontogram", "patient_id ASC, tooth ASC")})
+        if parsed.path == "/api/payments":
+            return send_json(self, {"payments": list_table("payments", "date DESC, created_at DESC")})
+        if parsed.path == "/api/expenses":
+            return send_json(self, {"expenses": list_table("expenses", "date DESC, created_at DESC")})
+        if parsed.path == "/api/cash-sessions":
+            return send_json(self, {"cashSessions": list_table("cash_sessions", "date DESC")})
+        if parsed.path == "/api/users":
+            if not require_role(self, {"ADMIN"}):
+                return
+            return send_json(self, {"users": list_users()})
+
+        send_json(self, {"error": "Ruta no encontrada"}, 404)
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if not parsed.path.startswith("/api/"):
+            return send_json(self, {"error": "Ruta no encontrada"}, 404)
+
+        if parsed.path == "/api/login":
+            data = read_json(self)
+            username = str(data.get("username", "")).strip()
+            password = str(data.get("password", ""))
+            with db() as conn:
+                row = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?) AND active = 1", (username,)).fetchone()
+            if not row or not verify_password(password, row["password_hash"]):
+                return send_json(self, {"error": "Usuario o contraseña incorrectos"}, 401)
+            token = secrets.token_urlsafe(32)
+            sessions[token] = {"user_id": row["id"], "expires": time.time() + SESSION_SECONDS}
+            return send_json(self, {
+                "token": token,
+                "user": {"id": row["id"], "name": row["name"], "username": row["username"], "role": row["role"], "active": row["active"]},
+            })
+
+        if parsed.path == "/api/logout":
+            token = self.headers.get("Authorization", "").replace("Bearer ", "").strip()
+            sessions.pop(token, None)
+            return send_json(self, {"ok": True})
+
+        if parsed.path == "/api/users":
+            if not require_role(self, {"ADMIN"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("user")
+            password = str(data.get("password") or "")
+            with db() as conn:
+                existing = conn.execute("SELECT id, password_hash FROM users WHERE id = ?", (item_id,)).fetchone()
+                if not existing and not password:
+                    return send_json(self, {"error": "Ingresa una contrasena para crear el usuario."}, 400)
+                password_hash = hash_password(password) if password else existing["password_hash"]
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO users (id, name, username, password_hash, role, active)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                          name=excluded.name, username=excluded.username,
+                          password_hash=excluded.password_hash, role=excluded.role,
+                          active=excluded.active, updated_at=CURRENT_TIMESTAMP
+                        """,
+                        (
+                            item_id,
+                            data["name"].strip(),
+                            data["username"].strip(),
+                            password_hash,
+                            data["role"],
+                            1 if data.get("active", True) else 0,
+                        ),
+                    )
+                except sqlite3.IntegrityError:
+                    return send_json(self, {"error": "Ese nombre de usuario ya existe."}, 409)
+            return send_json(self, {"ok": True, "id": item_id})
+
+        user = require_auth(self)
+        if not user:
+            return
+
+        if parsed.path == "/api/patients":
+            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            if data.get("delete"):
+                if not require_role(self, {"ADMIN", "RECEPCION"}):
+                    return
+                item_id = data.get("id")
+                if not item_id:
+                    return send_json(self, {"error": "Paciente no indicado."}, 400)
+                with db() as conn:
+                    row = conn.execute("SELECT id FROM patients WHERE id = ?", (item_id,)).fetchone()
+                    if not row:
+                        return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                    conn.execute("DELETE FROM patients WHERE id = ?", (item_id,))
+                return send_json(self, {"ok": True, "id": item_id})
+            item_id = data.get("id") or now_id("p")
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO patients (id, dni, name, phone, doctor, main_treatment, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      dni=excluded.dni, name=excluded.name, phone=excluded.phone,
+                      doctor=excluded.doctor, main_treatment=excluded.main_treatment,
+                      notes=excluded.notes, updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (item_id, data["dni"], data["name"].upper(), data.get("phone", ""), data.get("doctor", ""), data.get("mainTreatment", ""), data.get("notes", "")),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/appointments":
+            if not require_role(self, {"ADMIN", "RECEPCION"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("appt")
+            with db() as conn:
+                conflict_unit = conn.execute(
+                    "SELECT id FROM appointments WHERE date=? AND time=? AND unit=? AND id<>?",
+                    (data["date"], data["time"], data["unit"], item_id),
+                ).fetchone()
+                conflict_doctor = conn.execute(
+                    "SELECT id FROM appointments WHERE date=? AND time=? AND doctor=? AND id<>?",
+                    (data["date"], data["time"], data["doctor"], item_id),
+                ).fetchone()
+                if conflict_unit:
+                    return send_json(self, {"error": "La unidad ya esta ocupada en esa hora."}, 409)
+                if conflict_doctor:
+                    return send_json(self, {"error": "El doctor ya tiene una cita en esa hora."}, 409)
+                conn.execute(
+                    """
+                    INSERT INTO appointments (id, date, time, unit, doctor, patient_id, service, duration, status, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      date=excluded.date, time=excluded.time, unit=excluded.unit,
+                      doctor=excluded.doctor, patient_id=excluded.patient_id,
+                      service=excluded.service, duration=excluded.duration,
+                      status=excluded.status, notes=excluded.notes,
+                      updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (item_id, data["date"], data["time"], data["unit"], data["doctor"], data["patientId"], data["service"], data.get("duration"), data["status"], data.get("notes", "")),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/clinical-history":
+            if not require_role(self, {"ADMIN", "DOCTOR"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("hist")
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO clinical_history (
+                      id, patient_id, date, attended_by, attended, reason, anamnesis,
+                      exam, diagnosis, plan, procedure_done, instructions, agreed_price
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      patient_id=excluded.patient_id, date=excluded.date,
+                      attended_by=excluded.attended_by, attended=excluded.attended,
+                      reason=excluded.reason, anamnesis=excluded.anamnesis,
+                      exam=excluded.exam, diagnosis=excluded.diagnosis,
+                      plan=excluded.plan, procedure_done=excluded.procedure_done,
+                      instructions=excluded.instructions, agreed_price=excluded.agreed_price,
+                      updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (
+                        item_id,
+                        data["patientId"],
+                        data["date"],
+                        data["attendedBy"],
+                        1 if data.get("attended", True) else 0,
+                        data.get("reason", ""),
+                        data.get("anamnesis", ""),
+                        data.get("exam", ""),
+                        data.get("diagnosis", ""),
+                        data.get("plan", ""),
+                        data.get("procedure", ""),
+                        data.get("instructions", ""),
+                        float(data.get("agreedPrice") or 0),
+                    ),
+                )
+                if data.get("attended", True):
+                    conn.execute(
+                        """
+                        UPDATE appointments
+                        SET status = 'ATENDIDA', updated_at = CURRENT_TIMESTAMP
+                        WHERE patient_id = ? AND date = ?
+                        """,
+                        (data["patientId"], data["date"]),
+                    )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/treatments":
+            if not require_role(self, {"ADMIN", "DOCTOR"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("t")
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO treatments (id, patient_id, service, teeth, budget, status, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      patient_id=excluded.patient_id, service=excluded.service,
+                      teeth=excluded.teeth, budget=excluded.budget,
+                      status=excluded.status, notes=excluded.notes,
+                      updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (
+                        item_id,
+                        data["patientId"],
+                        data["service"],
+                        data.get("teeth", ""),
+                        float(data.get("budget") or 0),
+                        data["status"],
+                        data.get("notes", ""),
+                    ),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/odontogram":
+            if not require_role(self, {"ADMIN", "DOCTOR"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("odo")
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO odontogram (id, patient_id, tooth, condition, note)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(patient_id, tooth) DO UPDATE SET
+                      condition=excluded.condition, note=excluded.note,
+                      updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (
+                        item_id,
+                        data["patientId"],
+                        data["tooth"],
+                        data["condition"],
+                        data.get("note", ""),
+                    ),
+                )
+                row = conn.execute(
+                    "SELECT id FROM odontogram WHERE patient_id=? AND tooth=?",
+                    (data["patientId"], data["tooth"]),
+                ).fetchone()
+            return send_json(self, {"ok": True, "id": row["id"] if row else item_id})
+
+        if parsed.path == "/api/payments":
+            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("pay")
+            amount = float(data.get("amount") or 0)
+            cash_received = float(data.get("cashReceived") or amount)
+            with db() as conn:
+                history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (data.get("historyId"),)).fetchone()
+                if not history:
+                    return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
+                paid = conn.execute(
+                    "SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
+                    (data.get("historyId"), item_id),
+                ).fetchone()["total"]
+                due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
+                if amount <= 0 or amount > due:
+                    return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
+                conn.execute(
+                    """
+                    INSERT INTO payments (
+                      id, patient_id, history_id, date, amount, cash_received,
+                      change_amount, method, receipt, closed
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      patient_id=excluded.patient_id, history_id=excluded.history_id,
+                      date=excluded.date, amount=excluded.amount,
+                      cash_received=excluded.cash_received,
+                      change_amount=excluded.change_amount,
+                      method=excluded.method, receipt=excluded.receipt,
+                      closed=excluded.closed
+                    """,
+                    (
+                        item_id,
+                        data["patientId"],
+                        data.get("historyId"),
+                        data["date"],
+                        amount,
+                        cash_received,
+                        max(0, cash_received - amount),
+                        data["method"],
+                        data.get("receipt", ""),
+                        1 if data.get("closed") else 0,
+                    ),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/expenses":
+            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("exp")
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO expenses (
+                      id, date, detail, amount, method, source, receipt,
+                      category, person, type, closed
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      date=excluded.date, detail=excluded.detail, amount=excluded.amount,
+                      method=excluded.method, source=excluded.source, receipt=excluded.receipt,
+                      category=excluded.category, person=excluded.person, type=excluded.type,
+                      closed=excluded.closed
+                    """,
+                    (
+                        item_id,
+                        data["date"],
+                        data["detail"],
+                        float(data.get("amount") or 0),
+                        data["method"],
+                        data["source"],
+                        data.get("receipt", ""),
+                        data.get("category", ""),
+                        data.get("person", ""),
+                        data.get("type", ""),
+                        1 if data.get("closed") else 0,
+                    ),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/petty-cash":
+            if not require_role(self, {"ADMIN", "DOCTOR"}):
+                return
+            data = read_json(self)
+            amount = float(data.get("amount") or 0)
+            date = data.get("date")
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO petty_cash_allocations (id, date, amount)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(date) DO UPDATE SET amount=excluded.amount, updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (data.get("id") or now_id("petty"), date, amount),
+                )
+                session = conn.execute("SELECT id FROM cash_sessions WHERE date=? AND closed_at IS NULL", (date,)).fetchone()
+                if session:
+                    conn.execute("UPDATE cash_sessions SET opening_cash=? WHERE id=?", (amount, session["id"]))
+            return send_json(self, {"ok": True})
+
+        if parsed.path == "/api/config":
+            if not require_role(self, {"ADMIN"}):
+                return
+            data = read_json(self)
+            values = {}
+            if "generalCashOpening" in data:
+                values["generalCashOpening"] = data["generalCashOpening"]
+            if "generalBankOpening" in data:
+                values["generalBankOpening"] = data["generalBankOpening"]
+            if "clinicName" in data:
+                values["clinicName"] = data["clinicName"]
+            for key in ["start", "end", "interval", "inactiveDays", "whatsapp", "doctors", "units"]:
+                if key in data:
+                    values[key] = data[key]
+            set_config(values)
+            return send_json(self, {"ok": True})
+
+        if parsed.path == "/api/reset-operational":
+            if not require_role(self, {"ADMIN"}):
+                return
+            with db() as conn:
+                for table in [
+                    "payments",
+                    "expenses",
+                    "cash_sessions",
+                    "petty_cash_allocations",
+                    "odontogram",
+                    "treatments",
+                    "clinical_history",
+                    "appointments",
+                    "patients",
+                ]:
+                    conn.execute(f"DELETE FROM {table}")
+                conn.execute(
+                    "INSERT INTO app_config (key, value) VALUES ('generalCashOpening', '0') ON CONFLICT(key) DO UPDATE SET value='0'"
+                )
+                conn.execute(
+                    "INSERT INTO app_config (key, value) VALUES ('generalBankOpening', '0') ON CONFLICT(key) DO UPDATE SET value='0'"
+                )
+            return send_json(self, {"ok": True})
+
+        if parsed.path == "/api/cash/open":
+            if not require_role(self, {"ADMIN", "RECEPCION"}):
+                return
+            data = read_json(self)
+            date = data.get("date")
+            opening_cash = float(data.get("openingCash") or 0)
+            with db() as conn:
+                existing = conn.execute("SELECT id FROM cash_sessions WHERE date=? AND closed_at IS NULL", (date,)).fetchone()
+                if existing:
+                    return send_json(self, {"error": "La caja del dia ya esta abierta."}, 409)
+                item_id = data.get("id") or now_id("cash")
+                conn.execute(
+                    """
+                    INSERT INTO cash_sessions (id, date, opening_cash, opened_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (item_id, date, opening_cash, data.get("openedAt") or time.strftime("%Y-%m-%dT%H:%M:%S")),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/cash/close":
+            if not require_role(self, {"ADMIN", "RECEPCION"}):
+                return
+            data = read_json(self)
+            date = data.get("date")
+            closing_cash = float(data.get("closingCash") or 0)
+            with db() as conn:
+                session = conn.execute("SELECT * FROM cash_sessions WHERE date=? AND closed_at IS NULL", (date,)).fetchone()
+                if not session:
+                    return send_json(self, {"error": "Primero abre la caja del dia."}, 400)
+                income = conn.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE date=? AND closed=0", (date,)).fetchone()["total"]
+                expenses = conn.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date=? AND closed=0 AND source <> 'CAJA_GENERAL'", (date,)).fetchone()["total"]
+                expected = float(session["opening_cash"] or 0) + float(income or 0) - float(expenses or 0)
+                difference = closing_cash - expected
+                conn.execute(
+                    """
+                    UPDATE cash_sessions
+                    SET closing_cash=?, difference=?, income_total=?, expense_total=?, closed_at=?
+                    WHERE id=?
+                    """,
+                    (closing_cash, difference, income, expenses, data.get("closedAt") or time.strftime("%Y-%m-%dT%H:%M:%S"), session["id"]),
+                )
+                conn.execute("UPDATE payments SET closed=1 WHERE date=?", (date,))
+                conn.execute("UPDATE expenses SET closed=1 WHERE date=?", (date,))
+                conn.execute(
+                    """
+                    INSERT INTO petty_cash_allocations (id, date, amount)
+                    VALUES (?, ?, 0)
+                    ON CONFLICT(date) DO UPDATE SET amount=0, updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (now_id("petty"), date),
+                )
+            return send_json(self, {"ok": True, "difference": difference})
+
+        send_json(self, {"error": "Ruta no encontrada"}, 404)
+
+
+def main():
+    init_db()
+    port = int(os.environ.get("PORT", "8787"))
+    host = os.environ.get("HOST") or ("0.0.0.0" if os.environ.get("RENDER") or os.environ.get("RAILWAY_ENVIRONMENT") else "127.0.0.1")
+    server = ThreadingHTTPServer((host, port), DentalHandler)
+    print(f"Sistema dental con base de datos: http://127.0.0.1:{port}/index.html")
+    if host in {"0.0.0.0", ""}:
+        print(f"Acceso desde otras laptops: http://{local_ip()}:{port}/index.html")
+    print(f"Base de datos: {DB_PATH}")
+    server.serve_forever()
+
+
+def local_ip():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except OSError:
+        return socket.gethostbyname(socket.gethostname())
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,2387 @@
+const STORAGE_KEY = "cm-dental-system-v3";
+const API_TOKEN_KEY = `${STORAGE_KEY}-api-token`;
+const API_ENABLED = location.protocol === "http:" || location.protocol === "https:";
+
+const seedData = {
+  config: {
+    clinicName: "CM Odontologia Estetica",
+    start: "09:00",
+    end: "20:00",
+    interval: 30,
+    lunchStart: "13:00",
+    lunchEnd: "15:00",
+    inactiveDays: 30,
+    whatsapp: "930914176",
+    doctors: ["Carlos", "Maghy", "Tercero (por contratar)"],
+    units: ["Unidad 1", "Unidad 2"],
+    statuses: ["RESERVADA", "CONFIRMADA", "EN_ATENCION", "ATENDIDA", "NO_ASISTIO", "CANCELADA", "REPROGRAMADA"],
+    paymentMethods: ["EFECTIVO", "YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"],
+    treatmentStatuses: ["PRESUPUESTADO", "EN_PROCESO", "TERMINADO", "PAUSADO"],
+    expenseSources: ["INGRESO_DEL_DIA", "CAJA_CHICA", "CAJA_GENERAL"],
+    staffPaymentTypes: ["DOCTOR", "ASISTENTE", "DOCTOR_EXTERNO", "CONTADOR", "LABORATORIO", "OTRO"],
+    generalCashOpening: 9000,
+    generalBankOpening: 10000
+  },
+  services: [
+    { name: "Consulta", category: "General", duration: 20, price: 30, active: true },
+    { name: "Evaluacion", category: "General", duration: 30, price: 0, active: true },
+    { name: "Profilaxis / Limpieza", category: "Periodoncia", duration: 30, price: 50, active: true },
+    { name: "Destartraje / Limpieza General", category: "Periodoncia", duration: 60, price: 80, active: true },
+    { name: "Frenectomia", category: "Periodoncia", duration: 60, price: 400, active: true },
+    { name: "Gingivectomia", category: "Periodoncia", duration: 60, price: 300, active: true },
+    { name: "Instalacion de Brackets Orthodontic", category: "Ortodoncia", duration: 90, price: 300, active: true },
+    { name: "Instalacion de Brackets Orthometric", category: "Ortodoncia", duration: 90, price: 400, active: true },
+    { name: "Instalacion de Brackets Morelli", category: "Ortodoncia", duration: 90, price: 500, active: true },
+    { name: "Instalacion de Brackets Mor / autoliga", category: "Ortodoncia", duration: 90, price: 1000, active: true },
+    { name: "Instalacion de Brackets Zafiro", category: "Ortodoncia", duration: 90, price: 2000, active: true },
+    { name: "Control de Ortodoncia", category: "Ortodoncia", duration: 30, price: 80, active: true },
+    { name: "Endodoncia", category: "Endodoncia", duration: 60, price: 600, active: true },
+    { name: "Curaciones Simples", category: "Operatoria", duration: 30, price: 40, active: true },
+    { name: "Curaciones Compuestas", category: "Operatoria", duration: 60, price: 60, active: true },
+    { name: "Restauraciones Esteticas", category: "Operatoria", duration: 60, price: 90, active: true },
+    { name: "Carillas de Resinas", category: "Operatoria", duration: 60, price: 150, active: true },
+    { name: "Carillas de Ceramicas", category: "Operatoria", duration: 90, price: 900, active: true },
+    { name: "Perno Dental", category: "Rehabilitacion Oral", duration: 60, price: 150, active: true },
+    { name: "PPR Removible", category: "Rehabilitacion Oral", duration: 30, price: 500, active: true },
+    { name: "Corona Zirconio", category: "Rehabilitacion Oral", duration: 30, price: 900, active: true },
+    { name: "Corona Porcelana", category: "Rehabilitacion Oral", duration: 30, price: 500, active: true },
+    { name: "Extraccion Simple", category: "Cirugia", duration: 30, price: 50, active: true },
+    { name: "Extraccion Tercer Molar", category: "Cirugia", duration: 30, price: 300, active: true }
+  ],
+  patients: [
+    { id: "p1", dni: "00831463", name: "BRISSA CORDOVA VILCA", phone: "980420884", doctor: "Maghy", mainTreatment: "Control de Ortodoncia", createdAt: "2026-05-06", notes: "" },
+    { id: "p2", dni: "41097373", name: "MIRIAN CUBAS", phone: "916082948", doctor: "Maghy", mainTreatment: "Consulta", createdAt: "2026-05-06", notes: "" },
+    { id: "p3", dni: "NIÑO", name: "LIAM CUBAS", phone: "916082948", doctor: "Maghy", mainTreatment: "Consulta", createdAt: "2026-05-06", notes: "" },
+    { id: "p4", dni: "75713685", name: "JADI CRUZ TINEO", phone: "927361283", doctor: "Maghy", mainTreatment: "Control de Ortodoncia", createdAt: "2026-05-06", notes: "" },
+    { id: "p5", dni: "61098463", name: "ALEXANDRA LOPEZ", phone: "983829630", doctor: "Carlos", mainTreatment: "Control de Ortodoncia", createdAt: "2026-05-06", notes: "" },
+    { id: "p6", dni: "60160195", name: "JUAN GARCIA", phone: "999761941", doctor: "Maghy", mainTreatment: "Control de Ortodoncia", createdAt: "2026-05-06", notes: "" },
+    { id: "p7", dni: "00000001", name: "PIERO NEIRA PERALTA", phone: "999111222", doctor: "Carlos", mainTreatment: "Evaluacion", createdAt: "2026-05-09", notes: "" },
+    { id: "p8", dni: "00000002", name: "PAOLA ROJAS", phone: "988222333", doctor: "Carlos", mainTreatment: "Control de Ortodoncia", createdAt: "2026-05-10", notes: "" }
+  ],
+  appointments: [
+    { id: "CI-000001", date: "2026-06-06", time: "10:00", unit: "Unidad 1", doctor: "Maghy", patientId: "p1", service: "Control de Ortodoncia", status: "CONFIRMADA", notes: "" },
+    { id: "CI-000002", date: "2026-06-05", time: "03:00", unit: "Unidad 1", doctor: "Maghy", patientId: "p1", service: "Control de Ortodoncia", status: "ATENDIDA", notes: "" },
+    { id: "CI-000003", date: "2026-05-09", time: "12:00", unit: "Unidad 2", doctor: "Carlos", patientId: "p7", service: "Evaluacion", status: "RESERVADA", notes: "" },
+    { id: "CI-000004", date: "2026-06-06", time: "10:00", unit: "Unidad 2", doctor: "Carlos", patientId: "p8", service: "Control de Ortodoncia", status: "CONFIRMADA", notes: "" },
+    { id: "CI-000005", date: "2026-05-15", time: "09:30", unit: "Unidad 1", doctor: "Carlos", patientId: "p5", service: "Control de Ortodoncia", status: "CONFIRMADA", notes: "" },
+    { id: "CI-000006", date: "2026-05-15", time: "11:00", unit: "Unidad 2", doctor: "Maghy", patientId: "p2", service: "Consulta", status: "RESERVADA", notes: "" }
+  ],
+  treatments: [
+    { id: "t1", patientId: "p1", service: "Control de Ortodoncia", teeth: "General", budget: 800, status: "EN_PROCESO", notes: "Control mensual de brackets.", createdAt: "2026-05-06" },
+    { id: "t2", patientId: "p5", service: "Control de Ortodoncia", teeth: "General", budget: 800, status: "EN_PROCESO", notes: "", createdAt: "2026-05-06" },
+    { id: "t3", patientId: "p2", service: "Consulta", teeth: "", budget: 30, status: "PRESUPUESTADO", notes: "Evaluar plan integral.", createdAt: "2026-05-06" }
+  ],
+  payments: [
+    { id: "pay1", patientId: "p1", historyId: "h1", date: "2026-05-15", amount: 80, cashReceived: 100, change: 20, method: "YAPE", receipt: "Control mayo" },
+    { id: "pay2", patientId: "p5", historyId: "", date: "2026-05-15", amount: 80, cashReceived: 80, change: 0, method: "EFECTIVO", receipt: "Control mayo" }
+  ],
+  clinicalHistory: [
+    { id: "h1", patientId: "p1", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Control de ortodoncia", anamnesis: "Sin cambios relevantes.", exam: "Higiene regular.", diagnosis: "Evolucion favorable", plan: "Continuar controles.", procedure: "Cambio de ligas y revision de brackets.", instructions: "Mantener higiene y volver en 30 dias.", agreedPrice: 80 },
+    { id: "h2", patientId: "p2", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Consulta inicial", anamnesis: "Niega alergias.", exam: "Evaluacion intraoral inicial.", diagnosis: "Evaluacion pendiente", plan: "Solicitar radiografia.", procedure: "Revision clinica general.", instructions: "Tomar radiografia panoramica.", agreedPrice: 50 }
+  ],
+  odontogram: [
+    { patientId: "p1", tooth: "11", condition: "Obturado", note: "Control ortodontico" },
+    { patientId: "p1", tooth: "26", condition: "Cariado", note: "Revisar restauracion" },
+    { patientId: "p2", tooth: "36", condition: "Cariado", note: "Programar curacion" }
+  ],
+  cashSessions: [],
+  dailyClosures: [],
+  expenses: [],
+  pettyCashAllocations: [],
+  users: [
+    { id: "u-admin", name: "Administrador principal", username: "admin", password: "admin123", role: "ADMIN", active: true }
+  ]
+};
+
+const odontogramRows = [
+  { label: "Superior derecha", teeth: ["18", "17", "16", "15", "14", "13", "12", "11"] },
+  { label: "Superior izquierda", teeth: ["21", "22", "23", "24", "25", "26", "27", "28"] },
+  { label: "Inferior derecha", teeth: ["48", "47", "46", "45", "44", "43", "42", "41"] },
+  { label: "Inferior izquierda", teeth: ["31", "32", "33", "34", "35", "36", "37", "38"] }
+];
+const teeth = odontogramRows.flatMap((row) => row.teeth);
+const toothConditions = ["Sano", "Cariado", "Obturado", "Perdido", "Ausente", "Por extraer", "Extraido", "Corona", "Endodoncia", "Implante", "Sellante", "Observacion"];
+
+let state = loadState();
+let currentView = "dashboard";
+let currentUserId = localStorage.getItem(`${STORAGE_KEY}-current-user`) || "";
+let apiToken = localStorage.getItem(API_TOKEN_KEY) || "";
+let apiUser = null;
+let apiBootstrapped = false;
+let apiRefreshing = false;
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+
+function loadState() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return normalizeState(structuredClone(seedData));
+  try {
+    const base = structuredClone(seedData);
+    const parsed = JSON.parse(saved);
+    const merged = { ...base, ...parsed, config: { ...base.config, ...(parsed.config || {}) } };
+    for (const key of ["services", "patients", "appointments", "treatments", "payments", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "pettyCashAllocations", "users"]) {
+      if (!Array.isArray(merged[key])) merged[key] = base[key];
+    }
+    return normalizeState(merged);
+  } catch {
+    return normalizeState(structuredClone(seedData));
+  }
+}
+
+function normalizeState(data) {
+  const defaults = seedData.config;
+  data.config = { ...defaults, ...(data.config || {}) };
+  if (!Array.isArray(data.config.doctors) || !data.config.doctors.filter(Boolean).length) data.config.doctors = [...defaults.doctors];
+  if (!Array.isArray(data.config.units) || !data.config.units.filter(Boolean).length) data.config.units = [...defaults.units];
+  if (!Array.isArray(data.config.statuses) || !data.config.statuses.filter(Boolean).length) data.config.statuses = [...defaults.statuses];
+  if (!Array.isArray(data.config.paymentMethods) || !data.config.paymentMethods.filter(Boolean).length) data.config.paymentMethods = [...defaults.paymentMethods];
+  if (!Array.isArray(data.config.treatmentStatuses) || !data.config.treatmentStatuses.filter(Boolean).length) data.config.treatmentStatuses = [...defaults.treatmentStatuses];
+  if (!Array.isArray(data.config.expenseSources) || !data.config.expenseSources.filter(Boolean).length) data.config.expenseSources = [...defaults.expenseSources];
+  if (!Array.isArray(data.config.staffPaymentTypes) || !data.config.staffPaymentTypes.filter(Boolean).length) data.config.staffPaymentTypes = [...defaults.staffPaymentTypes];
+  data.config.doctors = data.config.doctors.map((item) => String(item).trim()).filter(Boolean);
+  data.config.units = data.config.units.map((item) => String(item).trim()).filter(Boolean);
+  data.config.staffPaymentTypes = data.config.staffPaymentTypes.map((item) => String(item).trim()).filter(Boolean);
+  data.config.start = validTime(data.config.start) ? data.config.start : defaults.start;
+  data.config.end = validTime(data.config.end) ? data.config.end : defaults.end;
+  data.config.lunchStart = validTime(data.config.lunchStart) ? data.config.lunchStart : defaults.lunchStart;
+  data.config.lunchEnd = validTime(data.config.lunchEnd) ? data.config.lunchEnd : defaults.lunchEnd;
+  data.config.interval = Number(data.config.interval) > 0 ? Number(data.config.interval) : defaults.interval;
+  data.config.inactiveDays = Number(data.config.inactiveDays) > 0 ? Number(data.config.inactiveDays) : defaults.inactiveDays;
+  data.config.generalCashOpening = Number(data.config.generalCashOpening ?? defaults.generalCashOpening);
+  data.config.generalBankOpening = Number(data.config.generalBankOpening ?? defaults.generalBankOpening);
+  if (!Array.isArray(data.users) || !data.users.length) data.users = structuredClone(seedData.users);
+  if (!Array.isArray(data.pettyCashAllocations)) data.pettyCashAllocations = [];
+  data.users = data.users.map((user, index) => ({
+    id: user.id || uid("user"),
+    name: String(user.name || user.username || `Usuario ${index + 1}`).trim(),
+    username: String(user.username || "").trim(),
+    password: String(user.password || ""),
+    role: ["ADMIN", "DOCTOR", "RECEPCION"].includes(user.role) ? user.role : "RECEPCION",
+    active: user.active !== false
+  })).filter((user) => user.username);
+  return data;
+}
+
+function validTime(value) {
+  return typeof value === "string" && /^\d{2}:\d{2}$/.test(value);
+}
+
+function saveState() {
+  state = normalizeState(state);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+async function apiFetch(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+      ...(options.headers || {})
+    }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "No se pudo conectar con el servidor.");
+  return payload;
+}
+
+function mapApiPatient(row) {
+  return {
+    id: row.id,
+    dni: row.dni,
+    name: row.name,
+    phone: row.phone || "",
+    doctor: row.doctor || "",
+    mainTreatment: row.main_treatment || row.mainTreatment || "",
+    notes: row.notes || "",
+    createdAt: (row.created_at || "").slice(0, 10)
+  };
+}
+
+function mapApiAppointment(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    time: row.time,
+    unit: row.unit,
+    doctor: row.doctor,
+    patientId: row.patient_id || row.patientId,
+    service: row.service,
+    duration: row.duration,
+    status: row.status,
+    notes: row.notes || ""
+  };
+}
+
+function mapApiClinicalHistory(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id || row.patientId,
+    date: row.date,
+    attendedBy: row.attended_by || row.attendedBy || "",
+    attended: Boolean(row.attended),
+    reason: row.reason || "",
+    anamnesis: row.anamnesis || "",
+    exam: row.exam || "",
+    diagnosis: row.diagnosis || "",
+    plan: row.plan || "",
+    procedure: row.procedure_done || row.procedure || "",
+    instructions: row.instructions || "",
+    agreedPrice: Number(row.agreed_price ?? row.agreedPrice ?? 0)
+  };
+}
+
+function mapApiTreatment(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id || row.patientId,
+    service: row.service || "",
+    teeth: row.teeth || "",
+    budget: Number(row.budget || 0),
+    status: row.status || "",
+    notes: row.notes || "",
+    createdAt: (row.created_at || row.createdAt || "").slice(0, 10)
+  };
+}
+
+function mapApiOdontogram(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id || row.patientId,
+    tooth: row.tooth,
+    condition: row.condition || "Sano",
+    note: row.note || ""
+  };
+}
+
+function mapApiPayment(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id || row.patientId,
+    historyId: row.history_id || row.historyId || "",
+    date: row.date,
+    amount: Number(row.amount || 0),
+    cashReceived: Number(row.cash_received ?? row.cashReceived ?? 0),
+    change: Number(row.change_amount ?? row.change ?? 0),
+    method: row.method,
+    receipt: row.receipt || "",
+    closed: Boolean(row.closed)
+  };
+}
+
+function mapApiExpense(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    detail: row.detail || "",
+    amount: Number(row.amount || 0),
+    method: row.method || "",
+    source: row.source || "",
+    receipt: row.receipt || "",
+    category: row.category || "",
+    person: row.person || "",
+    type: row.type || "",
+    closed: Boolean(row.closed)
+  };
+}
+
+function mapApiCashSession(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    openingCash: Number(row.opening_cash ?? row.openingCash ?? 0),
+    openedAt: row.opened_at || row.openedAt || "",
+    closedAt: row.closed_at || row.closedAt || "",
+    closingCash: Number(row.closing_cash ?? row.closingCash ?? 0),
+    difference: Number(row.difference || 0),
+    incomeTotal: Number(row.income_total ?? row.incomeTotal ?? 0),
+    expenseTotal: Number(row.expense_total ?? row.expenseTotal ?? 0)
+  };
+}
+
+function mapApiPettyCash(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    amount: Number(row.amount || 0)
+  };
+}
+
+function mapApiUser(row) {
+  return {
+    id: row.id,
+    name: row.name || "",
+    username: row.username || "",
+    password: "",
+    role: row.role || "RECEPCION",
+    active: row.active !== 0 && row.active !== false
+  };
+}
+
+function parseApiList(value, fallback) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (!value) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean);
+  } catch {
+    return String(value).split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return fallback;
+}
+
+function applyApiBootstrap(payload) {
+  state.patients = (payload.patients || []).map(mapApiPatient);
+  state.appointments = (payload.appointments || []).map(mapApiAppointment);
+  state.clinicalHistory = (payload.clinicalHistory || []).map(mapApiClinicalHistory);
+  state.treatments = (payload.treatments || []).map(mapApiTreatment);
+  state.odontogram = (payload.odontogram || []).map(mapApiOdontogram);
+  state.payments = (payload.payments || []).map(mapApiPayment);
+  state.expenses = (payload.expenses || []).map(mapApiExpense);
+  state.cashSessions = (payload.cashSessions || []).map(mapApiCashSession);
+  state.pettyCashAllocations = (payload.pettyCashAllocations || []).map(mapApiPettyCash);
+  if (Array.isArray(payload.users) && payload.users.length) {
+    state.users = payload.users.map(mapApiUser);
+  }
+  if (payload.config) {
+    state.config.generalCashOpening = Number(payload.config.generalCashOpening ?? state.config.generalCashOpening);
+    state.config.generalBankOpening = Number(payload.config.generalBankOpening ?? state.config.generalBankOpening);
+    state.config.clinicName = payload.config.clinicName || state.config.clinicName;
+    state.config.start = payload.config.start || state.config.start;
+    state.config.end = payload.config.end || state.config.end;
+    state.config.interval = Number(payload.config.interval ?? state.config.interval);
+    state.config.inactiveDays = Number(payload.config.inactiveDays ?? state.config.inactiveDays);
+    state.config.whatsapp = payload.config.whatsapp || state.config.whatsapp;
+    state.config.doctors = parseApiList(payload.config.doctors, state.config.doctors);
+    state.config.units = parseApiList(payload.config.units, state.config.units);
+  }
+  apiUser = payload.user || apiUser;
+  if (apiUser) currentUserId = apiUser.id;
+  apiBootstrapped = true;
+  render();
+}
+
+async function loadFromApi() {
+  if (!API_ENABLED || !apiToken || apiRefreshing) return;
+  apiRefreshing = true;
+  try {
+    const payload = await apiFetch("/api/bootstrap");
+    applyApiBootstrap(payload);
+  } catch {
+    apiToken = "";
+    apiUser = null;
+    localStorage.removeItem(API_TOKEN_KEY);
+    render();
+  } finally {
+    apiRefreshing = false;
+  }
+}
+
+function shouldAutoRefreshApi() {
+  if (!API_ENABLED || !apiToken) return false;
+  if (document.hidden) return false;
+  if ($("dialog[open]")) return false;
+  const active = document.activeElement;
+  if (!active) return true;
+  return !["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+}
+
+function setupApiAutoRefresh() {
+  if (!API_ENABLED) return;
+  window.addEventListener("focus", () => {
+    if (apiToken) loadFromApi();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && apiToken) loadFromApi();
+  });
+  setInterval(() => {
+    if (shouldAutoRefreshApi()) loadFromApi();
+  }, 8000);
+}
+
+async function savePatientApi(patient) {
+  if (!API_ENABLED || !apiToken) return;
+  const payload = {
+    id: patient.id,
+    dni: patient.dni,
+    name: patient.name,
+    phone: patient.phone,
+    doctor: patient.doctor,
+    mainTreatment: patient.mainTreatment,
+    notes: patient.notes
+  };
+  const result = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify(payload) });
+  if (result.id) patient.id = result.id;
+}
+
+async function deletePatientApi(id) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/patients", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+}
+
+async function saveAppointmentApi(appointment) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/appointments", { method: "POST", body: JSON.stringify(appointment) });
+  if (result.id) appointment.id = result.id;
+}
+
+async function saveClinicalHistoryApi(entry) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/clinical-history", { method: "POST", body: JSON.stringify(entry) });
+  if (result.id) entry.id = result.id;
+}
+
+async function saveTreatmentApi(treatment) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/treatments", { method: "POST", body: JSON.stringify(treatment) });
+  if (result.id) treatment.id = result.id;
+}
+
+async function saveOdontogramApi(record) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/odontogram", { method: "POST", body: JSON.stringify(record) });
+  if (result.id) record.id = result.id;
+}
+
+async function savePaymentApi(payment) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/payments", { method: "POST", body: JSON.stringify(payment) });
+  if (result.id) payment.id = result.id;
+}
+
+async function saveExpenseApi(expense) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/expenses", { method: "POST", body: JSON.stringify(expense) });
+  if (result.id) expense.id = result.id;
+}
+
+async function savePettyCashApi(date, amount) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/petty-cash", { method: "POST", body: JSON.stringify({ date, amount }) });
+}
+
+async function saveConfigApi(values) {
+  if (!API_ENABLED || !apiToken || !Object.keys(values).length) return;
+  await apiFetch("/api/config", { method: "POST", body: JSON.stringify(values) });
+}
+
+async function saveUserApi(user) {
+  if (!API_ENABLED || !apiToken) return;
+  const payload = {
+    id: user.id,
+    name: user.name,
+    username: user.username,
+    password: user.password,
+    role: user.role,
+    active: user.active
+  };
+  const result = await apiFetch("/api/users", { method: "POST", body: JSON.stringify(payload) });
+  if (result.id) user.id = result.id;
+}
+
+async function resetOperationalApi() {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/reset-operational", { method: "POST", body: JSON.stringify({}) });
+}
+
+async function openCashApi(session) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/cash/open", { method: "POST", body: JSON.stringify(session) });
+  if (result.id) session.id = result.id;
+}
+
+async function closeCashApi(payload) {
+  if (!API_ENABLED || !apiToken) return null;
+  return apiFetch("/api/cash/close", { method: "POST", body: JSON.stringify(payload) });
+}
+
+function blankStateFromCurrent() {
+  return normalizeState({
+    ...structuredClone(seedData),
+    config: {
+      ...state.config,
+      generalCashOpening: 0,
+      generalBankOpening: 0
+    },
+    services: structuredClone(state.services.length ? state.services : seedData.services),
+    users: structuredClone(state.users.length ? state.users : seedData.users),
+    patients: [],
+    appointments: [],
+    treatments: [],
+    payments: [],
+    clinicalHistory: [],
+    odontogram: [],
+    cashSessions: [],
+    dailyClosures: [],
+    expenses: [],
+    pettyCashAllocations: []
+  });
+}
+
+function uid(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function money(value) {
+  return `S/ ${Number(value || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatDate(date) {
+  if (!date) return "";
+  return new Date(`${date}T00:00:00`).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function patientById(id) {
+  return state.patients.find((patient) => patient.id === id);
+}
+
+function serviceByName(name) {
+  return state.services.find((service) => service.name === name);
+}
+
+function treatmentById(id) {
+  return state.treatments.find((treatment) => treatment.id === id);
+}
+
+function minutes(time) {
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function timeFromMinutes(total) {
+  const hour = Math.floor(total / 60).toString().padStart(2, "0");
+  const minute = (total % 60).toString().padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
+function patientDebt(patientId) {
+  const budget = state.treatments.filter((t) => t.patientId === patientId).reduce((sum, t) => sum + Number(t.budget || 0), 0);
+  const historyDebt = state.clinicalHistory.filter((h) => h.patientId === patientId).reduce((sum, h) => sum + historyBalance(h.id), 0);
+  const treatmentPaid = state.payments.filter((p) => p.patientId === patientId && !p.historyId).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  return Math.max(0, budget - treatmentPaid) + historyDebt;
+}
+
+function historyById(id) {
+  return state.clinicalHistory.find((entry) => entry.id === id);
+}
+
+function historyPaid(historyId) {
+  return state.payments.filter((payment) => payment.historyId === historyId).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+}
+
+function historyBalance(historyId) {
+  const entry = historyById(historyId);
+  if (!entry) return 0;
+  return Math.max(0, Number(entry.agreedPrice || 0) - historyPaid(historyId));
+}
+
+function pendingHistories() {
+  return state.clinicalHistory.filter((entry) => entry.attended && historyBalance(entry.id) > 0);
+}
+
+function pendingPatientIds() {
+  return [...new Set(pendingHistories().map((entry) => entry.patientId))];
+}
+
+function cashSessionToday() {
+  return state.cashSessions
+    .filter((session) => session.date === todayISO() && !session.closedAt)
+    .slice(-1)[0];
+}
+
+function cashSessionsToday() {
+  return state.cashSessions.filter((session) => session.date === todayISO());
+}
+
+function pettyCashAllocation(date = todayISO()) {
+  return state.pettyCashAllocations.find((item) => item.date === date);
+}
+
+function pettyCashAmount(date = todayISO()) {
+  return Number(pettyCashAllocation(date)?.amount || 0);
+}
+
+function setPettyCashAllocation(date, amount) {
+  const existing = pettyCashAllocation(date);
+  if (existing) existing.amount = Number(amount || 0);
+  else state.pettyCashAllocations.push({ id: uid("petty"), date, amount: Number(amount || 0) });
+}
+
+function pettyCashDeliveredTotal() {
+  const dates = [...new Set([
+    ...state.pettyCashAllocations.map((item) => item.date),
+    ...state.cashSessions.map((session) => session.date)
+  ])];
+  return dates.reduce((sum, date) => {
+    const session = state.cashSessions.filter((item) => item.date === date).slice(-1)[0];
+    if (session?.closedAt) return sum;
+    return sum + Number(session?.openingCash ?? pettyCashAmount(date) ?? 0);
+  }, 0);
+}
+
+function incomeForDate(date, method = null) {
+  return state.payments
+    .filter((payment) => payment.date === date && (!method || payment.method === method))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+}
+
+function openIncomeForDate(date, method = null) {
+  return openPaymentsForDate(date)
+    .filter((payment) => !method || payment.method === method)
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+}
+
+function todayIncome(method = null) {
+  return openIncomeForDate(todayISO(), method);
+}
+
+function incomeByMethodsForDate(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return openPaymentsForDate(date)
+    .filter((payment) => normalized.includes(String(payment.method || "").toUpperCase()))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+}
+
+function todayIncomeByMethods(methods) {
+  return incomeByMethodsForDate(todayISO(), methods);
+}
+
+function expenseByMethodsForDate(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return expensesForDate(date)
+    .filter((expense) => expenseAffectsDaily(expense) && normalized.includes(String(expense.method || "").toUpperCase()))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function todayExpenseByMethods(methods) {
+  return expenseByMethodsForDate(todayISO(), methods);
+}
+
+function expensesForDate(date) {
+  return state.expenses.filter((expense) => expense.date === date);
+}
+
+function openPaymentsForDate(date) {
+  return state.payments.filter((payment) => payment.date === date && !payment.closed);
+}
+
+function openExpensesForDate(date) {
+  return state.expenses.filter((expense) => expense.date === date && !expense.closed);
+}
+
+function expenseAffectsDaily(expense) {
+  return expense.source !== "CAJA_GENERAL";
+}
+
+function dailyExpenseTotal(date, includeGeneral = false) {
+  return expensesForDate(date)
+    .filter((expense) => includeGeneral || expenseAffectsDaily(expense))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function dailyGeneralExpenseTotal(date) {
+  return expensesForDate(date)
+    .filter((expense) => expense.source === "CAJA_GENERAL")
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function dailyCashAffectingExpenseTotal(date) {
+  return openExpensesForDate(date)
+    .filter((expense) => expenseAffectsDaily(expense))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function allDatesWithCashActivity() {
+  return [...new Set([
+    ...state.payments.map((payment) => payment.date),
+    ...state.expenses.map((expense) => expense.date),
+    ...state.pettyCashAllocations.map((item) => item.date),
+    ...state.cashSessions.map((session) => session.date),
+    ...state.dailyClosures.map((closure) => closure.date)
+  ])].filter(Boolean).sort();
+}
+
+function lastAppointment(patientId) {
+  return state.appointments
+    .filter((appointment) => appointment.patientId === patientId && appointment.status === "ATENDIDA")
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+
+function patientStatus(patient) {
+  const last = lastAppointment(patient.id);
+  if (!last) return "NUEVO";
+  const diff = Math.floor((new Date() - new Date(`${last.date}T00:00:00`)) / 86400000);
+  return diff > Number(state.config.inactiveDays) ? "INACTIVO" : "ACTIVO";
+}
+
+function fillSelect(select, options, selected = "") {
+  if (!select) return;
+  const cleanOptions = options.map((option) => String(option ?? "").trim()).filter(Boolean);
+  select.innerHTML = cleanOptions.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("");
+  if (selected && cleanOptions.includes(selected)) select.value = selected;
+  else if (cleanOptions.length) select.value = cleanOptions[0];
+}
+
+function fillPatientSelect(select, selected = "") {
+  if (!select) return;
+  select.innerHTML = state.patients
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni)}</option>`)
+    .join("");
+  if (selected && state.patients.some((patient) => patient.id === selected)) select.value = selected;
+  else if (state.patients[0]) select.value = state.patients[0].id;
+}
+
+function fillPaymentPatientSelect(select, selected = "") {
+  if (!select) return;
+  const ids = pendingPatientIds();
+  const patients = state.patients
+    .filter((patient) => ids.includes(patient.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  select.innerHTML = patients.length
+    ? patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - deuda ${money(patientDebt(patient.id))}</option>`).join("")
+    : `<option value="">Sin pacientes pendientes</option>`;
+  if (selected && patients.some((patient) => patient.id === selected)) select.value = selected;
+  else if (patients[0]) select.value = patients[0].id;
+}
+
+function fillAppointmentPatientSelectForDate(select, date, selected = "") {
+  if (!select) return;
+  const attendedIds = new Set(state.clinicalHistory
+    .filter((entry) => entry.date === date && entry.attended && entry.id !== $("#historyForm")?.id?.value)
+    .map((entry) => entry.patientId));
+  const ids = [...new Set(state.appointments
+    .filter((appointment) => appointment.date === date && !attendedIds.has(appointment.patientId))
+    .map((appointment) => appointment.patientId))];
+  const patients = state.patients
+    .filter((patient) => ids.includes(patient.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  select.innerHTML = patients.length
+    ? patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni)}</option>`).join("")
+    : `<option value="">Sin pacientes pendientes de atencion en esta fecha</option>`;
+  if (selected && patients.some((patient) => patient.id === selected)) select.value = selected;
+  else if (patients[0]) select.value = patients[0].id;
+  syncAssignedDoctor();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
+}
+
+const roleLabels = {
+  ADMIN: "Administrador",
+  DOCTOR: "Doctor",
+  RECEPCION: "Recepcion"
+};
+
+const roleViews = {
+  ADMIN: ["dashboard", "agenda", "pacientes", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR: ["dashboard", "agenda", "pacientes", "historial", "odontograma", "tratamientos", "pagos", "caja-general"],
+  RECEPCION: ["dashboard", "agenda", "pacientes", "pagos"]
+};
+
+function currentUser() {
+  if (API_ENABLED) return apiUser;
+  return state.users.find((user) => user.id === currentUserId && user.active);
+}
+
+function hasRoleView(view) {
+  const user = currentUser();
+  return Boolean(user && (roleViews[user.role] || []).includes(view));
+}
+
+function isAdmin() {
+  return currentUser()?.role === "ADMIN";
+}
+
+function canManageAppointments() {
+  return ["ADMIN", "RECEPCION"].includes(currentUser()?.role);
+}
+
+function canManageClinical() {
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+}
+
+function canManagePayments() {
+  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
+}
+
+function canCreatePatients() {
+  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
+}
+
+function applyAuthState() {
+  const user = currentUser();
+  document.body.classList.toggle("locked", !user);
+  if (!user) return;
+  $("#sessionUser").textContent = user.name;
+  $("#sessionRole").textContent = roleLabels[user.role] || user.role;
+  $$(".nav-item").forEach((button) => {
+    button.hidden = !hasRoleView(button.dataset.view);
+  });
+  $("#quickAppointmentBtn").hidden = !canManageAppointments();
+  const agendaAppointmentBtn = $("#newAppointmentBtn");
+  if (agendaAppointmentBtn) agendaAppointmentBtn.hidden = !canManageAppointments();
+  $("#quickPatientBtn").hidden = !canCreatePatients();
+  $("#backupBtn").hidden = !isAdmin();
+  $(".file-label").hidden = !isAdmin();
+  const userAdminPanel = $("#userAdminPanel");
+  if (userAdminPanel) userAdminPanel.hidden = !isAdmin();
+  if (!hasRoleView(currentView)) setView((roleViews[user.role] || ["dashboard"])[0]);
+}
+
+function setView(view) {
+  if (!hasRoleView(view)) view = (roleViews[currentUser()?.role] || ["dashboard"])[0];
+  currentView = view;
+  if (view === "historial") {
+    const historyDate = $('#historyForm input[name="date"]');
+    const agendaDate = $("#agendaDate");
+    if (historyDate && agendaDate?.value) historyDate.value = agendaDate.value;
+  }
+  $$(".view").forEach((element) => element.classList.toggle("active", element.id === view));
+  $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+  $("#viewTitle").textContent = {
+    dashboard: "Dashboard",
+    agenda: "Agenda diaria",
+    pacientes: "Pacientes",
+    historial: "Historial clinico dental",
+    odontograma: "Odontograma",
+    tratamientos: "Tratamientos",
+    pagos: "Pagos y caja",
+    "caja-general": "Caja general",
+    panel: "Panel para doctores y recepcion",
+    recordatorios: "Recordatorios de citas",
+    reportes: "Reportes diarios y mensuales",
+    campanas: "Campanas",
+    configuracion: "Configuracion"
+  }[view];
+  render();
+}
+
+function render() {
+  state = normalizeState(state);
+  applyAuthState();
+  if (!currentUser()) return;
+  const todayLabel = $("#todayLabel");
+  if (todayLabel) todayLabel.textContent = `${state.config.clinicName} | ${formatDate(todayISO())}`;
+  hydrateForms();
+  renderDashboard();
+  renderAgenda();
+  renderPatients();
+  renderClinicalHistory();
+  renderOdontogram();
+  renderTreatments();
+  renderPayments();
+  renderGeneralCash();
+  renderStaffPanel();
+  renderReminders();
+  renderReports();
+  renderCampaigns();
+  renderConfig();
+}
+
+function hydrateForms() {
+  const serviceNames = state.services.filter((service) => service.active).map((service) => service.name);
+  $$('select[name="doctor"]').forEach((select) => fillSelect(select, state.config.doctors, select.value));
+  $$('select[name="unit"]').forEach((select) => fillSelect(select, state.config.units, select.value));
+  $$('select[name="service"], select[name="mainTreatment"]').forEach((select) => fillSelect(select, serviceNames, select.value));
+  $$('select[name="status"]').forEach((select) => {
+    const options = select.closest("#treatmentForm") ? state.config.treatmentStatuses : state.config.statuses;
+    fillSelect(select, options, select.value);
+  });
+  $$('select[name="method"]').forEach((select) => fillSelect(select, state.config.paymentMethods, select.value));
+  $$('select[name="source"]').forEach((select) => fillSelect(select, state.config.expenseSources, select.value));
+  $$('#staffPaymentForm select[name="type"]').forEach((select) => fillSelect(select, state.config.staffPaymentTypes, select.value));
+  $$('select[name="attendedBy"]').forEach((select) => fillSelect(select, state.config.doctors, select.value));
+  $$('select[name="patientId"]').forEach((select) => {
+    if (select.closest("#paymentForm")) return;
+    if (select.closest("#historyForm")) return;
+    fillPatientSelect(select, select.value);
+  });
+  fillAppointmentPatientSelectForDate($('#historyForm select[name="patientId"]'), $('#historyForm input[name="date"]')?.value || todayISO(), $('#historyForm select[name="patientId"]')?.value || "");
+  fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), $('#paymentForm select[name="patientId"]')?.value || "");
+  fillPatientSelect($("#historyPatientFilter"), $("#historyPatientFilter").value);
+  fillPatientSelect($("#odontogramPatientFilter"), $("#odontogramPatientFilter").value);
+  $$('select[name="tooth"]').forEach((select) => fillSelect(select, teeth, select.value));
+  $$('select[name="condition"]').forEach((select) => fillSelect(select, toothConditions, select.value));
+  fillSelect($("#doctorFilter"), ["Todos los doctores", ...state.config.doctors], $("#doctorFilter").value);
+  fillSelect($("#unitFilter"), ["Todas las unidades", ...state.config.units], $("#unitFilter").value);
+  renderTreatmentPaymentOptions();
+}
+
+function renderTreatmentPaymentOptions() {
+  const patientSelect = $('#paymentForm select[name="patientId"]');
+  const historySelect = $('#paymentForm select[name="historyId"]');
+  if (!patientSelect || !historySelect) return;
+  const patientId = patientSelect.value;
+  const pending = pendingHistories().filter((entry) => entry.patientId === patientId);
+  historySelect.innerHTML = pending.length
+    ? pending.map((entry) => `<option value="${entry.id}">${formatDate(entry.date)} - ${escapeHtml(entry.reason)} - saldo ${money(historyBalance(entry.id))}</option>`).join("")
+    : `<option value="">Sin atenciones pendientes</option>`;
+  updatePaymentDue();
+}
+
+function updatePaymentDue() {
+  const form = $("#paymentForm");
+  if (!form) return;
+  const due = historyBalance(form.historyId.value);
+  form.amountDue.value = due || 0;
+  form.amount.value = due || "";
+  updatePaymentChange();
+}
+
+function updatePaymentChange() {
+  const form = $("#paymentForm");
+  if (!form) return;
+  const received = Number(form.cashReceived.value || 0);
+  const amount = Number(form.amount.value || 0);
+  form.change.value = Math.max(0, received - amount).toFixed(2);
+}
+
+function syncAssignedDoctor() {
+  const historyForm = $("#historyForm");
+  if (historyForm?.patientId && historyForm?.attendedBy) {
+    const patient = patientById(historyForm.patientId.value);
+    historyForm.attendedBy.value = patient?.doctor || "";
+  }
+}
+
+function syncAppointmentDoctor() {
+  const form = $("#appointmentForm");
+  if (!form?.patientId || !form?.doctor) return;
+  const patient = patientById(form.patientId.value);
+  if (patient?.doctor) form.doctor.value = patient.doctor;
+}
+
+function findAppointmentConflict(candidate) {
+  const sameDateTime = state.appointments.filter((appointment) =>
+    appointment.id !== candidate.id &&
+    appointment.date === candidate.date &&
+    appointment.time === candidate.time &&
+    !["CANCELADA", "REPROGRAMADA"].includes(appointment.status)
+  );
+  const unitConflict = sameDateTime.find((appointment) => appointment.unit === candidate.unit);
+  if (unitConflict) {
+    return {
+      type: "unit",
+      message: `La ${candidate.unit} ya esta ocupada a las ${candidate.time}. Cambia a otra unidad disponible, por ejemplo Unidad 2 si esta libre.`
+    };
+  }
+  const doctorConflict = sameDateTime.find((appointment) => appointment.doctor === candidate.doctor);
+  if (doctorConflict) {
+    const patient = patientById(doctorConflict.patientId);
+    return {
+      type: "doctor",
+      message: `${candidate.doctor} ya tiene una cita a las ${candidate.time} con ${patient?.name || "otro paciente"}. Cambia la hora o selecciona otro doctor.`
+    };
+  }
+  return null;
+}
+
+function renderDashboard() {
+  const today = todayISO();
+  const appointmentsToday = state.appointments.filter((appointment) => appointment.date === today);
+  const cashToday = state.payments.filter((payment) => payment.date === today).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const totalDebtValue = state.patients.reduce((sum, patient) => sum + patientDebt(patient.id), 0);
+  $("#kpiToday").textContent = appointmentsToday.length;
+  $("#kpiActive").textContent = state.patients.filter((patient) => patientStatus(patient) !== "INACTIVO").length;
+  $("#kpiCash").textContent = money(cashToday);
+  $("#kpiDebt").textContent = money(totalDebtValue);
+
+  $("#todayAppointments").innerHTML = appointmentsToday.length
+    ? appointmentsToday.map(appointmentCard).join("")
+    : `<p class="muted">No hay citas registradas para hoy.</p>`;
+
+  const debtors = state.patients.filter((patient) => patientDebt(patient.id) > 0).slice(0, 4);
+  const inactive = state.patients.filter((patient) => patientStatus(patient) === "INACTIVO");
+  $("#alertsList").innerHTML = [
+    `<div class="appointment-card"><strong>${inactive.length} pacientes inactivos</strong><p class="muted">Listos para campana de WhatsApp.</p></div>`,
+    ...debtors.map((patient) => `<div class="appointment-card"><strong>${escapeHtml(patient.name)}</strong><p class="muted">Saldo pendiente: ${money(patientDebt(patient.id))}</p></div>`)
+  ].join("");
+}
+
+function appointmentCard(appointment) {
+  const patient = patientById(appointment.patientId);
+  const statusClass = ["NO_ASISTIO", "CANCELADA"].includes(appointment.status) ? "danger" : appointment.status === "RESERVADA" ? "warn" : "";
+  return `<article class="appointment-card">
+    <div class="card-title">
+      <strong>${appointment.time} | ${escapeHtml(patient?.name || "Paciente")}</strong>
+      <span class="status ${statusClass}">${escapeHtml(appointment.status)}</span>
+    </div>
+    <p class="muted">${escapeHtml(appointment.service)} | ${escapeHtml(appointment.doctor)} | ${escapeHtml(appointment.unit)}</p>
+  </article>`;
+}
+
+function renderAgenda() {
+  if (!$("#agendaDate").value) $("#agendaDate").value = todayISO();
+  const date = $("#agendaDate").value;
+  const doctor = $("#doctorFilter").value;
+  const unit = $("#unitFilter").value;
+  const start = minutes(state.config.start);
+  const end = minutes(state.config.end);
+  const units = state.config.units.length ? state.config.units : seedData.config.units;
+  const rows = [];
+  for (let cursor = start; cursor < end; cursor += Number(state.config.interval)) {
+    const time = timeFromMinutes(cursor);
+    const slots = units.map((unitName) => {
+      const appointment = state.appointments.find((item) => {
+        const doctorOk = !doctor || doctor === "Todos los doctores" || item.doctor === doctor;
+        const unitOk = !unit || unit === "Todas las unidades" || item.unit === unit;
+        return item.date === date && item.time === time && item.unit === unitName && doctorOk && unitOk;
+      });
+      const isLunch = cursor >= minutes(state.config.lunchStart) && cursor < minutes(state.config.lunchEnd);
+      if (appointment) {
+        const patient = patientById(appointment.patientId);
+        const debt = patient ? patientDebt(patient.id) : 0;
+        const statusText = appointment.status === "ATENDIDA" ? "ATENDIDO" : appointment.status;
+        return `<div class="slot busy status-${appointment.status.toLowerCase()}" data-edit-appointment="${appointment.id}">
+          <div class="slot-main">
+            <strong>${escapeHtml(patient?.name || "")}</strong>
+            <span>${escapeHtml(appointment.service)}</span>
+          </div>
+          <div class="slot-meta">
+            <span>${escapeHtml(appointment.doctor)}</span>
+            <span>${escapeHtml(statusText)}</span>
+            <span>${money(debt)}</span>
+          </div>
+        </div>`;
+      }
+      return `<div class="slot ${isLunch ? "lunch" : ""}" data-new-at="${time}" data-unit="${escapeHtml(unitName)}">
+        <div class="slot-main">
+          <strong>${escapeHtml(unitName)}</strong>
+          <span class="muted">${isLunch ? "Almuerzo flexible" : "Disponible"}</span>
+        </div>
+      </div>`;
+    });
+    rows.push(`<div class="agenda-row" style="grid-template-columns: 56px repeat(${units.length}, minmax(0, 1fr));"><div class="time-cell">${time}</div>${slots.join("")}</div>`);
+  }
+  $("#agendaBoard").innerHTML = rows.join("") || `<div class="appointment-card"><strong>No se pudo construir la agenda.</strong><p class="muted">Revisa horario de inicio, fin e intervalo en Configuracion.</p></div>`;
+}
+
+function renderPatients() {
+  const query = $("#globalSearch").value.trim().toLowerCase();
+  const rows = state.patients
+    .filter((patient) => [patient.name, patient.dni, patient.phone].join(" ").toLowerCase().includes(query))
+    .map((patient) => {
+      const status = patientStatus(patient);
+      return `<tr>
+        <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
+        <td>${escapeHtml(patient.phone)}</td>
+        <td>${escapeHtml(patient.doctor)}</td>
+        <td><span class="status ${status === "INACTIVO" ? "danger" : status === "NUEVO" ? "warn" : ""}">${status}</span></td>
+        <td>${money(patientDebt(patient.id))}</td>
+        <td class="row-actions"><button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button><button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button></td>
+      </tr>`;
+    });
+  $("#patientsTable").innerHTML = rows.join("") || `<tr><td colspan="6">No hay pacientes para mostrar.</td></tr>`;
+}
+
+function renderTreatments() {
+  $("#treatmentsList").innerHTML = state.treatments.map((treatment) => {
+    const patient = patientById(treatment.patientId);
+    const paid = state.payments.filter((payment) => payment.treatmentId === treatment.id).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const balance = Math.max(0, Number(treatment.budget || 0) - paid);
+    return `<article class="treatment-card">
+      <div class="card-title">
+        <strong>${escapeHtml(patient?.name || "Paciente")}</strong>
+        <span class="status">${escapeHtml(treatment.status)}</span>
+      </div>
+      <p class="muted">${escapeHtml(treatment.service)} | Piezas: ${escapeHtml(treatment.teeth || "-")}</p>
+      <p>Presupuesto: <strong>${money(treatment.budget)}</strong> | Pagado: <strong>${money(paid)}</strong> | Saldo: <strong>${money(balance)}</strong></p>
+      <p class="muted">${escapeHtml(treatment.notes || "")}</p>
+      <button class="small-btn" data-edit-treatment="${treatment.id}">Editar</button>
+    </article>`;
+  }).join("") || `<p class="muted">Aun no hay tratamientos.</p>`;
+}
+
+function renderClinicalHistory() {
+  const filter = $("#historyPatientFilter").value || state.patients[0]?.id;
+  if (!$('#historyForm input[name="date"]').value) $('#historyForm input[name="date"]').value = todayISO();
+  const items = state.clinicalHistory
+    .filter((entry) => !filter || entry.patientId === filter)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  $("#historyTimeline").innerHTML = items.map((entry) => {
+    const patient = patientById(entry.patientId);
+    const balance = historyBalance(entry.id);
+    return `<details class="timeline-item">
+      <summary>
+        <strong>${formatDate(entry.date)} | ${escapeHtml(patient?.name || "")}</strong>
+        <span class="status ${balance > 0 ? "warn" : ""}">${balance > 0 ? "PENDIENTE" : "PAGADO"}</span>
+      </summary>
+      <p><strong>Atendido por:</strong> ${escapeHtml(entry.attendedBy || "-")} | <strong>Precio pactado:</strong> ${money(entry.agreedPrice)} | <strong>Saldo:</strong> ${money(balance)}</p>
+      <p><strong>Motivo:</strong> ${escapeHtml(entry.reason)}</p>
+      <p><strong>Anamnesis:</strong> ${escapeHtml(entry.anamnesis || "-")}</p>
+      <p><strong>Examen:</strong> ${escapeHtml(entry.exam || "-")}</p>
+      <p><strong>Diagnostico:</strong> ${escapeHtml(entry.diagnosis || "-")}</p>
+      <p><strong>Plan:</strong> ${escapeHtml(entry.plan || "-")}</p>
+      <p class="muted">${escapeHtml(entry.procedure || "")}</p>
+      <p class="muted">${escapeHtml(entry.instructions || "")}</p>
+      <button class="small-btn" data-edit-history="${entry.id}">Editar</button>
+    </details>`;
+  }).join("") || `<p class="muted">Este paciente aun no tiene historial registrado.</p>`;
+}
+
+function renderOdontogram() {
+  const patientId = $("#odontogramPatientFilter").value || state.patients[0]?.id;
+  const records = state.odontogram.filter((item) => item.patientId === patientId);
+  $("#odontogramGrid").innerHTML = odontogramRows.map((row) => {
+    const buttons = row.teeth.map((tooth) => {
+      const record = records.find((item) => item.tooth === tooth);
+      const condition = record?.condition || "Sano";
+      return `<button class="tooth ${condition.toLowerCase().replaceAll(" ", "-")}" data-tooth="${tooth}" type="button" title="${escapeHtml(record?.note || "")}">
+        <strong>${tooth}</strong>
+        <small>${escapeHtml(condition)}</small>
+      </button>`;
+    }).join("");
+    return `<div class="odontogram-section"><h3>${escapeHtml(row.label)}</h3><div class="odontogram-row">${buttons}</div></div>`;
+  }).join("");
+}
+
+function renderPayments() {
+  const month = todayISO().slice(0, 7);
+  const monthIncome = state.payments.filter((payment) => payment.date.startsWith(month)).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  $("#monthIncome").textContent = money(monthIncome);
+  $("#totalDebt").textContent = money(state.patients.reduce((sum, patient) => sum + patientDebt(patient.id), 0));
+  renderCashBox();
+  renderExpenses();
+  $("#paymentsTable").innerHTML = openPaymentsForDate(todayISO())
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map((payment) => {
+      const patient = patientById(payment.patientId);
+      const history = historyById(payment.historyId);
+      return `<tr>
+        <td>${formatDate(payment.date)}</td>
+        <td>${escapeHtml(patient?.name || "")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
+        <td>${escapeHtml(payment.method)}</td>
+        <td><strong>${money(payment.amount)}</strong><br><span class="muted">Vuelto: ${money(payment.change || 0)}</span></td>
+        <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="5">No hay pagos registrados.</td></tr>`;
+}
+
+function renderCashBox() {
+  const session = cashSessionToday();
+  const lastSession = cashSessionsToday().slice(-1)[0];
+  const suggestedOpening = pettyCashAmount(todayISO());
+  const openingInput = $("#openingCash");
+  if (!session && openingInput && document.activeElement !== openingInput) openingInput.value = suggestedOpening || "";
+  const opening = Number(session?.openingCash ?? openingInput?.value ?? suggestedOpening ?? 0);
+  const income = todayIncome();
+  const expenses = dailyCashAffectingExpenseTotal(todayISO());
+  const cashIncome = todayIncomeByMethods(["EFECTIVO"]);
+  const walletIncome = todayIncomeByMethods(["YAPE", "PLIN"]);
+  const bankIncome = todayIncomeByMethods(["TARJETA", "TRANSFERENCIA"]);
+  const cashNet = opening + cashIncome - todayExpenseByMethods(["EFECTIVO"]);
+  const walletNet = walletIncome - todayExpenseByMethods(["YAPE", "PLIN"]);
+  const bankNet = bankIncome - todayExpenseByMethods(["TARJETA", "TRANSFERENCIA"]);
+  const expected = opening + income - expenses;
+  $("#cashStatus").textContent = session ? "ABIERTA" : lastSession?.closedAt ? "CERRADA" : "SIN APERTURA";
+  $("#cashOpeningLabel").textContent = money(opening);
+  $("#cashIncomeLabel").textContent = money(income);
+  $("#cashExpenseLabel").textContent = money(expenses);
+  $("#cashExpectedLabel").textContent = money(expected);
+  $("#cashMethodCash").textContent = money(cashNet);
+  $("#cashMethodWallet").textContent = money(walletNet);
+  $("#cashMethodBank").textContent = money(bankNet);
+  if (session && openingInput) openingInput.value = opening;
+  if (openingInput) openingInput.readOnly = Boolean(session);
+  const counted = Number($("#closingCash").value || session?.closingCash || 0);
+  $("#cashDifference").value = counted ? (counted - expected).toFixed(2) : "";
+  toggleCashLockedState(Boolean(session));
+}
+
+function renderExpenses() {
+  const rows = openExpensesForDate(todayISO()).filter(expenseAffectsDaily).map((expense) => `<tr>
+    <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
+    <td>${escapeHtml(expense.method)}</td>
+    <td>${escapeHtml(expense.source)}</td>
+    <td><strong>${money(expense.amount)}</strong></td>
+  </tr>`);
+  $("#expensesTable").innerHTML = rows.join("") || `<tr><td colspan="4">No hay egresos registrados hoy.</td></tr>`;
+}
+
+function toggleCashLockedState(isOpen) {
+  const paymentForm = $("#paymentForm");
+  if (paymentForm) {
+    $$("input, select, textarea, button", paymentForm).forEach((control) => {
+      if (control.type !== "button") control.disabled = !isOpen;
+    });
+  }
+  const openExpenseBtn = $("#openExpenseBtn");
+  if (openExpenseBtn) openExpenseBtn.disabled = !isOpen;
+  const lockedMessage = $("#cashLockedMessage");
+  if (lockedMessage) lockedMessage.hidden = isOpen;
+}
+
+function renderCampaigns() {
+  const inactivePatients = state.patients.filter((patient) => patientStatus(patient) === "INACTIVO" || patientDebt(patient.id) > 0);
+  $("#campaignList").innerHTML = inactivePatients.map((patient) => {
+    const debt = patientDebt(patient.id);
+    const text = debt > 0
+      ? `Hola ${patient.name}, le saludamos de ${state.config.clinicName}. Tiene un saldo pendiente de ${money(debt)}. Podemos ayudarle a regularizarlo.`
+      : `Hola ${patient.name}, le saludamos de ${state.config.clinicName}. Queremos recordarle que puede agendar su control dental.`;
+    const wa = `https://wa.me/51${patient.phone}?text=${encodeURIComponent(text)}`;
+    return `<article class="campaign-card">
+      <div class="card-title">
+        <strong>${escapeHtml(patient.name)}</strong>
+        <span class="status ${debt > 0 ? "warn" : ""}">${debt > 0 ? "SALDO" : "INACTIVO"}</span>
+      </div>
+      <p class="muted">${escapeHtml(patient.phone)} | ${escapeHtml(patient.mainTreatment)}</p>
+      <p>${escapeHtml(text)}</p>
+      <a class="primary" href="${wa}" target="_blank" rel="noopener">Enviar WhatsApp</a>
+    </article>`;
+  }).join("") || `<p class="muted">No hay pacientes pendientes para campana.</p>`;
+}
+
+function renderStaffPanel() {
+  const today = todayISO();
+  const todayAppointments = state.appointments.filter((appointment) => appointment.date === today);
+  $("#panelWaiting").textContent = todayAppointments.filter((appointment) => ["RESERVADA", "CONFIRMADA"].includes(appointment.status)).length;
+  $("#panelAttention").textContent = todayAppointments.filter((appointment) => appointment.status === "EN_ATENCION").length;
+  $("#panelDone").textContent = todayAppointments.filter((appointment) => appointment.status === "ATENDIDA").length;
+  $("#panelMissed").textContent = todayAppointments.filter((appointment) => appointment.status === "NO_ASISTIO").length;
+
+  $("#receptionQueue").innerHTML = todayAppointments
+    .sort((a, b) => a.time.localeCompare(b.time))
+    .map((appointment) => {
+      const patient = patientById(appointment.patientId);
+      return `<article class="appointment-card">
+        <div class="card-title">
+          <strong>${appointment.time} | ${escapeHtml(patient?.name || "")}</strong>
+          <span class="status">${escapeHtml(appointment.status)}</span>
+        </div>
+        <p class="muted">${escapeHtml(appointment.unit)} | ${escapeHtml(appointment.doctor)} | ${escapeHtml(appointment.service)}</p>
+      </article>`;
+    }).join("") || `<p class="muted">No hay pacientes en agenda para hoy.</p>`;
+
+  const max = Math.max(1, todayAppointments.length);
+  $("#doctorPanel").innerHTML = state.config.doctors.map((doctor) => {
+    const count = todayAppointments.filter((appointment) => appointment.doctor === doctor).length;
+    const percent = Math.round((count / max) * 100);
+    return `<article class="doctor-card">
+      <strong>${escapeHtml(doctor)}</strong>
+      <p class="muted">${count} citas hoy</p>
+      <div class="metric-bar"><span style="width:${percent}%"></span></div>
+    </article>`;
+  }).join("");
+}
+
+function renderReminders() {
+  const upcoming = state.appointments
+    .filter((appointment) => appointment.date >= todayISO() && !["CANCELADA", "NO_ASISTIO"].includes(appointment.status))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
+    .slice(0, 30);
+  $("#remindersList").innerHTML = upcoming.map((appointment) => {
+    const patient = patientById(appointment.patientId);
+    const text = `Hola ${patient?.name || ""}, le recordamos su cita odontologica en ${state.config.clinicName} el ${formatDate(appointment.date)} a las ${appointment.time}.`;
+    const wa = `https://wa.me/51${patient?.phone || ""}?text=${encodeURIComponent(text)}`;
+    return `<article class="campaign-card">
+      <div class="card-title">
+        <strong>${formatDate(appointment.date)} ${appointment.time}</strong>
+        <span class="status">${escapeHtml(appointment.status)}</span>
+      </div>
+      <p>${escapeHtml(patient?.name || "")}</p>
+      <p class="muted">${escapeHtml(appointment.service)} | ${escapeHtml(appointment.doctor)}</p>
+      <a class="primary" href="${wa}" target="_blank" rel="noopener">Enviar recordatorio</a>
+    </article>`;
+  }).join("") || `<p class="muted">No hay citas futuras para recordar.</p>`;
+}
+
+function renderReports() {
+  if (!$("#reportMonth").value) $("#reportMonth").value = todayISO().slice(0, 7);
+  const month = $("#reportMonth").value;
+  const appointments = state.appointments.filter((appointment) => appointment.date.startsWith(month));
+  const payments = state.payments.filter((payment) => payment.date.startsWith(month));
+  const newPatients = state.patients.filter((patient) => patient.createdAt?.startsWith(month));
+  $("#reportAppointments").textContent = appointments.length;
+  $("#reportIncome").textContent = money(payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
+  $("#reportTreatments").textContent = state.treatments.filter((treatment) => treatment.status === "EN_PROCESO").length;
+  $("#reportNewPatients").textContent = newPatients.length;
+
+  const doctorRows = state.config.doctors.map((doctor) => {
+    const count = appointments.filter((appointment) => appointment.doctor === doctor).length;
+    const attended = appointments.filter((appointment) => appointment.doctor === doctor && appointment.status === "ATENDIDA").length;
+    return `<tr><td>${escapeHtml(doctor)}</td><td>${count}</td><td>${attended}</td></tr>`;
+  }).join("");
+  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th>Citas</th><th>Atendidas</th></tr></thead><tbody>${doctorRows}</tbody></table>`;
+
+  const serviceMap = appointments.reduce((map, appointment) => {
+    map[appointment.service] = (map[appointment.service] || 0) + 1;
+    return map;
+  }, {});
+  const serviceRows = Object.entries(serviceMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([service, count]) => `<tr><td>${escapeHtml(service)}</td><td>${count}</td></tr>`)
+    .join("");
+  $("#serviceReport").innerHTML = `<table><thead><tr><th>Servicio</th><th>Citas</th></tr></thead><tbody>${serviceRows || `<tr><td colspan="2">Sin datos</td></tr>`}</tbody></table>`;
+}
+
+function renderConfig() {
+  const form = $("#configForm");
+  if (!(document.activeElement && form.contains(document.activeElement))) {
+    form.clinicName.value = state.config.clinicName;
+    form.start.value = state.config.start;
+    form.end.value = state.config.end;
+    form.interval.value = state.config.interval;
+    form.inactiveDays.value = state.config.inactiveDays;
+    form.whatsapp.value = state.config.whatsapp;
+    form.doctors.value = state.config.doctors.join(", ");
+    form.units.value = state.config.units.join(", ");
+  }
+  renderUsers();
+}
+
+function renderUsers() {
+  const table = $("#usersTable");
+  if (!table) return;
+  table.innerHTML = state.users.map((user) => `<tr>
+    <td>${escapeHtml(user.name)}</td>
+    <td>${escapeHtml(user.username)}</td>
+    <td>${roleLabels[user.role] || user.role}</td>
+    <td>${user.active ? "Activo" : "Inactivo"}</td>
+    <td>
+      <button class="ghost" data-edit-user="${user.id}">Editar</button>
+      ${user.id !== "u-admin" ? `<button class="ghost" data-toggle-user="${user.id}">${user.active ? "Desactivar" : "Activar"}</button>` : ""}
+    </td>
+  </tr>`).join("");
+}
+
+function generalCashBalances() {
+  const cashIncome = state.payments
+    .filter((payment) => String(payment.method || "").toUpperCase() === "EFECTIVO")
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const bankIncome = state.payments
+    .filter((payment) => ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"].includes(String(payment.method || "").toUpperCase()))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const cashExpenses = state.expenses
+    .filter((expense) => expense.source === "CAJA_GENERAL" && String(expense.method || "").toUpperCase() === "EFECTIVO")
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const bankExpenses = state.expenses
+    .filter((expense) => expense.source === "CAJA_GENERAL" && ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"].includes(String(expense.method || "").toUpperCase()))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const cash = Number(state.config.generalCashOpening || 0) + cashIncome - cashExpenses - pettyCashDeliveredTotal();
+  const bank = Number(state.config.generalBankOpening || 0) + bankIncome - bankExpenses;
+  return { cash, bank, total: cash + bank };
+}
+
+function renderGeneralCash() {
+  const balances = generalCashBalances();
+  $("#generalCashBalance").textContent = money(balances.cash);
+  $("#generalBankBalance").textContent = money(balances.bank);
+  $("#generalTotalBalance").textContent = money(balances.total);
+  $("#generalTodayIncome").textContent = money(todayIncome());
+  const form = $("#generalCashForm");
+  if (form && (!document.activeElement || !form.contains(document.activeElement))) {
+    form.cash.value = state.config.generalCashOpening;
+    form.bank.value = state.config.generalBankOpening;
+    form.pettyCash.value = pettyCashAmount(todayISO()) || "";
+  }
+  if (form) {
+    form.cash.readOnly = !isAdmin();
+    form.bank.readOnly = !isAdmin();
+    form.cash.title = isAdmin() ? "" : "Solo el administrador puede cambiar el saldo inicial.";
+    form.bank.title = isAdmin() ? "" : "Solo el administrador puede cambiar el saldo inicial.";
+  }
+  $("#generalDailyTable").innerHTML = allDatesWithCashActivity().reverse().map((date) => {
+    const income = incomeForDate(date);
+    const opExpenses = dailyExpenseTotal(date);
+    const generalExpenses = dailyGeneralExpenseTotal(date);
+    const closure = state.dailyClosures.find((item) => item.date === date);
+    const details = closure?.rows || printableRowsForDailyClose(date);
+    const detailRows = details.map((row) => `<tr><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.detalle)}</td><td>${escapeHtml(row.metodo || "")}</td><td>${escapeHtml(row.origen || "")}</td><td>${moneyForPrint(row.monto)}</td></tr>`).join("");
+    return `<tr>
+      <td>${formatDate(date)}</td>
+      <td>${money(income)}</td>
+      <td>${money(opExpenses)}</td>
+      <td>${money(generalExpenses)}</td>
+      <td><strong>${money(income - opExpenses - generalExpenses)}</strong>
+        <details class="day-detail"><summary>Ver detalle</summary>
+          <table><thead><tr><th>Tipo</th><th>Detalle</th><th>Metodo</th><th>Origen</th><th>Monto</th></tr></thead><tbody>${detailRows}</tbody></table>
+        </details>
+      </td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5">Aun no hay movimientos.</td></tr>`;
+  renderStaffPayments();
+}
+
+function staffPayments() {
+  return state.expenses
+    .filter((expense) => expense.category === "PERSONAL_TERCERO")
+    .slice()
+    .sort((a, b) => `${b.date || ""}${b.id || ""}`.localeCompare(`${a.date || ""}${a.id || ""}`));
+}
+
+function renderStaffPayments() {
+  const table = $("#staffPaymentsTable");
+  if (!table) return;
+  table.innerHTML = staffPayments().map((payment) => `<tr>
+    <td>${formatDate(payment.date)}</td>
+    <td>${escapeHtml(payment.person || "")}</td>
+    <td>${escapeHtml(payment.type || "OTRO")}</td>
+    <td>${escapeHtml(payment.method || "")}</td>
+    <td><strong>${money(payment.amount)}</strong></td>
+    <td>${escapeHtml(payment.detail || "")}</td>
+  </tr>`).join("") || `<tr><td colspan="6">Aun no hay pagos de personal o terceros.</td></tr>`;
+}
+
+function openAppointment(appointment = {}) {
+  const form = $("#appointmentForm");
+  form.id.value = appointment.id || "";
+  form.date.value = appointment.date || $("#agendaDate").value || todayISO();
+  form.time.value = appointment.time || "09:00";
+  form.unit.value = appointment.unit || state.config.units[0];
+  form.patientId.value = appointment.patientId || state.patients[0]?.id || "";
+  form.doctor.value = appointment.doctor || patientById(form.patientId.value)?.doctor || "";
+  form.service.value = appointment.service || state.services[0]?.name || "";
+  form.status.value = appointment.status || "RESERVADA";
+  form.notes.value = appointment.notes || "";
+  $("#openRescheduleBtn").style.display = appointment.id ? "inline-flex" : "none";
+  $("#appointmentDialog").showModal();
+}
+
+function openReschedule(appointment) {
+  if (!appointment?.id) return;
+  const form = $("#rescheduleForm");
+  form.appointmentId.value = appointment.id;
+  form.comment.value = appointment.notes || "";
+  form.date.value = appointment.date;
+  form.time.value = appointment.time;
+  form.unit.value = appointment.unit || state.config.units[0];
+  form.doctor.value = appointment.doctor || patientById(appointment.patientId)?.doctor || "";
+  $("#appointmentDialog").close();
+  $("#rescheduleDialog").showModal();
+}
+
+function formData(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+function upsert(collection, item) {
+  const index = collection.findIndex((current) => current.id === item.id);
+  if (index >= 0) collection[index] = item;
+  else collection.push(item);
+}
+
+function exportCsv(filename, rows) {
+  if (!rows.length) return;
+  const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
+  const csv = [
+    headers.join(";"),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(";"))
+  ].join("\r\n");
+  download(filename, `\uFEFF${csv}`, "text/csv;charset=utf-8");
+}
+
+function csvCell(value) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function csvRowsForDailyClose(date = todayISO()) {
+  const stored = state.dailyClosures.find((closure) => closure.date === date && Array.isArray(closure.csvRows));
+  if (stored) return stored.csvRows;
+  const session = state.cashSessions.find((item) => item.date === date) || {};
+  const opening = Number(session.openingCash || 0);
+  const incomeCash = incomeByMethodsForDate(date, ["EFECTIVO"]);
+  const incomeWallet = incomeByMethodsForDate(date, ["YAPE", "PLIN"]);
+  const incomeBank = incomeByMethodsForDate(date, ["TARJETA", "TRANSFERENCIA"]);
+  const incomeTotal = incomeForDate(date);
+  const operatingExpenses = dailyCashAffectingExpenseTotal(date);
+  const expected = opening + incomeTotal - operatingExpenses;
+  const rows = [
+    { seccion: "RESUMEN", fecha: date, concepto: "Caja chica inicial", metodo: "", origen: "", ingreso: "", egreso: "", saldo: opening, comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Ingreso bruto efectivo", metodo: "EFECTIVO", origen: "INGRESOS DEL DIA", ingreso: incomeCash, egreso: "", saldo: "", comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Ingreso bruto Yape + Plin", metodo: "YAPE/PLIN", origen: "INGRESOS DEL DIA", ingreso: incomeWallet, egreso: "", saldo: "", comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Ingreso bruto tarjeta + transferencia", metodo: "TARJETA/TRANSFERENCIA", origen: "INGRESOS DEL DIA", ingreso: incomeBank, egreso: "", saldo: "", comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Total ingresos brutos", metodo: "", origen: "", ingreso: incomeTotal, egreso: "", saldo: "", comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Total egresos operativos", metodo: "", origen: "INGRESO_DEL_DIA / CAJA_CHICA", ingreso: "", egreso: operatingExpenses, saldo: "", comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Esperado al cierre", metodo: "", origen: "CAJA CHICA + INGRESOS - EGRESOS", ingreso: "", egreso: "", saldo: expected, comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Contado al cierre", metodo: "", origen: "", ingreso: "", egreso: "", saldo: Number(session.closingCash || 0), comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Diferencia", metodo: "", origen: "", ingreso: "", egreso: "", saldo: Number(session.difference || 0), comprobante: "" }
+  ];
+  state.payments.filter((payment) => payment.date === date).forEach((payment) => {
+    rows.push({
+      seccion: "PAGO",
+      fecha: payment.date,
+      concepto: patientById(payment.patientId)?.name || "",
+      metodo: payment.method,
+      origen: "INGRESO",
+      ingreso: Number(payment.amount || 0),
+      egreso: "",
+      saldo: "",
+      comprobante: payment.receipt || ""
+    });
+  });
+  expensesForDate(date).forEach((expense) => {
+    rows.push({
+      seccion: "EGRESO",
+      fecha: expense.date,
+      concepto: expense.detail,
+      metodo: expense.method,
+      origen: expense.source,
+      ingreso: "",
+      egreso: Number(expense.amount || 0),
+      saldo: "",
+      comprobante: expense.receipt || ""
+    });
+  });
+  return rows;
+}
+
+function printableRowsForDailyClose(date = todayISO()) {
+  const stored = state.dailyClosures.find((closure) => closure.date === date && Array.isArray(closure.rows));
+  if (stored) return stored.rows;
+  const session = state.cashSessions.find((item) => item.date === date) || {};
+  const opening = Number(session.openingCash || 0);
+  const incomeCash = incomeByMethodsForDate(date, ["EFECTIVO"]);
+  const incomeWallet = incomeByMethodsForDate(date, ["YAPE", "PLIN"]);
+  const incomeBank = incomeByMethodsForDate(date, ["TARJETA", "TRANSFERENCIA"]);
+  const operatingExpenses = dailyCashAffectingExpenseTotal(date);
+  const expected = opening + incomeForDate(date) - operatingExpenses;
+  const rows = [
+    { tipo: "RESUMEN", detalle: "Caja chica inicial", metodo: "", origen: "", monto: opening, comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Ingresos efectivo", metodo: "EFECTIVO", origen: "", monto: incomeCash, comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Ingresos Yape + Plin", metodo: "YAPE/PLIN", origen: "", monto: incomeWallet, comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Ingresos tarjeta + transferencia", metodo: "TARJETA/TRANSFERENCIA", origen: "", monto: incomeBank, comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Egresos operativos", metodo: "", origen: "INGRESO_DIA/CAJA_CHICA", monto: -operatingExpenses, comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Esperado", metodo: "", origen: "", monto: expected, comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Contado cierre", metodo: "", origen: "", monto: Number(session.closingCash || 0), comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Diferencia", metodo: "", origen: "", monto: Number(session.difference || 0), comprobante: "" }
+  ];
+  state.payments.filter((payment) => payment.date === date).forEach((payment) => {
+    rows.push({
+      tipo: "PAGO",
+      detalle: patientById(payment.patientId)?.name || "",
+      metodo: payment.method,
+      origen: "INGRESO",
+      monto: Number(payment.amount || 0),
+      comprobante: payment.receipt || ""
+    });
+  });
+  expensesForDate(date).forEach((expense) => {
+    rows.push({
+      tipo: "EGRESO",
+      detalle: expense.detail,
+      metodo: expense.method,
+      origen: expense.source,
+      monto: -Number(expense.amount || 0),
+      comprobante: expense.receipt || ""
+    });
+  });
+  return rows;
+}
+
+function moneyForPrint(value) {
+  const amount = Number(value || 0);
+  if (amount < 0) return `S/ (${Math.abs(amount).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 })})`;
+  return money(amount);
+}
+
+function printDailyClose(date = todayISO()) {
+  const rows = printableRowsForDailyClose(date);
+  const htmlRows = rows.map((row) => `<tr class="${row.tipo.toLowerCase()}"><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.detalle)}</td><td>${escapeHtml(row.metodo || "")}</td><td>${escapeHtml(row.origen || "")}</td><td class="amount">${moneyForPrint(row.monto)}</td><td>${escapeHtml(row.comprobante || "")}</td></tr>`).join("");
+  const w = window.open("", "_blank");
+  w.document.write(`<!doctype html><html><head><title>Cierre de caja ${date}</title><style>
+    body{font-family:Arial,sans-serif;padding:24px;color:#111}
+    h1{margin:0 0 4px;font-size:22px}
+    p{margin:0 0 18px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    td,th{border:1px solid #cfcfcf;padding:8px 10px;text-align:left}
+    th{background:#eaf7fa;font-weight:700}
+    tr.resumen td{font-weight:600}
+    tr.egreso td{color:#9b1c1c}
+    .amount{white-space:nowrap;font-weight:700}
+    @media print{body{padding:12px} button{display:none}}
+  </style></head><body><h1>Cierre de caja ${formatDate(date)}</h1><p>${escapeHtml(state.config.clinicName)}</p><table><thead><tr><th>Tipo</th><th>Detalle</th><th>Metodo</th><th>Origen</th><th>Monto</th><th>Comprobante</th></tr></thead><tbody>${htmlRows}</tbody></table><script>window.print();</script></body></html>`);
+  w.document.close();
+}
+
+function download(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function bindEvents() {
+  const on = (selector, eventName, handler) => {
+    const element = $(selector);
+    if (element) element.addEventListener(eventName, handler);
+  };
+
+  $("#loginForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = formData(event.currentTarget);
+    if (API_ENABLED) {
+      apiFetch("/api/login", { method: "POST", body: JSON.stringify({ username: data.username, password: data.password }) })
+        .then((payload) => {
+          apiToken = payload.token;
+          apiUser = payload.user;
+          currentUserId = payload.user.id;
+          localStorage.setItem(API_TOKEN_KEY, apiToken);
+          $("#loginMessage").textContent = "";
+          form.reset();
+          return loadFromApi();
+        })
+        .catch((error) => {
+          $("#loginMessage").textContent = error.message;
+        });
+      return;
+    }
+    const user = state.users.find((item) =>
+      item.active && item.username.toLowerCase() === data.username.trim().toLowerCase() && item.password === data.password
+    );
+    if (!user) {
+      $("#loginMessage").textContent = "Usuario o contrasena incorrectos.";
+      return;
+    }
+    currentUserId = user.id;
+    localStorage.setItem(`${STORAGE_KEY}-current-user`, currentUserId);
+    $("#loginMessage").textContent = "";
+    event.currentTarget.reset();
+    render();
+  });
+  $("#logoutBtn").addEventListener("click", () => {
+    if (API_ENABLED && apiToken) {
+      apiFetch("/api/logout", { method: "POST", body: "{}" }).catch(() => {});
+    }
+    apiToken = "";
+    apiUser = null;
+    localStorage.removeItem(API_TOKEN_KEY);
+    currentUserId = "";
+    localStorage.removeItem(`${STORAGE_KEY}-current-user`);
+    render();
+  });
+  $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+  $$("[data-go]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.go)));
+  on("#globalSearch", "input", renderPatients);
+  on("#agendaDate", "change", renderAgenda);
+  on("#reportMonth", "change", renderReports);
+  on("#historyPatientFilter", "change", renderClinicalHistory);
+  on("#odontogramPatientFilter", "change", renderOdontogram);
+  on("#doctorFilter", "change", renderAgenda);
+  on("#unitFilter", "change", renderAgenda);
+  on("#newAppointmentBtn", "click", () => openAppointment());
+  on("#quickAppointmentBtn", "click", () => openAppointment());
+  on("#openRescheduleBtn", "click", () => {
+    const appointment = state.appointments.find((item) => item.id === $("#appointmentForm").id.value);
+    openReschedule(appointment);
+  });
+  on("#quickPatientBtn", "click", () => {
+    setView("pacientes");
+    setTimeout(() => $('#patientForm input[name="dni"]')?.focus(), 0);
+  });
+  on("#openExpenseBtn", "click", () => {
+    if (!cashSessionToday()) {
+      alert("Primero abre la caja del dia para registrar egresos.");
+      return;
+    }
+    const form = $("#expenseForm");
+    form.date.value = todayISO();
+    form.detail.value = "";
+    form.amount.value = "";
+    form.receipt.value = "";
+    $("#expenseDialog").showModal();
+  });
+  on('#appointmentForm select[name="patientId"]', "change", syncAppointmentDoctor);
+  on('#historyForm input[name="date"]', "change", () => {
+    fillAppointmentPatientSelectForDate($('#historyForm select[name="patientId"]'), $('#historyForm input[name="date"]').value, $('#historyForm select[name="patientId"]').value);
+  });
+  on('#historyForm select[name="patientId"]', "change", syncAssignedDoctor);
+
+  $("#agendaBoard").addEventListener("click", (event) => {
+    if (!canManageAppointments()) return;
+    const edit = event.target.closest("[data-edit-appointment]");
+    const empty = event.target.closest("[data-new-at]");
+    if (edit) openAppointment(state.appointments.find((appointment) => appointment.id === edit.dataset.editAppointment));
+    if (empty) openAppointment({ date: $("#agendaDate").value, time: empty.dataset.newAt, unit: empty.dataset.unit });
+  });
+
+  $("#saveAppointmentBtn").addEventListener("click", async () => {
+    if (!canManageAppointments()) {
+      alert("Tu usuario solo puede visualizar la agenda.");
+      return;
+    }
+    const data = formData($("#appointmentForm"));
+    const service = serviceByName(data.service);
+    const appointment = {
+      id: data.id || `CI-${String(state.appointments.length + 1).padStart(6, "0")}`,
+      date: data.date,
+      time: data.time,
+      unit: data.unit,
+      doctor: data.doctor,
+      patientId: data.patientId,
+      service: data.service,
+      duration: service?.duration || state.config.interval,
+      status: data.status,
+      notes: data.notes
+    };
+    const conflict = findAppointmentConflict(appointment);
+    if (conflict) {
+      alert(conflict.message);
+      return;
+    }
+    try {
+      await saveAppointmentApi(appointment);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    upsert(state.appointments, appointment);
+    if (!API_ENABLED) saveState();
+    $("#appointmentDialog").close();
+    render();
+  });
+
+  $("#saveRescheduleBtn").addEventListener("click", () => {
+    if (!canManageAppointments()) {
+      alert("Tu usuario no tiene permiso para reprogramar citas.");
+      return;
+    }
+    const data = formData($("#rescheduleForm"));
+    const original = state.appointments.find((appointment) => appointment.id === data.appointmentId);
+    if (!original) return;
+    if (!data.comment.trim()) {
+      alert("Agrega un comentario para registrar el seguimiento de la reprogramacion.");
+      return;
+    }
+    original.status = "REPROGRAMADA";
+    original.notes = data.comment.trim();
+    const newAppointment = {
+      id: `CI-${String(state.appointments.length + 1).padStart(6, "0")}`,
+      date: data.date,
+      time: data.time,
+      unit: data.unit,
+      doctor: data.doctor,
+      patientId: original.patientId,
+      service: original.service,
+      duration: original.duration || serviceByName(original.service)?.duration || state.config.interval,
+      status: "RESERVADA",
+      notes: `Reprogramada desde ${formatDate(original.date)} ${original.time}. ${data.comment.trim()}`
+    };
+    const conflict = findAppointmentConflict(newAppointment);
+    if (conflict) {
+      original.status = "RESERVADA";
+      original.notes = "";
+      alert(conflict.message);
+      return;
+    }
+    state.appointments.push(newAppointment);
+    saveState();
+    $("#rescheduleDialog").close();
+    render();
+  });
+
+  $("#patientForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = formData(event.currentTarget);
+    const patient = {
+      id: data.id || uid("p"),
+      dni: data.dni,
+      name: data.name.trim().toUpperCase(),
+      phone: data.phone,
+      doctor: data.doctor,
+      mainTreatment: data.mainTreatment,
+      createdAt: new Date().toISOString().slice(0, 10),
+      notes: data.notes
+    };
+    try {
+      await savePatientApi(patient);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    upsert(state.patients, patient);
+    event.currentTarget.reset();
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#patientsTable").addEventListener("click", async (event) => {
+    const edit = event.target.closest("[data-edit-patient]");
+    const pay = event.target.closest("[data-pay-patient]");
+    const del = event.target.closest("[data-delete-patient]");
+    if (edit) {
+      const patient = patientById(edit.dataset.editPatient);
+      const form = $("#patientForm");
+      Object.entries(patient).forEach(([key, value]) => {
+        if (form[key]) form[key].value = value;
+      });
+    }
+    if (pay) {
+      setView("pagos");
+      fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), pay.dataset.payPatient);
+      renderTreatmentPaymentOptions();
+    }
+    if (del) {
+      const patient = patientById(del.dataset.deletePatient);
+      if (!patient || !confirm(`Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`)) return;
+      const id = patient.id;
+      try {
+        await deletePatientApi(id);
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      state.patients = state.patients.filter((item) => item.id !== id);
+      state.appointments = state.appointments.filter((item) => item.patientId !== id);
+      state.treatments = state.treatments.filter((item) => item.patientId !== id);
+      state.payments = state.payments.filter((item) => item.patientId !== id);
+      state.clinicalHistory = state.clinicalHistory.filter((item) => item.patientId !== id);
+      state.odontogram = state.odontogram.filter((item) => item.patientId !== id);
+      if (!API_ENABLED) saveState();
+      render();
+    }
+  });
+
+  $("#treatmentForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = formData(event.currentTarget);
+    const treatment = {
+      id: data.id || uid("t"),
+      patientId: data.patientId,
+      service: data.service,
+      teeth: data.teeth,
+      budget: Number(data.budget || 0),
+      status: data.status,
+      notes: data.notes,
+      createdAt: todayISO()
+    };
+    try {
+      await saveTreatmentApi(treatment);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    upsert(state.treatments, treatment);
+    event.currentTarget.reset();
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#treatmentsList").addEventListener("click", (event) => {
+    const edit = event.target.closest("[data-edit-treatment]");
+    if (!edit) return;
+    const treatment = treatmentById(edit.dataset.editTreatment);
+    const form = $("#treatmentForm");
+    Object.entries(treatment).forEach(([key, value]) => {
+      if (form[key]) form[key].value = value;
+    });
+  });
+
+  $("#historyForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!canManageClinical()) {
+      alert("Tu usuario no tiene permiso para guardar historial clinico.");
+      return;
+    }
+    const data = formData(event.currentTarget);
+    if (!data.attended) {
+      alert("Marca la opcion Atendido para poder guardar el historial.");
+      return;
+    }
+    const entry = {
+      id: data.id || uid("h"),
+      patientId: data.patientId,
+      date: data.date,
+      attendedBy: data.attendedBy,
+      attended: true,
+      reason: data.reason,
+      anamnesis: data.anamnesis,
+      exam: data.exam,
+      diagnosis: data.diagnosis,
+      plan: data.plan,
+      procedure: data.procedure,
+      instructions: data.instructions,
+      agreedPrice: Number(data.agreedPrice || 0)
+    };
+    try {
+      await saveClinicalHistoryApi(entry);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    upsert(state.clinicalHistory, entry);
+    const appointment = state.appointments
+      .filter((item) => item.patientId === data.patientId && item.date === data.date)
+      .sort((a, b) => a.time.localeCompare(b.time))[0];
+    if (appointment) appointment.status = "ATENDIDA";
+    $("#historyPatientFilter").value = data.patientId;
+    event.currentTarget.reset();
+    event.currentTarget.attended.checked = false;
+    $('#historyForm input[name="date"]').value = todayISO();
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#historyTimeline").addEventListener("click", (event) => {
+    const edit = event.target.closest("[data-edit-history]");
+    if (!edit) return;
+    const entry = state.clinicalHistory.find((item) => item.id === edit.dataset.editHistory);
+    const form = $("#historyForm");
+    fillPatientSelect(form.patientId, entry.patientId);
+    Object.entries(entry).forEach(([key, value]) => {
+      if (!form[key]) return;
+      if (form[key].type === "checkbox") form[key].checked = Boolean(value);
+      else form[key].value = value;
+    });
+  });
+
+  $("#odontogramForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = formData(event.currentTarget);
+    const index = state.odontogram.findIndex((item) => item.patientId === data.patientId && item.tooth === data.tooth);
+    const record = {
+      id: index >= 0 ? state.odontogram[index].id : uid("odo"),
+      patientId: data.patientId,
+      tooth: data.tooth,
+      condition: data.condition,
+      note: data.note
+    };
+    try {
+      await saveOdontogramApi(record);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    if (index >= 0) state.odontogram[index] = record;
+    else state.odontogram.push(record);
+    $("#odontogramPatientFilter").value = data.patientId;
+    event.currentTarget.reset();
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#odontogramGrid").addEventListener("click", (event) => {
+    const tooth = event.target.closest("[data-tooth]");
+    if (!tooth) return;
+    const patientId = $("#odontogramPatientFilter").value || state.patients[0]?.id;
+    const record = state.odontogram.find((item) => item.patientId === patientId && item.tooth === tooth.dataset.tooth);
+    const form = $("#odontogramForm");
+    form.patientId.value = patientId;
+    form.tooth.value = tooth.dataset.tooth;
+    form.condition.value = record?.condition || "Sano";
+    form.note.value = record?.note || "";
+  });
+
+  $('#paymentForm select[name="patientId"]').addEventListener("change", renderTreatmentPaymentOptions);
+  $('#paymentForm select[name="historyId"]').addEventListener("change", updatePaymentDue);
+  $('#paymentForm input[name="amount"]').addEventListener("input", updatePaymentChange);
+  $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
+  $("#paymentForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!cashSessionToday()) {
+      alert("Primero abre la caja del dia para registrar pagos.");
+      return;
+    }
+    if (!canManagePayments()) {
+      alert("Tu usuario no tiene permiso para registrar pagos.");
+      return;
+    }
+    const data = formData(event.currentTarget);
+    const due = historyBalance(data.historyId);
+    const amount = Number(data.amount || 0);
+    if (!data.historyId) {
+      alert("Selecciona una atencion pendiente para registrar el pago.");
+      return;
+    }
+    if (amount <= 0 || amount > due) {
+      alert("El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
+      return;
+    }
+    const payment = {
+      id: data.id || uid("pay"),
+      patientId: data.patientId,
+      historyId: data.historyId,
+      date: data.date,
+      amount,
+      cashReceived: Number(data.cashReceived || amount),
+      change: Math.max(0, Number(data.cashReceived || amount) - amount),
+      method: data.method,
+      receipt: data.receipt
+    };
+    try {
+      await savePaymentApi(payment);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    upsert(state.payments, payment);
+    event.currentTarget.reset();
+    event.currentTarget.date.value = todayISO();
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#openCashBtn").addEventListener("click", async () => {
+    const existing = cashSessionToday();
+    if (existing) {
+      alert("La caja del dia ya esta abierta.");
+      return;
+    }
+    const openingCash = Number($("#openingCash").value || pettyCashAmount(todayISO()) || 0);
+    if (openingCash > generalCashBalances().cash) {
+      alert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
+      return;
+    }
+    const session = { id: uid("cash"), date: todayISO(), openingCash, openedAt: new Date().toISOString(), closedAt: "", closingCash: 0, difference: 0 };
+    try {
+      await openCashApi(session);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.cashSessions.push(session);
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#closeCashBtn").addEventListener("click", async () => {
+    const session = cashSessionToday();
+    if (!session) {
+      alert("Primero abre la caja del dia.");
+      return;
+    }
+    const unresolved = state.appointments.filter((appointment) => {
+      if (appointment.date !== todayISO()) return false;
+      if (appointment.status === "ATENDIDA") return false;
+      if (appointment.status === "REPROGRAMADA" && appointment.notes?.trim()) return false;
+      return true;
+    });
+    if (unresolved.length) {
+      const names = unresolved.map((appointment) => patientById(appointment.patientId)?.name || "Paciente").join(", ");
+      alert(`No puedes cerrar caja. Debes atender o reprogramar con comentario a: ${names}`);
+      return;
+    }
+    if ($("#closingCash").value === "") {
+      alert("Ingresa el efectivo contado al cierre antes de cerrar caja.");
+      $("#closingCash").focus();
+      return;
+    }
+    const expected = Number(session.openingCash || 0) + todayIncome() - dailyCashAffectingExpenseTotal(todayISO());
+    const closing = Number($("#closingCash").value || 0);
+    const closureRows = printableRowsForDailyClose(todayISO());
+    const closureCsvRows = csvRowsForDailyClose(todayISO());
+    session.closingCash = closing;
+    session.difference = closing - expected;
+    session.incomeTotal = todayIncome();
+    session.expenseTotal = dailyCashAffectingExpenseTotal(todayISO());
+    session.closedAt = new Date().toISOString();
+    try {
+      await closeCashApi({ date: todayISO(), closingCash: closing, closedAt: session.closedAt });
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.payments.forEach((payment) => {
+      if (payment.date === todayISO()) payment.closed = true;
+    });
+    state.expenses.forEach((expense) => {
+      if (expense.date === todayISO()) expense.closed = true;
+    });
+    setPettyCashAllocation(todayISO(), 0);
+    const existingClosureIndex = state.dailyClosures.findIndex((closure) => closure.date === todayISO());
+    const closure = { id: uid("close"), date: todayISO(), closedAt: session.closedAt, rows: closureRows, csvRows: closureCsvRows };
+    if (existingClosureIndex >= 0) state.dailyClosures[existingClosureIndex] = closure;
+    else state.dailyClosures.push(closure);
+    if (!API_ENABLED) saveState();
+    render();
+    printDailyClose(todayISO());
+    alert(`Caja cerrada. Diferencia: ${money(session.difference)}`);
+  });
+
+  $("#openingCash").addEventListener("input", renderCashBox);
+  $("#closingCash").addEventListener("input", renderCashBox);
+
+  $("#saveExpenseBtn").addEventListener("click", async () => {
+    if (!cashSessionToday()) {
+      alert("Primero abre la caja del dia para registrar egresos.");
+      return;
+    }
+    const data = formData($("#expenseForm"));
+    if (!data.detail.trim() || Number(data.amount || 0) <= 0) {
+      alert("Completa el detalle y el monto del egreso.");
+      return;
+    }
+    const expense = {
+      id: uid("exp"),
+      date: data.date || todayISO(),
+      detail: data.detail.trim(),
+      amount: Number(data.amount || 0),
+      method: data.method,
+      source: data.source,
+      receipt: data.receipt
+    };
+    try {
+      await saveExpenseApi(expense);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.expenses.push(expense);
+    if (!API_ENABLED) saveState();
+    $("#expenseDialog").close();
+    render();
+  });
+
+  $("#configForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!isAdmin()) {
+      alert("Solo el administrador puede cambiar la configuracion.");
+      return;
+    }
+    const data = formData(event.currentTarget);
+    const doctors = data.doctors.split(",").map((item) => item.trim()).filter(Boolean);
+    const units = data.units.split(",").map((item) => item.trim()).filter(Boolean);
+    state.config = {
+      ...state.config,
+      clinicName: data.clinicName,
+      start: data.start,
+      end: data.end,
+      interval: Number(data.interval),
+      inactiveDays: Number(data.inactiveDays),
+      whatsapp: data.whatsapp,
+      doctors: doctors.length ? doctors : seedData.config.doctors,
+      units: units.length ? units : seedData.config.units
+    };
+    try {
+      await saveConfigApi({
+        clinicName: state.config.clinicName,
+        start: state.config.start,
+        end: state.config.end,
+        interval: state.config.interval,
+        inactiveDays: state.config.inactiveDays,
+        whatsapp: state.config.whatsapp,
+        doctors: state.config.doctors,
+        units: state.config.units
+      });
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#resetDataBtn").addEventListener("click", () => {
+    if (!isAdmin()) return;
+    if (!confirm("Se reemplazaran los datos guardados por los datos iniciales. Deseas continuar?")) return;
+    state = structuredClone(seedData);
+    saveState();
+    render();
+  });
+  $("#blankDataBtn").addEventListener("click", async () => {
+    if (!isAdmin()) return;
+    if (!confirm("Esto dejara el sistema en cero: sin pacientes, citas, pagos, historiales, caja ni saldos iniciales. Se conservaran configuracion, servicios y usuarios. Deseas continuar?")) return;
+    try {
+      await resetOperationalApi();
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state = blankStateFromCurrent();
+    if (!API_ENABLED) saveState();
+    setView("dashboard");
+  });
+
+  $("#backupBtn").addEventListener("click", () => {
+    if (!isAdmin()) return;
+    download("respaldo-cm-odontologia.json", JSON.stringify(state, null, 2), "application/json");
+  });
+  $("#restoreInput").addEventListener("change", async (event) => {
+    if (!isAdmin()) return;
+    const file = event.target.files[0];
+    if (!file) return;
+    state = JSON.parse(await file.text());
+    saveState();
+    render();
+  });
+
+  $("#exportPatientsBtn").addEventListener("click", () => exportCsv("pacientes.csv", state.patients));
+  $("#exportTreatmentsBtn").addEventListener("click", () => exportCsv("tratamientos.csv", state.treatments));
+  $("#exportPaymentsBtn").addEventListener("click", () => exportCsv("pagos.csv", state.payments));
+  $("#exportCloseBtn").addEventListener("click", () => exportCsv(`cierre-caja-${todayISO()}.csv`, csvRowsForDailyClose(todayISO())));
+  $("#printCloseBtn").addEventListener("click", () => printDailyClose(todayISO()));
+  $("#generalCashForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = formData(event.currentTarget);
+    const configUpdates = {};
+    if (isAdmin()) {
+      state.config.generalCashOpening = Number(data.cash || 0);
+      state.config.generalBankOpening = Number(data.bank || 0);
+      configUpdates.generalCashOpening = state.config.generalCashOpening;
+      configUpdates.generalBankOpening = state.config.generalBankOpening;
+    }
+    const pettyAmount = Number(data.pettyCash || 0);
+    try {
+      await saveConfigApi(configUpdates);
+      await savePettyCashApi(todayISO(), pettyAmount);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    setPettyCashAllocation(todayISO(), pettyAmount);
+    const session = cashSessionToday();
+    if (session) session.openingCash = pettyAmount;
+    if (!API_ENABLED) saveState();
+    render();
+  });
+  $("#userForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!isAdmin()) {
+      alert("Solo el administrador puede crear usuarios.");
+      return;
+    }
+    const data = formData(event.currentTarget);
+    const username = data.username.trim();
+    const duplicate = state.users.find((user) => user.username.toLowerCase() === username.toLowerCase() && user.id !== data.id);
+    if (duplicate) {
+      alert("Ese nombre de usuario ya existe.");
+      return;
+    }
+    const existing = state.users.find((user) => user.id === data.id);
+    if (!existing && !data.password) {
+      alert("Ingresa una contrasena para crear el usuario.");
+      return;
+    }
+    const user = {
+      id: data.id || uid("user"),
+      name: data.name.trim(),
+      username,
+      password: data.password || existing?.password || "",
+      role: data.role,
+      active: data.active === "on"
+    };
+    if (existing?.id === "u-admin") user.active = true;
+    try {
+      await saveUserApi(user);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    user.password = "";
+    upsert(state.users, user);
+    event.currentTarget.reset();
+    event.currentTarget.active.checked = true;
+    if (!API_ENABLED) saveState();
+    render();
+  });
+  $("#clearUserFormBtn").addEventListener("click", () => {
+    const form = $("#userForm");
+    form.reset();
+    form.id.value = "";
+    form.active.checked = true;
+  });
+  $("#usersTable").addEventListener("click", (event) => {
+    if (!isAdmin()) return;
+    const edit = event.target.closest("[data-edit-user]");
+    const toggle = event.target.closest("[data-toggle-user]");
+    if (edit) {
+      const user = state.users.find((item) => item.id === edit.dataset.editUser);
+      const form = $("#userForm");
+      form.id.value = user.id;
+      form.name.value = user.name;
+      form.username.value = user.username;
+      form.password.value = "";
+      form.role.value = user.role;
+      form.active.checked = user.active;
+    }
+    if (toggle) {
+      const user = state.users.find((item) => item.id === toggle.dataset.toggleUser);
+      if (!user || user.id === "u-admin") return;
+      const previous = user.active;
+      user.active = !user.active;
+      saveUserApi(user).catch((error) => {
+        user.active = previous;
+        alert(error.message);
+        render();
+      });
+      if (!API_ENABLED) saveState();
+      render();
+    }
+  });
+  $("#staffPaymentForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = formData(event.currentTarget);
+    const amount = Number(data.amount || 0);
+    if (!data.person.trim() || !data.detail.trim() || amount <= 0) {
+      alert("Completa la persona, el detalle y un monto mayor a cero.");
+      return;
+    }
+    const expense = {
+      id: uid("staff"),
+      date: data.date || todayISO(),
+      person: data.person.trim().toUpperCase(),
+      type: data.type || "OTRO",
+      detail: data.detail.trim(),
+      amount,
+      method: data.method,
+      source: "CAJA_GENERAL",
+      category: "PERSONAL_TERCERO",
+      receipt: "Pago personal / tercero"
+    };
+    try {
+      await saveExpenseApi(expense);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.expenses.push(expense);
+    event.currentTarget.reset();
+    event.currentTarget.date.value = todayISO();
+    if (!API_ENABLED) saveState();
+    render();
+  });
+  $("#exportGeneralBtn").addEventListener("click", () => {
+    const rows = allDatesWithCashActivity().map((date) => ({
+      fecha: date,
+      ingresos: incomeForDate(date),
+      egresos_operativos: dailyExpenseTotal(date),
+      egresos_caja_general: dailyGeneralExpenseTotal(date),
+      neto: incomeForDate(date) - dailyExpenseTotal(date) - dailyGeneralExpenseTotal(date)
+    }));
+    exportCsv("caja-general.csv", rows);
+  });
+  $("#exportStaffPaymentsBtn").addEventListener("click", () => {
+    exportCsv("pagos-personal-terceros.csv", staffPayments().map((payment) => ({
+      fecha: payment.date,
+      persona: payment.person,
+      tipo: payment.type,
+      metodo: payment.method,
+      origen: payment.source,
+      monto: -Number(payment.amount || 0),
+      detalle: payment.detail
+    })));
+  });
+  $("#exportCampaignBtn").addEventListener("click", () => exportCsv("campanas.csv", state.patients.map((patient) => ({ nombre: patient.name, telefono: patient.phone, estado: patientStatus(patient), saldo: patientDebt(patient.id) }))));
+  $("#exportRemindersBtn").addEventListener("click", () => exportCsv("recordatorios.csv", state.appointments.filter((appointment) => appointment.date >= todayISO()).map((appointment) => ({ fecha: appointment.date, hora: appointment.time, paciente: patientById(appointment.patientId)?.name, telefono: patientById(appointment.patientId)?.phone, servicio: appointment.service, doctor: appointment.doctor, estado: appointment.status }))));
+  $("#exportReportsBtn").addEventListener("click", () => {
+    const month = $("#reportMonth").value || todayISO().slice(0, 7);
+    exportCsv("reporte-mensual.csv", state.appointments.filter((appointment) => appointment.date.startsWith(month)).map((appointment) => ({ fecha: appointment.date, hora: appointment.time, paciente: patientById(appointment.patientId)?.name, servicio: appointment.service, doctor: appointment.doctor, estado: appointment.status })));
+  });
+}
+
+function init() {
+  $("#agendaDate").value = todayISO();
+  $('#paymentForm input[name="date"]').value = todayISO();
+  $('#historyForm input[name="date"]').value = todayISO();
+  $('#staffPaymentForm input[name="date"]').value = todayISO();
+  $("#reportMonth").value = todayISO().slice(0, 7);
+  bindEvents();
+  setupApiAutoRefresh();
+  if (API_ENABLED && apiToken) loadFromApi();
+  else render();
+}
+
+init();

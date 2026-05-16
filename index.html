@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CM Odontologia Estetica | Sistema Dental</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="loginScreen" class="login-screen">
+      <form class="login-card" id="loginForm">
+        <span class="brand-mark">CM</span>
+        <h1>Ingreso al sistema</h1>
+        <label>Usuario<input name="username" autocomplete="username" required /></label>
+        <label>Contrasena<input name="password" type="password" autocomplete="current-password" required /></label>
+        <button class="primary" type="submit">Ingresar</button>
+        <p class="muted" id="loginMessage"></p>
+      </form>
+    </section>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">CM</span>
+        <div>
+          <strong>CM Odontologia</strong>
+          <small>Sistema dental</small>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Modulos">
+        <button class="nav-item active" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="agenda">Agenda</button>
+        <button class="nav-item" data-view="pacientes">Pacientes</button>
+        <button class="nav-item" data-view="historial">Historial clinico</button>
+        <button class="nav-item" data-view="odontograma">Odontograma</button>
+        <button class="nav-item" data-view="tratamientos">Tratamientos</button>
+        <button class="nav-item" data-view="pagos">Pagos y caja</button>
+        <button class="nav-item" data-view="caja-general">Caja general</button>
+        <button class="nav-item" data-view="panel">Panel recepcion</button>
+        <button class="nav-item" data-view="recordatorios">Recordatorios</button>
+        <button class="nav-item" data-view="reportes">Reportes</button>
+        <button class="nav-item" data-view="campanas">Campanas</button>
+        <button class="nav-item" data-view="configuracion">Configuracion</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="session-box">
+          <strong id="sessionUser">Sin usuario</strong>
+          <small id="sessionRole"></small>
+        </div>
+        <button class="ghost full" id="logoutBtn">Cerrar sesion</button>
+        <button class="ghost full" id="backupBtn">Exportar respaldo</button>
+        <label class="ghost full file-label">
+          Importar respaldo
+          <input id="restoreInput" type="file" accept="application/json" />
+        </label>
+      </div>
+    </aside>
+
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="todayLabel"></p>
+          <h1 id="viewTitle">Dashboard</h1>
+        </div>
+        <div class="top-actions">
+          <input id="globalSearch" class="search" type="search" placeholder="Buscar paciente, DNI o telefono" />
+          <button class="ghost" id="quickPatientBtn">Nuevo paciente</button>
+          <button class="primary" id="quickAppointmentBtn">Nueva cita</button>
+        </div>
+      </header>
+
+      <section id="dashboard" class="view active">
+        <div class="kpi-grid">
+          <article class="kpi">
+            <span>Citas hoy</span>
+            <strong id="kpiToday">0</strong>
+          </article>
+          <article class="kpi">
+            <span>Pacientes activos</span>
+            <strong id="kpiActive">0</strong>
+          </article>
+          <article class="kpi">
+            <span>Caja del dia</span>
+            <strong id="kpiCash">S/ 0</strong>
+          </article>
+          <article class="kpi">
+            <span>Saldo pendiente</span>
+            <strong id="kpiDebt">S/ 0</strong>
+          </article>
+        </div>
+
+        <div class="content-grid two">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Agenda de hoy</h2>
+              <button class="link" data-go="agenda">Ver agenda</button>
+            </div>
+            <div id="todayAppointments" class="stack"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Alertas</h2>
+              <button class="link" data-go="campanas">Campanas</button>
+            </div>
+            <div id="alertsList" class="stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="agenda" class="view">
+        <div class="toolbar agenda-toolbar">
+          <input id="agendaDate" type="date" />
+          <select id="doctorFilter"></select>
+          <select id="unitFilter"></select>
+          <button class="primary" id="newAppointmentBtn">Registrar cita</button>
+        </div>
+        <div class="agenda-board" id="agendaBoard"></div>
+      </section>
+
+      <section id="pacientes" class="view">
+        <div class="content-grid form-and-list">
+          <form class="panel form" id="patientForm">
+            <div class="panel-head">
+              <h2>Ingreso de paciente</h2>
+              <button type="reset" class="ghost">Limpiar</button>
+            </div>
+            <input type="hidden" name="id" />
+            <label>DNI o identificador<input name="dni" required /></label>
+            <label>Nombre completo<input name="name" required /></label>
+            <label>Telefono<input name="phone" inputmode="tel" /></label>
+            <label>Doctor principal<select name="doctor"></select></label>
+            <label>Tratamiento principal<select name="mainTreatment"></select></label>
+            <label>Observaciones<textarea name="notes" rows="3"></textarea></label>
+            <button class="primary" type="submit">Guardar paciente</button>
+          </form>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Pacientes</h2>
+              <button class="ghost" id="exportPatientsBtn">CSV</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Paciente</th>
+                    <th>Telefono</th>
+                    <th>Doctor</th>
+                    <th>Estado</th>
+                    <th>Saldo</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="patientsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="historial" class="view">
+        <div class="content-grid form-and-list">
+          <form class="panel form" id="historyForm">
+            <div class="panel-head">
+              <h2>Nota clinica</h2>
+              <button type="reset" class="ghost">Limpiar</button>
+            </div>
+            <input type="hidden" name="id" />
+            <label>Fecha<input name="date" type="date" required /></label>
+            <label>Paciente<select name="patientId" required></select></label>
+            <label>Atendido por<input name="attendedBy" readonly required /></label>
+            <label>Motivo de consulta<textarea name="reason" rows="2" required></textarea></label>
+            <label>Anamnesis / antecedentes<textarea name="anamnesis" rows="2"></textarea></label>
+            <label>Examen estomatologico<textarea name="exam" rows="2"></textarea></label>
+            <label>Diagnostico<textarea name="diagnosis" rows="2"></textarea></label>
+            <label>Plan de tratamiento<textarea name="plan" rows="2"></textarea></label>
+            <label>Procedimiento realizado<textarea name="procedure" rows="3"></textarea></label>
+            <label>Indicaciones<textarea name="instructions" rows="2"></textarea></label>
+            <label>Precio pactado del dia S/<input name="agreedPrice" type="number" min="0" step="0.01" required /></label>
+            <label class="check-row"><input name="attended" type="checkbox" /> Atendido</label>
+            <button class="primary" type="submit">Guardar historial</button>
+          </form>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Historial del paciente</h2>
+              <select id="historyPatientFilter"></select>
+            </div>
+            <div id="historyTimeline" class="timeline"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="odontograma" class="view">
+        <div class="content-grid form-and-list">
+          <form class="panel form" id="odontogramForm">
+            <div class="panel-head">
+              <h2>Registro dental</h2>
+              <button type="reset" class="ghost">Limpiar</button>
+            </div>
+            <label>Paciente<select name="patientId" required></select></label>
+            <label>Pieza dental<select name="tooth" required></select></label>
+            <label>Condicion<select name="condition" required></select></label>
+            <label>Observacion<textarea name="note" rows="3"></textarea></label>
+            <button class="primary" type="submit">Actualizar odontograma</button>
+          </form>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Odontograma</h2>
+              <select id="odontogramPatientFilter"></select>
+            </div>
+            <div class="tooth-legend">
+              <span><i class="healthy"></i>Sano</span>
+              <span><i class="cavity"></i>Cariado</span>
+              <span><i class="treated"></i>Obturado</span>
+              <span><i class="missing"></i>Perdido/Ausente</span>
+            </div>
+            <div id="odontogramGrid" class="odontogram-grid"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tratamientos" class="view">
+        <div class="content-grid form-and-list">
+          <form class="panel form" id="treatmentForm">
+            <div class="panel-head">
+              <h2>Plan de tratamiento</h2>
+              <button type="reset" class="ghost">Limpiar</button>
+            </div>
+            <input type="hidden" name="id" />
+            <label>Paciente<select name="patientId" required></select></label>
+            <label>Servicio<select name="service" required></select></label>
+            <label>Piezas dentales<input name="teeth" placeholder="Ej. 11, 12, 21" /></label>
+            <label>Presupuesto S/<input name="budget" type="number" min="0" step="0.01" required /></label>
+            <label>Estado<select name="status"></select></label>
+            <label>Notas clinicas<textarea name="notes" rows="3"></textarea></label>
+            <button class="primary" type="submit">Guardar tratamiento</button>
+          </form>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Seguimiento clinico</h2>
+              <button class="ghost" id="exportTreatmentsBtn">CSV</button>
+            </div>
+            <div id="treatmentsList" class="stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="pagos" class="view">
+        <div class="content-grid form-and-list">
+          <form class="panel form" id="paymentForm">
+            <div class="panel-head">
+              <h2>Registrar pago</h2>
+              <div class="top-actions">
+                <button type="button" class="ghost" id="openExpenseBtn">Egresos</button>
+                <button type="reset" class="ghost">Limpiar</button>
+              </div>
+            </div>
+            <p class="notice" id="cashLockedMessage">Primero abre la caja del dia para registrar pagos o egresos.</p>
+            <input type="hidden" name="id" />
+            <label>Paciente<select name="patientId" required></select></label>
+            <label>Atencion pendiente<select name="historyId"></select></label>
+            <label>Saldo a pagar<input name="amountDue" type="number" readonly /></label>
+            <label>Fecha<input name="date" type="date" required /></label>
+            <label>Monto que paga S/<input name="amount" type="number" min="0" step="0.01" readonly required /></label>
+            <label>Monto recibido S/<input name="cashReceived" type="number" min="0" step="0.01" /></label>
+            <label>Vuelto S/<input name="change" type="number" readonly /></label>
+            <label>Metodo<select name="method"></select></label>
+            <label>Comprobante<input name="receipt" placeholder="Boleta, factura o referencia" /></label>
+            <button class="primary" type="submit">Guardar pago</button>
+          </form>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Caja y saldos</h2>
+              <button class="ghost" id="exportPaymentsBtn">CSV</button>
+            </div>
+            <div class="summary-row">
+              <span>Ingresos del mes <strong id="monthIncome">S/ 0</strong></span>
+              <span>Pendiente total <strong id="totalDebt">S/ 0</strong></span>
+            </div>
+            <div class="cash-box">
+              <div class="panel-head">
+                <h2>Caja diaria</h2>
+                <span class="status" id="cashStatus">SIN APERTURA</span>
+              </div>
+              <div class="settings-grid">
+                <label>Caja chica inicial S/<input id="openingCash" type="number" min="0" step="0.01" /></label>
+                <label>Efectivo contado al cierre S/<input id="closingCash" type="number" min="0" step="0.01" /></label>
+                <label>Diferencia S/<input id="cashDifference" type="number" readonly /></label>
+              </div>
+              <div class="summary-row">
+                <span>Inicial <strong id="cashOpeningLabel">S/ 0</strong></span>
+                <span>Total ingresos <strong id="cashIncomeLabel">S/ 0</strong></span>
+                <span>Egresos dia <strong id="cashExpenseLabel">S/ 0</strong></span>
+                <span>Esperado <strong id="cashExpectedLabel">S/ 0</strong></span>
+              </div>
+              <div class="top-actions">
+                <button class="ghost" id="openCashBtn" type="button">Abrir caja del dia</button>
+                <button class="primary" id="closeCashBtn" type="button">Cerrar y cuadrar caja</button>
+                <button class="ghost" id="printCloseBtn" type="button">Imprimir cierre</button>
+                <button class="ghost" id="exportCloseBtn" type="button">Excel cierre</button>
+                <div class="cash-breakdown">
+                  <span>Efectivo disponible <strong id="cashMethodCash">S/ 0</strong></span>
+                  <span>Yape + Plin disp. <strong id="cashMethodWallet">S/ 0</strong></span>
+                  <span>Tarjeta + Transf. disp. <strong id="cashMethodBank">S/ 0</strong></span>
+                </div>
+              </div>
+            </div>
+            <div class="panel-head">
+              <h2>Egresos del dia</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Detalle</th>
+                    <th>Metodo</th>
+                    <th>Origen</th>
+                    <th>Monto</th>
+                  </tr>
+                </thead>
+                <tbody id="expensesTable"></tbody>
+              </table>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Paciente</th>
+                    <th>Metodo</th>
+                    <th>Monto</th>
+                    <th>Comprobante</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="caja-general" class="view">
+        <div class="kpi-grid compact">
+          <article class="kpi">
+            <span>Caja general efectivo</span>
+            <strong id="generalCashBalance">S/ 0</strong>
+          </article>
+          <article class="kpi">
+            <span>Billeteras y bancos</span>
+            <strong id="generalBankBalance">S/ 0</strong>
+          </article>
+          <article class="kpi">
+            <span>Total general</span>
+            <strong id="generalTotalBalance">S/ 0</strong>
+          </article>
+          <article class="kpi">
+            <span>Ingresos hoy</span>
+            <strong id="generalTodayIncome">S/ 0</strong>
+          </article>
+        </div>
+        <div class="content-grid general-layout">
+          <form class="panel form" id="generalCashForm">
+            <div class="panel-head">
+              <h2>Saldos iniciales</h2>
+            </div>
+            <label>Efectivo general S/<input name="cash" type="number" min="0" step="0.01" /></label>
+            <label>Yape/Plin/Transferencia/Tarjeta S/<input name="bank" type="number" min="0" step="0.01" /></label>
+            <label>Salida caja chica del dia S/<input name="pettyCash" type="number" min="0" step="0.01" /></label>
+            <button class="primary" type="submit">Guardar saldos</button>
+          </form>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Resumen diario</h2>
+              <button class="ghost" id="exportGeneralBtn">Excel</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Ingresos</th>
+                    <th>Egresos operativos</th>
+                    <th>Egresos caja general</th>
+                    <th>Neto</th>
+                  </tr>
+                </thead>
+                <tbody id="generalDailyTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div class="content-grid general-layout lower">
+          <form class="panel form" id="staffPaymentForm">
+            <div class="panel-head">
+              <h2>Pago personal / terceros</h2>
+            </div>
+            <label>Fecha<input name="date" type="date" required /></label>
+            <label>Persona / proveedor<input name="person" required placeholder="Doctor, asistente, contador, laboratorio" /></label>
+            <label>Tipo<select name="type"></select></label>
+            <label>Detalle<textarea name="detail" rows="3" required></textarea></label>
+            <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
+            <label>Metodo<select name="method"></select></label>
+            <button class="primary" type="submit">Guardar pago</button>
+          </form>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Pagos registrados</h2>
+              <button class="ghost" id="exportStaffPaymentsBtn">Excel</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Persona</th>
+                    <th>Tipo</th>
+                    <th>Metodo</th>
+                    <th>Monto</th>
+                    <th>Detalle</th>
+                  </tr>
+                </thead>
+                <tbody id="staffPaymentsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="panel" class="view">
+        <div class="kpi-grid compact">
+          <article class="kpi">
+            <span>En espera</span>
+            <strong id="panelWaiting">0</strong>
+          </article>
+          <article class="kpi">
+            <span>En atencion</span>
+            <strong id="panelAttention">0</strong>
+          </article>
+          <article class="kpi">
+            <span>Atendidas</span>
+            <strong id="panelDone">0</strong>
+          </article>
+          <article class="kpi">
+            <span>No asistio</span>
+            <strong id="panelMissed">0</strong>
+          </article>
+        </div>
+        <div class="content-grid two">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Recepcion</h2>
+              <button class="primary" data-go="agenda">Gestionar agenda</button>
+            </div>
+            <div id="receptionQueue" class="stack"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Doctores</h2>
+              <button class="ghost" data-go="historial">Abrir historial</button>
+            </div>
+            <div id="doctorPanel" class="doctor-grid"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="recordatorios" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Recordatorios de citas</h2>
+            <button class="ghost" id="exportRemindersBtn">CSV</button>
+          </div>
+          <div id="remindersList" class="campaign-grid"></div>
+        </div>
+      </section>
+
+      <section id="reportes" class="view">
+        <div class="toolbar">
+          <input id="reportMonth" type="month" />
+          <button class="ghost" id="exportReportsBtn">Exportar CSV</button>
+        </div>
+        <div class="kpi-grid compact">
+          <article class="kpi">
+            <span>Citas del mes</span>
+            <strong id="reportAppointments">0</strong>
+          </article>
+          <article class="kpi">
+            <span>Ingresos</span>
+            <strong id="reportIncome">S/ 0</strong>
+          </article>
+          <article class="kpi">
+            <span>Tratamientos activos</span>
+            <strong id="reportTreatments">0</strong>
+          </article>
+          <article class="kpi">
+            <span>Pacientes nuevos</span>
+            <strong id="reportNewPatients">0</strong>
+          </article>
+        </div>
+        <div class="content-grid two">
+          <section class="panel">
+            <div class="panel-head"><h2>Resumen por doctor</h2></div>
+            <div id="doctorReport" class="table-wrap"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>Resumen por servicio</h2></div>
+            <div id="serviceReport" class="table-wrap"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="campanas" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Pacientes para WhatsApp</h2>
+            <button class="ghost" id="exportCampaignBtn">CSV</button>
+          </div>
+          <div id="campaignList" class="campaign-grid"></div>
+        </div>
+      </section>
+
+      <section id="configuracion" class="view">
+        <form class="panel form wide" id="configForm">
+          <div class="panel-head">
+            <h2>Configuracion del consultorio</h2>
+            <div class="top-actions">
+              <button class="ghost" id="resetDataBtn" type="button">Restaurar datos iniciales</button>
+              <button class="ghost" id="blankDataBtn" type="button">Empezar desde cero</button>
+            </div>
+          </div>
+          <div class="settings-grid">
+            <label>Nombre<input name="clinicName" /></label>
+            <label>Inicio<input name="start" type="time" /></label>
+            <label>Fin<input name="end" type="time" /></label>
+            <label>Intervalo minutos<input name="interval" type="number" min="10" step="5" /></label>
+            <label>Dias para inactivo<input name="inactiveDays" type="number" min="1" /></label>
+            <label>WhatsApp Business<input name="whatsapp" /></label>
+          </div>
+          <label>Doctores separados por coma<input name="doctors" /></label>
+          <label>Unidades separadas por coma<input name="units" /></label>
+          <button class="primary" type="submit">Guardar configuracion</button>
+        </form>
+        <div class="content-grid form-and-list user-admin-grid" id="userAdminPanel">
+          <form class="panel form" id="userForm">
+            <div class="panel-head">
+              <h2>Crear usuarios</h2>
+              <button class="ghost" id="clearUserFormBtn" type="button">Limpiar</button>
+            </div>
+            <input type="hidden" name="id" />
+            <label>Nombre completo<input name="name" required /></label>
+            <label>Usuario<input name="username" required /></label>
+            <label>Contrasena<input name="password" type="password" placeholder="Obligatoria al crear" /></label>
+            <label>Rol
+              <select name="role" required>
+                <option value="DOCTOR">Doctor</option>
+                <option value="RECEPCION">Recepcion</option>
+                <option value="ADMIN">Administrador</option>
+              </select>
+            </label>
+            <label class="check"><input name="active" type="checkbox" checked /> Usuario activo</label>
+            <button class="primary" type="submit">Guardar usuario</button>
+          </form>
+          <section class="panel">
+            <div class="panel-head"><h2>Usuarios registrados</h2></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Usuario</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="usersTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="appointmentDialog">
+      <form method="dialog" class="form modal-form" id="appointmentForm">
+        <div class="panel-head">
+          <h2>Nueva cita</h2>
+          <button class="icon" value="cancel" type="submit" aria-label="Cerrar">x</button>
+        </div>
+        <input type="hidden" name="id" />
+        <label>Fecha<input name="date" type="date" required /></label>
+        <label>Hora<input name="time" type="time" required /></label>
+        <label>Unidad<select name="unit" required></select></label>
+        <label>Doctor asignado<input name="doctor" readonly required /></label>
+        <label>Paciente<select name="patientId" required></select></label>
+        <label>Servicio<select name="service" required></select></label>
+        <label>Estado<select name="status" required></select></label>
+        <label>Notas<textarea name="notes" rows="3"></textarea></label>
+        <menu>
+          <button class="ghost" value="cancel" type="submit">Cancelar</button>
+          <button class="ghost" id="openRescheduleBtn" type="button">Reprogramar</button>
+          <button class="primary" id="saveAppointmentBtn" value="default" type="button">Guardar cita</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="rescheduleDialog">
+      <form method="dialog" class="form modal-form" id="rescheduleForm">
+        <div class="panel-head">
+          <h2>Reprogramar cita</h2>
+          <button class="icon" value="cancel" type="submit" aria-label="Cerrar">x</button>
+        </div>
+        <input type="hidden" name="appointmentId" />
+        <label>Comentario obligatorio<textarea name="comment" rows="3" required placeholder="Motivo o seguimiento realizado con el paciente"></textarea></label>
+        <label>Nueva fecha<input name="date" type="date" required /></label>
+        <label>Nueva hora<input name="time" type="time" required /></label>
+        <label>Unidad<select name="unit" required></select></label>
+        <label>Doctor asignado<input name="doctor" readonly required /></label>
+        <menu>
+          <button class="ghost" value="cancel" type="submit">Cancelar</button>
+          <button class="primary" id="saveRescheduleBtn" type="button">Guardar reprogramacion</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="expenseDialog">
+      <form method="dialog" class="form modal-form" id="expenseForm">
+        <div class="panel-head">
+          <h2>Registrar egreso</h2>
+          <button class="icon" value="cancel" type="submit" aria-label="Cerrar">x</button>
+        </div>
+        <label>Fecha<input name="date" type="date" required /></label>
+        <label>Detalle<textarea name="detail" rows="3" required placeholder="Compra de productos, implementos, movilidad, etc."></textarea></label>
+        <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
+        <label>Metodo<select name="method"></select></label>
+        <label>Origen del dinero<select name="source"></select></label>
+        <label>Comprobante / nota<input name="receipt" placeholder="Boleta, factura o referencia" /></label>
+        <menu>
+          <button class="ghost" value="cancel" type="submit">Cancelar</button>
+          <button class="primary" id="saveExpenseBtn" type="button">Guardar egreso</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

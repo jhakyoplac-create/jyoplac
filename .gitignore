@@ -1,0 +1,9 @@
+database/
+backups/
+cloud-test-data/
+*.sqlite3
+*.db
+*.log
+__pycache__/
+*.pyc
+.env
