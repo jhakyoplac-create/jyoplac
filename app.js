@@ -1186,15 +1186,33 @@ function odontogramMark(meta) {
   return `<span class="tooth-mark mark-${meta.mark}" aria-hidden="true"></span>`;
 }
 
+function toothSurfaceCross(meta) {
+  const active = ["cariado", "obturado", "sellante", "endodoncia"].includes(meta.className) ? " active" : "";
+  return `<span class="surface-cross ${meta.className}${active}" aria-hidden="true">
+    <i class="surface top"></i>
+    <i class="surface left"></i>
+    <i class="surface center"></i>
+    <i class="surface right"></i>
+    <i class="surface bottom"></i>
+  </span>`;
+}
+
 function renderOdontogramToolbar(currentCondition) {
-  const priority = ["Sano", "Cariado", "Obturado", "Por extraer", "Extraido", "Ausente", "Corona", "Endodoncia", "Implante", "Ortodoncia", "Protesis", "Observacion"];
-  $("#odontogramToolbar").innerHTML = priority.map((condition) => {
+  const priority = ["Cariado", "Obturado", "Ausente", "Por extraer", "Corona", "Endodoncia", "Implante", "Ortodoncia", "Protesis", "Sellante", "Extraido", "Observacion", "Sano"];
+  $("#odontogramToolbar").innerHTML = `<div class="odontogram-type">
+    <button class="type-pill active" type="button">Adulto</button>
+    <button class="type-pill" type="button" disabled>Nino</button>
+  </div>
+  <div class="odontogram-symbol-grid">
+  ${priority.map((condition) => {
     const meta = conditionMeta(condition);
     const active = condition === currentCondition ? " active" : "";
     return `<button class="condition-chip ${meta.className}${active}" type="button" data-condition-tool="${escapeHtml(condition)}">
-      <span class="chip-swatch"></span>${escapeHtml(meta.label)}
+      <span class="chip-swatch"></span><span>${escapeHtml(meta.label)}</span>
     </button>`;
-  }).join("");
+  }).join("")}
+  </div>
+  <button class="ghost compact" type="button" data-condition-tool="Sano">Limpiar pieza</button>`;
 }
 
 function renderOdontogram() {
@@ -1205,23 +1223,33 @@ function renderOdontogram() {
   const records = state.odontogram.filter((item) => item.patientId === patientId);
   const recordMap = new Map(records.map((item) => [item.tooth, item]));
   renderOdontogramToolbar(currentCondition);
+  const arches = [
+    { label: "Maxilar superior", teeth: ["18", "17", "16", "15", "14", "13", "12", "11", "21", "22", "23", "24", "25", "26", "27", "28"] },
+    { label: "Maxilar inferior", teeth: ["48", "47", "46", "45", "44", "43", "42", "41", "31", "32", "33", "34", "35", "36", "37", "38"] }
+  ];
   $("#odontogramGrid").innerHTML = `<div class="odontogram-board">
-    <div class="odontogram-note">Selecciona una condicion y luego una pieza dental. Guarda para actualizar la historia visual del paciente.</div>
-    ${odontogramRows.map((row) => {
-      const buttons = row.teeth.map((tooth) => {
+    <div class="odontogram-sheet-title">
+      <strong>Odontograma adulto</strong>
+      <span>FDI | selecciona condicion, pieza y guarda</span>
+    </div>
+    ${arches.map((arch) => {
+      const numbers = arch.teeth.map((tooth) => `<span>${tooth}</span>`).join("");
+      const buttons = arch.teeth.map((tooth) => {
         const record = recordMap.get(tooth);
         const condition = record?.condition || "Sano";
         const meta = conditionMeta(condition);
         const selected = String(tooth) === String(selectedTooth) ? " selected" : "";
         return `<button class="tooth ${meta.className}${selected}" data-tooth="${tooth}" type="button" title="${escapeHtml(record?.note || condition)}">
-          <span class="tooth-number">${tooth}</span>
-          <span class="tooth-art">${toothSvg(tooth)}${odontogramMark(meta)}</span>
           <span class="tooth-condition">${escapeHtml(meta.short)}</span>
+          <span class="tooth-art">${toothSvg(tooth)}${odontogramMark(meta)}</span>
+          ${toothSurfaceCross(meta)}
         </button>`;
       }).join("");
       return `<section class="odontogram-section">
-        <h3>${escapeHtml(row.label)}</h3>
+        <h3>${escapeHtml(arch.label)}</h3>
+        <div class="tooth-number-strip">${numbers}</div>
         <div class="odontogram-row">${buttons}</div>
+        <div class="tooth-number-strip bottom">${numbers}</div>
       </section>`;
     }).join("")}
   </div>
