@@ -203,17 +203,12 @@
             <button class="primary" type="submit">Actualizar odontograma</button>
           </form>
 
-          <section class="panel">
+          <section class="panel odontogram-panel">
             <div class="panel-head">
               <h2>Odontograma</h2>
               <select id="odontogramPatientFilter"></select>
             </div>
-            <div class="tooth-legend">
-              <span><i class="healthy"></i>Sano</span>
-              <span><i class="cavity"></i>Cariado</span>
-              <span><i class="treated"></i>Obturado</span>
-              <span><i class="missing"></i>Perdido/Ausente</span>
-            </div>
+            <div id="odontogramToolbar" class="odontogram-toolbar" aria-label="Herramientas del odontograma"></div>
             <div id="odontogramGrid" class="odontogram-grid"></div>
           </section>
         </div>

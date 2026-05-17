@@ -100,7 +100,7 @@ const odontogramRows = [
   { label: "Inferior izquierda", teeth: ["31", "32", "33", "34", "35", "36", "37", "38"] }
 ];
 const teeth = odontogramRows.flatMap((row) => row.teeth);
-const toothConditions = ["Sano", "Cariado", "Obturado", "Perdido", "Ausente", "Por extraer", "Extraido", "Corona", "Endodoncia", "Implante", "Sellante", "Observacion"];
+const toothConditions = ["Sano", "Cariado", "Obturado", "Perdido", "Ausente", "Por extraer", "Extraido", "Corona", "Endodoncia", "Implante", "Sellante", "Ortodoncia", "Protesis", "Observacion"];
 
 let state = loadState();
 let currentView = "dashboard";
@@ -1127,20 +1127,109 @@ function renderClinicalHistory() {
   }).join("") || `<p class="muted">Este paciente aun no tiene historial registrado.</p>`;
 }
 
+const odontogramConditionMeta = {
+  Sano: { label: "Sano", short: "OK", className: "sano", mark: "" },
+  Cariado: { label: "Cariado", short: "CA", className: "cariado", mark: "dot" },
+  Obturado: { label: "Obturado", short: "OB", className: "obturado", mark: "square" },
+  Perdido: { label: "Perdido", short: "PE", className: "perdido", mark: "x" },
+  Ausente: { label: "Ausente", short: "AU", className: "ausente", mark: "x" },
+  "Por extraer": { label: "Por extraer", short: "EX", className: "por-extraer", mark: "x" },
+  Extraido: { label: "Extraido", short: "EX", className: "extraido", mark: "x" },
+  Corona: { label: "Corona", short: "CO", className: "corona", mark: "cap" },
+  Endodoncia: { label: "Endodoncia", short: "EN", className: "endodoncia", mark: "line" },
+  Implante: { label: "Implante", short: "IM", className: "implante", mark: "pin" },
+  Sellante: { label: "Sellante", short: "SE", className: "sellante", mark: "square" },
+  Ortodoncia: { label: "Ortodoncia", short: "OR", className: "ortodoncia", mark: "bracket" },
+  Protesis: { label: "Protesis", short: "PR", className: "protesis", mark: "bridge" },
+  Observacion: { label: "Observacion", short: "OBS", className: "observacion", mark: "note" }
+};
+
+function conditionMeta(condition) {
+  return odontogramConditionMeta[condition] || odontogramConditionMeta.Sano;
+}
+
+function toothFamily(tooth) {
+  const last = String(tooth).slice(-1);
+  if (["1", "2"].includes(last)) return "incisor";
+  if (last === "3") return "canine";
+  if (["4", "5"].includes(last)) return "premolar";
+  return "molar";
+}
+
+function toothSvg(tooth) {
+  const family = toothFamily(tooth);
+  const topArch = ["18", "17", "16", "15", "14", "13", "12", "11", "21", "22", "23", "24", "25", "26", "27", "28"].includes(String(tooth));
+  const rootY = topArch ? 14 : 68;
+  const crownY = topArch ? 58 : 22;
+  const rootPath = {
+    incisor: `M34 ${rootY} C31 ${topArch ? 26 : 56} 30 ${topArch ? 38 : 44} 36 ${crownY - (topArch ? 10 : -10)} C42 ${topArch ? 38 : 44} 41 ${topArch ? 26 : 56} 38 ${rootY} Z`,
+    canine: `M35 ${rootY} C29 ${topArch ? 30 : 52} 30 ${topArch ? 44 : 38} 36 ${crownY - (topArch ? 9 : -9)} C44 ${topArch ? 42 : 40} 43 ${topArch ? 28 : 54} 37 ${rootY} Z`,
+    premolar: `M29 ${rootY} C25 ${topArch ? 31 : 51} 29 ${topArch ? 43 : 39} 34 ${crownY - (topArch ? 9 : -9)} C39 ${topArch ? 43 : 39} 43 ${topArch ? 31 : 51} 39 ${rootY} Z M39 ${rootY} C35 ${topArch ? 31 : 51} 39 ${topArch ? 43 : 39} 44 ${crownY - (topArch ? 9 : -9)} C49 ${topArch ? 43 : 39} 53 ${topArch ? 31 : 51} 49 ${rootY} Z`,
+    molar: `M24 ${rootY} C20 ${topArch ? 30 : 52} 25 ${topArch ? 42 : 40} 30 ${crownY - (topArch ? 9 : -9)} C35 ${topArch ? 42 : 40} 39 ${topArch ? 30 : 52} 35 ${rootY} Z M38 ${rootY} C35 ${topArch ? 31 : 51} 38 ${topArch ? 43 : 39} 43 ${crownY - (topArch ? 8 : -8)} C48 ${topArch ? 43 : 39} 52 ${topArch ? 31 : 51} 49 ${rootY} Z`
+  }[family];
+  const crown = family === "molar"
+    ? "M22 48 C20 37 28 30 36 35 C43 29 55 36 52 49 C53 62 42 68 36 61 C28 67 20 60 22 48 Z"
+    : family === "premolar"
+      ? "M25 48 C25 37 32 31 39 36 C46 31 53 38 51 48 C52 59 43 66 38 60 C32 66 24 59 25 48 Z"
+      : family === "canine"
+        ? "M27 49 C27 39 32 32 37 35 C43 31 50 39 49 50 C49 60 42 67 37 60 C31 66 26 59 27 49 Z"
+        : "M28 50 C28 39 32 32 38 35 C44 32 49 39 48 50 C49 60 43 66 38 61 C32 66 27 60 28 50 Z";
+  return `<svg class="tooth-svg tooth-${family}" viewBox="0 0 74 84" aria-hidden="true">
+    <path class="tooth-root" d="${rootPath}"></path>
+    <path class="tooth-crown" d="${crown}"></path>
+    <path class="tooth-shade" d="M38 35 C44 38 47 45 46 54 C44 60 40 63 37 61 C42 56 42 44 38 35 Z"></path>
+  </svg>`;
+}
+
+function odontogramMark(meta) {
+  if (!meta.mark) return "";
+  return `<span class="tooth-mark mark-${meta.mark}" aria-hidden="true"></span>`;
+}
+
+function renderOdontogramToolbar(currentCondition) {
+  const priority = ["Sano", "Cariado", "Obturado", "Por extraer", "Extraido", "Ausente", "Corona", "Endodoncia", "Implante", "Ortodoncia", "Protesis", "Observacion"];
+  $("#odontogramToolbar").innerHTML = priority.map((condition) => {
+    const meta = conditionMeta(condition);
+    const active = condition === currentCondition ? " active" : "";
+    return `<button class="condition-chip ${meta.className}${active}" type="button" data-condition-tool="${escapeHtml(condition)}">
+      <span class="chip-swatch"></span>${escapeHtml(meta.label)}
+    </button>`;
+  }).join("");
+}
+
 function renderOdontogram() {
   const patientId = $("#odontogramPatientFilter").value || state.patients[0]?.id;
+  const form = $("#odontogramForm");
+  const selectedTooth = form?.tooth?.value || "";
+  const currentCondition = form?.condition?.value || "Sano";
   const records = state.odontogram.filter((item) => item.patientId === patientId);
-  $("#odontogramGrid").innerHTML = odontogramRows.map((row) => {
-    const buttons = row.teeth.map((tooth) => {
-      const record = records.find((item) => item.tooth === tooth);
-      const condition = record?.condition || "Sano";
-      return `<button class="tooth ${condition.toLowerCase().replaceAll(" ", "-")}" data-tooth="${tooth}" type="button" title="${escapeHtml(record?.note || "")}">
-        <strong>${tooth}</strong>
-        <small>${escapeHtml(condition)}</small>
-      </button>`;
-    }).join("");
-    return `<div class="odontogram-section"><h3>${escapeHtml(row.label)}</h3><div class="odontogram-row">${buttons}</div></div>`;
-  }).join("");
+  const recordMap = new Map(records.map((item) => [item.tooth, item]));
+  renderOdontogramToolbar(currentCondition);
+  $("#odontogramGrid").innerHTML = `<div class="odontogram-board">
+    <div class="odontogram-note">Selecciona una condicion y luego una pieza dental. Guarda para actualizar la historia visual del paciente.</div>
+    ${odontogramRows.map((row) => {
+      const buttons = row.teeth.map((tooth) => {
+        const record = recordMap.get(tooth);
+        const condition = record?.condition || "Sano";
+        const meta = conditionMeta(condition);
+        const selected = String(tooth) === String(selectedTooth) ? " selected" : "";
+        return `<button class="tooth ${meta.className}${selected}" data-tooth="${tooth}" type="button" title="${escapeHtml(record?.note || condition)}">
+          <span class="tooth-number">${tooth}</span>
+          <span class="tooth-art">${toothSvg(tooth)}${odontogramMark(meta)}</span>
+          <span class="tooth-condition">${escapeHtml(meta.short)}</span>
+        </button>`;
+      }).join("");
+      return `<section class="odontogram-section">
+        <h3>${escapeHtml(row.label)}</h3>
+        <div class="odontogram-row">${buttons}</div>
+      </section>`;
+    }).join("")}
+  </div>
+  <div class="odontogram-summary">
+    ${records.length
+      ? records.map((record) => `<span><strong>${escapeHtml(record.tooth)}</strong> ${escapeHtml(record.condition)}${record.note ? ` - ${escapeHtml(record.note)}` : ""}</span>`).join("")
+      : `<span class="muted">Sin hallazgos registrados para este paciente.</span>`}
+  </div>`;
 }
 
 function renderPayments() {
@@ -1969,10 +2058,20 @@ function bindEvents() {
     const patientId = $("#odontogramPatientFilter").value || state.patients[0]?.id;
     const record = state.odontogram.find((item) => item.patientId === patientId && item.tooth === tooth.dataset.tooth);
     const form = $("#odontogramForm");
+    const selectedCondition = form.condition.value || "Sano";
     form.patientId.value = patientId;
     form.tooth.value = tooth.dataset.tooth;
-    form.condition.value = record?.condition || "Sano";
+    form.condition.value = record?.condition || selectedCondition;
     form.note.value = record?.note || "";
+    renderOdontogram();
+  });
+
+  $("#odontogramToolbar").addEventListener("click", (event) => {
+    const tool = event.target.closest("[data-condition-tool]");
+    if (!tool) return;
+    const form = $("#odontogramForm");
+    form.condition.value = tool.dataset.conditionTool;
+    renderOdontogram();
   });
 
   $('#paymentForm select[name="patientId"]').addEventListener("change", renderTreatmentPaymentOptions);
