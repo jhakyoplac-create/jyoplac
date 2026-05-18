@@ -133,6 +133,20 @@ textarea {
   border-radius: 8px;
   color: #355864;
   background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-item[data-view="pacientes"]::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  box-shadow: 8px 5px 0 -4px currentColor;
+  opacity: 0.8;
 }
 
 .nav-item:hover,

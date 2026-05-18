@@ -782,9 +782,9 @@ const roleLabels = {
 };
 
 const roleViews = {
-  ADMIN: ["dashboard", "agenda", "pacientes", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
-  DOCTOR: ["dashboard", "agenda", "pacientes", "historial", "odontograma", "tratamientos", "pagos", "caja-general"],
-  RECEPCION: ["dashboard", "agenda", "pacientes", "pagos"]
+  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "panel", "recordatorios", "reportes", "campanas"],
+  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -860,7 +860,7 @@ function setView(view) {
   $("#viewTitle").textContent = {
     dashboard: "Dashboard",
     agenda: "Agenda diaria",
-    pacientes: "Pacientes",
+    pacientes: "Registrar paciente",
     historial: "Historial clinico dental",
     odontograma: "Odontograma",
     tratamientos: "Tratamientos",
