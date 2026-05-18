@@ -1126,12 +1126,9 @@ function renderClinicalHistory() {
       </summary>
       <p><strong>Atendido por:</strong> ${escapeHtml(entry.attendedBy || "-")} | <strong>Precio pactado:</strong> ${money(entry.agreedPrice)} | <strong>Saldo:</strong> ${money(balance)}</p>
       <p><strong>Motivo:</strong> ${escapeHtml(entry.reason)}</p>
-      <p><strong>Anamnesis:</strong> ${escapeHtml(entry.anamnesis || "-")}</p>
-      <p><strong>Examen:</strong> ${escapeHtml(entry.exam || "-")}</p>
-      <p><strong>Diagnostico:</strong> ${escapeHtml(entry.diagnosis || "-")}</p>
       <p><strong>Plan:</strong> ${escapeHtml(entry.plan || "-")}</p>
       <p class="muted">${escapeHtml(entry.procedure || "")}</p>
-      <p class="muted">${escapeHtml(entry.instructions || "")}</p>
+      <p><strong>Presupuesto:</strong> ${escapeHtml(entry.instructions || "-")}</p>
       <button class="small-btn" data-edit-history="${entry.id}">Editar</button>
     </details>`;
   }).join("") || `<p class="muted">Este paciente aun no tiene historial registrado.</p>`;
@@ -2056,13 +2053,13 @@ function bindEvents() {
       date: data.date,
       attendedBy: data.attendedBy,
       attended: true,
-      reason: data.reason,
-      anamnesis: data.anamnesis,
-      exam: data.exam,
-      diagnosis: data.diagnosis,
-      plan: data.plan,
-      procedure: data.procedure,
-      instructions: data.instructions,
+      reason: data.reason || "",
+      anamnesis: data.anamnesis || "",
+      exam: data.exam || "",
+      diagnosis: data.diagnosis || "",
+      plan: data.plan || "",
+      procedure: data.procedure || "",
+      instructions: data.instructions || "",
       agreedPrice: Number(data.agreedPrice || 0)
     };
     try {
