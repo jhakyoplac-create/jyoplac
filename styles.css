@@ -201,6 +201,11 @@ textarea {
   font-weight: 700;
 }
 
+.notice.subtle {
+  background: #e9fbff;
+  color: #006b88;
+}
+
 .app {
   min-width: 0;
   padding: 28px;
@@ -626,6 +631,9 @@ th {
   border-radius: 7px;
   padding: 6px 9px;
   cursor: pointer;
+  color: #006b88;
+  text-decoration: none;
+  font-weight: 700;
 }
 
 .campaign-grid {

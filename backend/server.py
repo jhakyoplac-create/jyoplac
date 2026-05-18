@@ -96,9 +96,29 @@ def row_to_dict(row):
     return {key: row[key] for key in row.keys()}
 
 
+def ensure_column(conn, table, column, definition):
+    if conn.postgres:
+        exists = conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
+            (table, column),
+        ).fetchone()
+    else:
+        exists = any(row["name"] == column for row in conn.execute(f"PRAGMA table_info({table})").fetchall())
+    if not exists:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def migrate_db(conn):
+    ensure_column(conn, "clinical_history", "credit_pending", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "clinical_history", "credit_amount", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "clinical_history", "credit_due_date", "TEXT")
+    ensure_column(conn, "clinical_history", "credit_note", "TEXT")
+
+
 def init_db():
     with db() as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        migrate_db(conn)
         admin = conn.execute("SELECT id FROM users WHERE username = ?", ("admin",)).fetchone()
         if not admin:
             admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -392,9 +412,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """
                     INSERT INTO clinical_history (
                       id, patient_id, date, attended_by, attended, reason, anamnesis,
-                      exam, diagnosis, plan, procedure_done, instructions, agreed_price
+                      exam, diagnosis, plan, procedure_done, instructions, agreed_price,
+                      credit_pending, credit_amount, credit_due_date, credit_note
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_id=excluded.patient_id, date=excluded.date,
                       attended_by=excluded.attended_by, attended=excluded.attended,
@@ -402,6 +423,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                       exam=excluded.exam, diagnosis=excluded.diagnosis,
                       plan=excluded.plan, procedure_done=excluded.procedure_done,
                       instructions=excluded.instructions, agreed_price=excluded.agreed_price,
+                      credit_pending=excluded.credit_pending, credit_amount=excluded.credit_amount,
+                      credit_due_date=excluded.credit_due_date, credit_note=excluded.credit_note,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -418,6 +441,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("procedure", ""),
                         data.get("instructions", ""),
                         float(data.get("agreedPrice") or 0),
+                        1 if data.get("creditPending") else 0,
+                        float(data.get("creditAmount") or data.get("agreedPrice") or 0),
+                        data.get("creditDueDate", ""),
+                        data.get("creditNote", ""),
                     ),
                 )
                 if data.get("attended", True):

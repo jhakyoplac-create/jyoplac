@@ -34,6 +34,7 @@
         <button class="nav-item" data-view="tratamientos">Tratamientos</button>
         <button class="nav-item" data-view="pagos">Pagos y caja</button>
         <button class="nav-item" data-view="caja-general">Caja general</button>
+        <button class="nav-item" data-view="cuentas-cobrar">Cuentas por cobrar</button>
         <button class="nav-item" data-view="panel">Panel recepcion</button>
         <button class="nav-item" data-view="recordatorios">Recordatorios</button>
         <button class="nav-item" data-view="reportes">Reportes</button>
@@ -173,6 +174,11 @@
             <label>Presupuesto<textarea name="instructions" rows="2"></textarea></label>
             <label>Precio pactado del dia S/<input name="agreedPrice" type="number" min="0" step="0.01" required /></label>
             <label class="check-row"><input name="attended" type="checkbox" /> Atendido</label>
+            <label class="check-row"><input name="creditPending" type="checkbox" /> Pago pendiente</label>
+            <input type="hidden" name="creditAmount" />
+            <input type="hidden" name="creditDueDate" />
+            <input type="hidden" name="creditNote" />
+            <p class="notice subtle" id="creditSummary" hidden></p>
             <button class="primary" type="submit">Guardar historial</button>
           </form>
 
@@ -420,6 +426,36 @@
         </div>
       </section>
 
+      <section id="cuentas-cobrar" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Agenda de cuentas por cobrar</h2>
+            <button class="ghost" id="exportReceivablesBtn">Excel</button>
+          </div>
+          <div class="summary-row">
+            <span>Total pendiente <strong id="receivablesTotal">S/ 0</strong></span>
+            <span>Vencidos <strong id="receivablesOverdue">0</strong></span>
+            <span>Por cobrar hoy <strong id="receivablesToday">0</strong></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha pago</th>
+                  <th>Paciente</th>
+                  <th>Celular</th>
+                  <th>Doctor</th>
+                  <th>Monto</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="receivablesTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
       <section id="panel" class="view">
         <div class="kpi-grid compact">
           <article class="kpi">
@@ -631,6 +667,22 @@
         <menu>
           <button class="ghost" data-close-dialog="expenseDialog" type="button">Cancelar</button>
           <button class="primary" id="saveExpenseBtn" type="button">Guardar egreso</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="creditDialog">
+      <form method="dialog" class="form modal-form" id="creditForm">
+        <div class="panel-head">
+          <h2>Pago pendiente</h2>
+          <button class="icon" data-close-dialog="creditDialog" type="button" aria-label="Cerrar">x</button>
+        </div>
+        <label>Monto pendiente S/<input name="creditAmount" type="number" min="0" step="0.01" required /></label>
+        <label>Fecha compromiso de pago<input name="creditDueDate" type="date" required /></label>
+        <label>Comentario<textarea name="creditNote" rows="3" placeholder="Ej. Pagara en dos dias por Yape"></textarea></label>
+        <menu>
+          <button class="ghost" id="cancelCreditBtn" type="button">Cancelar</button>
+          <button class="primary" id="saveCreditBtn" type="button">Guardar compromiso</button>
         </menu>
       </form>
     </dialog>

@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS clinical_history (
   procedure_done TEXT,
   instructions TEXT,
   agreed_price REAL NOT NULL DEFAULT 0,
+  credit_pending INTEGER NOT NULL DEFAULT 0,
+  credit_amount REAL NOT NULL DEFAULT 0,
+  credit_due_date TEXT,
+  credit_note TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE

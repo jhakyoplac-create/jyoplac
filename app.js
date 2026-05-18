@@ -229,7 +229,11 @@ function mapApiClinicalHistory(row) {
     plan: row.plan || "",
     procedure: row.procedure_done || row.procedure || "",
     instructions: row.instructions || "",
-    agreedPrice: Number(row.agreed_price ?? row.agreedPrice ?? 0)
+    agreedPrice: Number(row.agreed_price ?? row.agreedPrice ?? 0),
+    creditPending: Boolean(row.credit_pending ?? row.creditPending ?? false),
+    creditAmount: Number(row.credit_amount ?? row.creditAmount ?? 0),
+    creditDueDate: row.credit_due_date || row.creditDueDate || "",
+    creditNote: row.credit_note || row.creditNote || ""
   };
 }
 
@@ -585,6 +589,17 @@ function pendingHistories() {
   return state.clinicalHistory.filter((entry) => entry.attended && historyBalance(entry.id) > 0);
 }
 
+function receivableEntries() {
+  return pendingHistories()
+    .map((entry) => ({
+      entry,
+      patient: patientById(entry.patientId),
+      balance: historyBalance(entry.id),
+      dueDate: entry.creditDueDate || entry.date
+    }))
+    .sort((a, b) => `${a.dueDate} ${a.patient?.name || ""}`.localeCompare(`${b.dueDate} ${b.patient?.name || ""}`));
+}
+
 function pendingPatientIds() {
   return [...new Set(pendingHistories().map((entry) => entry.patientId))];
 }
@@ -782,9 +797,9 @@ const roleLabels = {
 };
 
 const roleViews = {
-  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
-  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "panel", "recordatorios", "reportes", "campanas"],
-  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "panel", "recordatorios"]
+  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "panel", "recordatorios", "reportes", "campanas"],
+  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "cuentas-cobrar", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -866,6 +881,7 @@ function setView(view) {
     tratamientos: "Tratamientos",
     pagos: "Pagos y caja",
     "caja-general": "Caja general",
+    "cuentas-cobrar": "Cuentas por cobrar",
     panel: "Panel para doctores y recepcion",
     recordatorios: "Recordatorios de citas",
     reportes: "Reportes diarios y mensuales",
@@ -890,6 +906,7 @@ function render() {
   renderTreatments();
   renderPayments();
   renderGeneralCash();
+  renderReceivables();
   renderStaffPanel();
   renderReminders();
   renderReports();
@@ -953,6 +970,39 @@ function updatePaymentChange() {
   const received = Number(form.cashReceived.value || 0);
   const amount = Number(form.amount.value || 0);
   form.change.value = Math.max(0, received - amount).toFixed(2);
+}
+
+function openPaymentForHistory(historyId) {
+  const history = historyById(historyId);
+  if (!history) return;
+  setView("pagos");
+  fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), history.patientId);
+  renderTreatmentPaymentOptions();
+  const historySelect = $('#paymentForm select[name="historyId"]');
+  if (historySelect) historySelect.value = historyId;
+  updatePaymentDue();
+  setTimeout(() => $('#paymentForm input[name="cashReceived"]')?.focus(), 0);
+}
+
+function openCreditDialog() {
+  const historyForm = $("#historyForm");
+  const creditForm = $("#creditForm");
+  if (!historyForm || !creditForm) return;
+  creditForm.creditAmount.value = historyForm.creditAmount.value || historyForm.agreedPrice.value || "";
+  creditForm.creditDueDate.value = historyForm.creditDueDate.value || todayISO();
+  creditForm.creditNote.value = historyForm.creditNote.value || "";
+  $("#creditDialog").showModal();
+}
+
+function updateCreditSummary() {
+  const form = $("#historyForm");
+  const summary = $("#creditSummary");
+  if (!form || !summary) return;
+  const checked = Boolean(form.creditPending.checked);
+  summary.hidden = !checked;
+  summary.textContent = checked
+    ? `Pago pendiente: ${money(Number(form.creditAmount.value || form.agreedPrice.value || 0))} para ${form.creditDueDate.value ? formatDate(form.creditDueDate.value) : "fecha por definir"}${form.creditNote.value ? ` - ${form.creditNote.value}` : ""}`
+    : "";
 }
 
 function syncAssignedDoctor() {
@@ -1130,6 +1180,7 @@ function renderClinicalHistory() {
       <p><strong>Plan:</strong> ${escapeHtml(entry.plan || "-")}</p>
       <p class="muted">${escapeHtml(entry.procedure || "")}</p>
       <p><strong>Presupuesto:</strong> ${escapeHtml(entry.instructions || "-")}</p>
+      ${entry.creditPending ? `<p><strong>Pago pendiente:</strong> ${money(historyBalance(entry.id))} | <strong>Fecha compromiso:</strong> ${entry.creditDueDate ? formatDate(entry.creditDueDate) : "-"}</p>` : ""}
       <button class="small-btn" data-edit-history="${entry.id}">Editar</button>
     </details>`;
   }).join("") || `<p class="muted">Este paciente aun no tiene historial registrado.</p>`;
@@ -1289,6 +1340,33 @@ function renderPayments() {
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}</td>
       </tr>`;
     }).join("") || `<tr><td colspan="5">No hay pagos registrados.</td></tr>`;
+}
+
+function renderReceivables() {
+  const table = $("#receivablesTable");
+  if (!table) return;
+  const rows = receivableEntries();
+  const today = todayISO();
+  $("#receivablesTotal").textContent = money(rows.reduce((sum, item) => sum + item.balance, 0));
+  $("#receivablesOverdue").textContent = rows.filter((item) => item.dueDate && item.dueDate < today).length;
+  $("#receivablesToday").textContent = rows.filter((item) => item.dueDate === today).length;
+  table.innerHTML = rows.map(({ entry, patient, balance, dueDate }) => {
+    const status = dueDate < today ? "VENCIDO" : dueDate === today ? "COBRAR HOY" : "PROGRAMADO";
+    const text = `Hola ${patient?.name || ""}, le saludamos de ${state.config.clinicName}. Le recordamos su pago pendiente de ${money(balance)} para el ${formatDate(dueDate)}.`;
+    const wa = `https://wa.me/51${patient?.phone || ""}?text=${encodeURIComponent(text)}`;
+    return `<tr>
+      <td>${formatDate(dueDate)}</td>
+      <td><strong>${escapeHtml(patient?.name || "")}</strong><br><span class="muted">${escapeHtml(entry.creditNote || entry.reason || "")}</span></td>
+      <td>${escapeHtml(patient?.phone || "")}</td>
+      <td>${escapeHtml(entry.attendedBy || patient?.doctor || "")}</td>
+      <td><strong>${money(balance)}</strong></td>
+      <td><span class="status ${status === "VENCIDO" ? "danger" : status === "COBRAR HOY" ? "warn" : ""}">${status}</span></td>
+      <td class="row-actions">
+        <a class="small-btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>
+        <button class="small-btn" data-pay-history="${entry.id}">Registrar pago</button>
+      </td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="7">No hay cuentas por cobrar pendientes.</td></tr>`;
 }
 
 function renderCashBox() {
@@ -1845,6 +1923,36 @@ function bindEvents() {
     fillAppointmentPatientSelectForDate($('#historyForm select[name="patientId"]'), $('#historyForm input[name="date"]').value, $('#historyForm select[name="patientId"]').value);
   });
   on('#historyForm select[name="patientId"]', "change", syncAssignedDoctor);
+  on('#historyForm input[name="creditPending"]', "change", (event) => {
+    if (event.target.checked) openCreditDialog();
+    else {
+      const form = $("#historyForm");
+      form.creditAmount.value = "";
+      form.creditDueDate.value = "";
+      form.creditNote.value = "";
+      updateCreditSummary();
+    }
+  });
+  on("#cancelCreditBtn", "click", () => {
+    const form = $("#historyForm");
+    form.creditPending.checked = false;
+    form.creditAmount.value = "";
+    form.creditDueDate.value = "";
+    form.creditNote.value = "";
+    updateCreditSummary();
+    $("#creditDialog").close();
+  });
+  on("#saveCreditBtn", "click", () => {
+    const historyForm = $("#historyForm");
+    const creditForm = $("#creditForm");
+    if (!creditForm.reportValidity()) return;
+    historyForm.creditAmount.value = creditForm.creditAmount.value;
+    historyForm.creditDueDate.value = creditForm.creditDueDate.value;
+    historyForm.creditNote.value = creditForm.creditNote.value;
+    historyForm.creditPending.checked = true;
+    updateCreditSummary();
+    $("#creditDialog").close();
+  });
 
   $("#agendaBoard").addEventListener("click", (event) => {
     if (!canManageAppointments()) return;
@@ -2002,6 +2110,12 @@ function bindEvents() {
     }
   });
 
+  $("#receivablesTable")?.addEventListener("click", (event) => {
+    const pay = event.target.closest("[data-pay-history]");
+    if (!pay) return;
+    openPaymentForHistory(pay.dataset.payHistory);
+  });
+
   $("#treatmentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = formData(event.currentTarget);
@@ -2061,6 +2175,17 @@ function bindEvents() {
       }
       return;
     }
+    const creditPending = data.creditPending === "on";
+    if (creditPending && !data.creditDueDate) {
+      alert("Completa la fecha compromiso del pago pendiente.");
+      historySaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar historial";
+      }
+      openCreditDialog();
+      return;
+    }
     const entry = {
       id: data.id || uid("h"),
       patientId: data.patientId,
@@ -2074,7 +2199,11 @@ function bindEvents() {
       plan: data.plan || "",
       procedure: data.procedure || "",
       instructions: data.instructions || "",
-      agreedPrice: Number(data.agreedPrice || 0)
+      agreedPrice: Number(data.agreedPrice || 0),
+      creditPending,
+      creditAmount: Number(data.creditAmount || data.agreedPrice || 0),
+      creditDueDate: data.creditDueDate || "",
+      creditNote: data.creditNote || ""
     };
     try {
       await saveClinicalHistoryApi(entry);
@@ -2095,6 +2224,11 @@ function bindEvents() {
     $("#historyPatientFilter").value = data.patientId;
     form.reset();
     form.attended.checked = false;
+    form.creditPending.checked = false;
+    form.creditAmount.value = "";
+    form.creditDueDate.value = "";
+    form.creditNote.value = "";
+    updateCreditSummary();
     $('#historyForm input[name="date"]').value = todayISO();
     if (!API_ENABLED) saveState();
     render();
@@ -2116,6 +2250,7 @@ function bindEvents() {
       if (form[key].type === "checkbox") form[key].checked = Boolean(value);
       else form[key].value = value;
     });
+    updateCreditSummary();
   });
 
   $("#odontogramForm").addEventListener("submit", async (event) => {
@@ -2413,6 +2548,14 @@ function bindEvents() {
   $("#exportPatientsBtn").addEventListener("click", () => exportCsv("pacientes.csv", state.patients));
   $("#exportTreatmentsBtn").addEventListener("click", () => exportCsv("tratamientos.csv", state.treatments));
   $("#exportPaymentsBtn").addEventListener("click", () => exportCsv("pagos.csv", state.payments));
+  $("#exportReceivablesBtn").addEventListener("click", () => exportCsv("cuentas-por-cobrar.csv", receivableEntries().map(({ entry, patient, balance, dueDate }) => ({
+    fecha_compromiso: dueDate,
+    paciente: patient?.name || "",
+    telefono: patient?.phone || "",
+    doctor: entry.attendedBy || patient?.doctor || "",
+    monto_pendiente: balance,
+    comentario: entry.creditNote || entry.reason || ""
+  }))));
   $("#exportCloseBtn").addEventListener("click", () => exportCsv(`cierre-caja-${todayISO()}.csv`, csvRowsForDailyClose(todayISO())));
   $("#printCloseBtn").addEventListener("click", () => printDailyClose(todayISO()));
   $("#generalCashForm").addEventListener("submit", async (event) => {
