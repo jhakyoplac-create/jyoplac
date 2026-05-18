@@ -130,7 +130,7 @@ def init_db():
                 ("u-admin", "Administrador principal", "admin", hash_password(admin_password), "ADMIN"),
             )
         for key, value in {
-            "clinicName": "CN Odontologia Estetica",
+            "clinicName": "CM Odontologia Estetica",
             "generalCashOpening": "0",
             "generalBankOpening": "0",
         }.items():
