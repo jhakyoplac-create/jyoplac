@@ -1,17 +1,19 @@
 :root {
-  --bg: #f3fbfd;
+  --bg: #eefbff;
   --surface: #ffffff;
   --ink: #17323d;
   --muted: #647b84;
-  --line: #d8edf2;
-  --green: #20a989;
-  --green-soft: #e4f8f3;
-  --aqua: #1ca7c9;
-  --aqua-soft: #e5f7fb;
-  --coral: #d96b5f;
-  --amber: #d69b2b;
-  --blue: #3278c7;
-  --shadow: 0 18px 42px rgba(30, 112, 132, 0.1);
+  --line: #c8eaf2;
+  --green: #12b886;
+  --green-soft: #d9fbe8;
+  --aqua: #00a6d6;
+  --aqua-soft: #dff7ff;
+  --coral: #ff5d57;
+  --amber: #f59f00;
+  --blue: #2f80ed;
+  --violet: #7c3aed;
+  --pink: #ec4899;
+  --shadow: 0 18px 42px rgba(0, 129, 167, 0.14);
 }
 
 * {
@@ -24,7 +26,10 @@ body {
   display: grid;
   grid-template-columns: 280px 1fr;
   color: var(--ink);
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top right, rgba(18, 184, 134, 0.18), transparent 28%),
+    radial-gradient(circle at top left, rgba(0, 166, 214, 0.16), transparent 32%),
+    var(--bg);
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
 
@@ -75,7 +80,7 @@ textarea {
 .sidebar {
   min-height: 100vh;
   padding: 24px 18px;
-  background: linear-gradient(180deg, #e9f9fc 0%, #ffffff 100%);
+  background: linear-gradient(180deg, #dff8ff 0%, #f2fffb 48%, #ffffff 100%);
   color: var(--ink);
   display: flex;
   flex-direction: column;
@@ -97,8 +102,8 @@ textarea {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #e6f3ed;
-  color: var(--aqua);
+  background: linear-gradient(135deg, #00a6d6, #12b886);
+  color: #fff;
   font-weight: 800;
 }
 
@@ -131,7 +136,7 @@ textarea {
   text-align: left;
   padding: 12px 14px;
   border-radius: 8px;
-  color: #355864;
+  color: #265160;
   background: transparent;
   display: flex;
   align-items: center;
@@ -151,8 +156,9 @@ textarea {
 
 .nav-item:hover,
 .nav-item.active {
-  background: var(--aqua-soft);
-  color: #08657d;
+  background: linear-gradient(135deg, #dff7ff, #e2fbe8);
+  color: #006b88;
+  box-shadow: inset 4px 0 0 var(--aqua);
 }
 
 .nav-item[hidden],
@@ -170,8 +176,8 @@ textarea {
 .session-box {
   padding: 10px 12px;
   border-radius: 8px;
-  background: var(--aqua-soft);
-  color: #0b5368;
+  background: linear-gradient(135deg, #dff7ff, #e2fbe8);
+  color: #006b88;
 }
 
 .session-box strong,
@@ -310,14 +316,15 @@ label {
 }
 
 .primary {
-  background: linear-gradient(135deg, var(--aqua), var(--green));
+  background: linear-gradient(135deg, #00a6d6, #12b886);
   color: #fff;
   font-weight: 800;
+  box-shadow: 0 10px 22px rgba(0, 166, 214, 0.22);
 }
 
 .ghost {
-  background: #eef9fb;
-  color: #176a7a;
+  background: #e2f8ff;
+  color: #006b88;
   font-weight: 700;
 }
 
@@ -363,6 +370,10 @@ label {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+}
+
+.kpi {
+  background: linear-gradient(135deg, #ffffff 0%, #e9fbff 100%);
 }
 
 .kpi {
@@ -468,12 +479,12 @@ label {
 }
 
 .status.warn {
-  background: #fff5df;
+  background: #fff1c7;
   color: var(--amber);
 }
 
 .status.danger {
-  background: #feece7;
+  background: #ffe0df;
   color: var(--coral);
 }
 
@@ -511,28 +522,28 @@ label {
 }
 
 .slot.busy {
-  border-color: #aee1ea;
-  background: var(--aqua-soft);
+  border-color: #65d3ea;
+  background: linear-gradient(135deg, #e0f7ff, #f0fdff);
 }
 
 .slot.status-atendida {
-  border-color: #86d5a5;
-  background: #e7f8ee;
+  border-color: #39d98a;
+  background: linear-gradient(135deg, #d9fbe8, #f2fff6);
 }
 
 .slot.status-reprogramada {
-  border-color: #efc16d;
-  background: #fff6df;
+  border-color: #ffb020;
+  background: linear-gradient(135deg, #fff1c7, #fff9e8);
 }
 
 .slot.status-no_asistio,
 .slot.status-cancelada {
-  border-color: #efb1a8;
-  background: #fff0ed;
+  border-color: #ff7b72;
+  background: linear-gradient(135deg, #ffe0df, #fff4f2);
 }
 
 .slot.lunch {
-  background: #fff8e7;
+  background: linear-gradient(135deg, #fff7df, #fffaf0);
 }
 
 .slot {
