@@ -812,6 +812,14 @@ function canManagePayments() {
   return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
+function canManageExpenses() {
+  return ["ADMIN", "RECEPCION"].includes(currentUser()?.role);
+}
+
+function canManageCash() {
+  return ["ADMIN", "RECEPCION"].includes(currentUser()?.role);
+}
+
 function canCreatePatients() {
   return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
 }
@@ -833,6 +841,8 @@ function applyAuthState() {
   $(".file-label").hidden = !isAdmin();
   const userAdminPanel = $("#userAdminPanel");
   if (userAdminPanel) userAdminPanel.hidden = !isAdmin();
+  const openExpenseBtn = $("#openExpenseBtn");
+  if (openExpenseBtn) openExpenseBtn.hidden = !canManageExpenses();
   if (!hasRoleView(currentView)) setView((roleViews[user.role] || ["dashboard"])[0]);
 }
 
@@ -1308,7 +1318,10 @@ function renderCashBox() {
   $("#cashMethodWallet").textContent = money(walletNet);
   $("#cashMethodBank").textContent = money(bankNet);
   if (session && openingInput) openingInput.value = opening;
-  if (openingInput) openingInput.readOnly = Boolean(session);
+  if (openingInput) {
+    openingInput.readOnly = true;
+    openingInput.title = "La caja chica se modifica desde Caja general.";
+  }
   const counted = Number($("#closingCash").value || session?.closingCash || 0);
   $("#cashDifference").value = counted ? (counted - expected).toFixed(2) : "";
   toggleCashLockedState(Boolean(session));
@@ -1332,7 +1345,14 @@ function toggleCashLockedState(isOpen) {
     });
   }
   const openExpenseBtn = $("#openExpenseBtn");
-  if (openExpenseBtn) openExpenseBtn.disabled = !isOpen;
+  if (openExpenseBtn) {
+    openExpenseBtn.disabled = !isOpen || !canManageExpenses();
+    openExpenseBtn.hidden = !canManageExpenses();
+  }
+  const openCashBtn = $("#openCashBtn");
+  const closeCashBtn = $("#closeCashBtn");
+  if (openCashBtn) openCashBtn.disabled = !canManageCash();
+  if (closeCashBtn) closeCashBtn.disabled = !isOpen || !canManageCash();
   const lockedMessage = $("#cashLockedMessage");
   if (lockedMessage) lockedMessage.hidden = isOpen;
 }
@@ -1807,6 +1827,10 @@ function bindEvents() {
     setTimeout(() => $('#patientForm input[name="dni"]')?.focus(), 0);
   });
   on("#openExpenseBtn", "click", () => {
+    if (!canManageExpenses()) {
+      alert("Tu usuario no tiene permiso para registrar egresos.");
+      return;
+    }
     if (!cashSessionToday()) {
       alert("Primero abre la caja del dia para registrar egresos.");
       return;
@@ -1868,7 +1892,7 @@ function bindEvents() {
     render();
   });
 
-  $("#saveRescheduleBtn").addEventListener("click", () => {
+  $("#saveRescheduleBtn").addEventListener("click", async () => {
     if (!canManageAppointments()) {
       alert("Tu usuario no tiene permiso para reprogramar citas.");
       return;
@@ -1880,6 +1904,8 @@ function bindEvents() {
       alert("Agrega un comentario para registrar el seguimiento de la reprogramacion.");
       return;
     }
+    const previousStatus = original.status;
+    const previousNotes = original.notes;
     original.status = "REPROGRAMADA";
     original.notes = data.comment.trim();
     const newAppointment = {
@@ -1896,13 +1922,22 @@ function bindEvents() {
     };
     const conflict = findAppointmentConflict(newAppointment);
     if (conflict) {
-      original.status = "RESERVADA";
-      original.notes = "";
+      original.status = previousStatus;
+      original.notes = previousNotes;
       alert(conflict.message);
       return;
     }
+    try {
+      await saveAppointmentApi(original);
+      await saveAppointmentApi(newAppointment);
+    } catch (error) {
+      original.status = previousStatus;
+      original.notes = previousNotes;
+      alert(error.message);
+      return;
+    }
     state.appointments.push(newAppointment);
-    saveState();
+    if (!API_ENABLED) saveState();
     $("#rescheduleDialog").close();
     render();
   });
@@ -2159,12 +2194,16 @@ function bindEvents() {
   });
 
   $("#openCashBtn").addEventListener("click", async () => {
+    if (!canManageCash()) {
+      alert("Tu usuario no tiene permiso para abrir caja.");
+      return;
+    }
     const existing = cashSessionToday();
     if (existing) {
       alert("La caja del dia ya esta abierta.");
       return;
     }
-    const openingCash = Number($("#openingCash").value || pettyCashAmount(todayISO()) || 0);
+    const openingCash = Number(pettyCashAmount(todayISO()) || 0);
     if (openingCash > generalCashBalances().cash) {
       alert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
       return;
@@ -2182,6 +2221,10 @@ function bindEvents() {
   });
 
   $("#closeCashBtn").addEventListener("click", async () => {
+    if (!canManageCash()) {
+      alert("Tu usuario no tiene permiso para cerrar caja.");
+      return;
+    }
     const session = cashSessionToday();
     if (!session) {
       alert("Primero abre la caja del dia.");
@@ -2239,6 +2282,10 @@ function bindEvents() {
   $("#closingCash").addEventListener("input", renderCashBox);
 
   $("#saveExpenseBtn").addEventListener("click", async () => {
+    if (!canManageExpenses()) {
+      alert("Tu usuario no tiene permiso para registrar egresos.");
+      return;
+    }
     if (!cashSessionToday()) {
       alert("Primero abre la caja del dia para registrar egresos.");
       return;

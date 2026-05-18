@@ -356,11 +356,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
             item_id = data.get("id") or now_id("appt")
             with db() as conn:
                 conflict_unit = conn.execute(
-                    "SELECT id FROM appointments WHERE date=? AND time=? AND unit=? AND id<>?",
+                    "SELECT id FROM appointments WHERE date=? AND time=? AND unit=? AND id<>? AND status NOT IN ('CANCELADA', 'REPROGRAMADA')",
                     (data["date"], data["time"], data["unit"], item_id),
                 ).fetchone()
                 conflict_doctor = conn.execute(
-                    "SELECT id FROM appointments WHERE date=? AND time=? AND doctor=? AND id<>?",
+                    "SELECT id FROM appointments WHERE date=? AND time=? AND doctor=? AND id<>? AND status NOT IN ('CANCELADA', 'REPROGRAMADA')",
                     (data["date"], data["time"], data["doctor"], item_id),
                 ).fetchone()
                 if conflict_unit:
@@ -536,7 +536,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/expenses":
-            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "RECEPCION"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("exp")
