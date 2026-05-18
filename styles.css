@@ -546,6 +546,19 @@ label {
   align-items: stretch;
 }
 
+.agenda-notice,
+.nonwork-day {
+  border: 1px solid #7edce8;
+  background: linear-gradient(135deg, #e2fbff, #e6fff4);
+  color: #006b88;
+}
+
+.agenda-notice {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
 .time-cell,
 .slot {
   min-height: 42px;

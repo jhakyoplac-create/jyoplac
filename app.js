@@ -564,6 +564,36 @@ function timeFromMinutes(total) {
   return `${hour}:${minute}`;
 }
 
+function dayOfWeek(date) {
+  return new Date(`${date}T00:00:00`).getDay();
+}
+
+function businessDayInfo(date) {
+  const day = dayOfWeek(date);
+  if (day === 0) return { open: false, start: null, end: null, message: "Domingo no laborable" };
+  const start = minutes(state.config.start);
+  const normalEnd = minutes(state.config.end);
+  const end = day === 6 ? Math.min(normalEnd, minutes("13:00")) : normalEnd;
+  return {
+    open: start < end,
+    start,
+    end,
+    message: day === 6 ? "Sabado: atencion hasta la 1:00 p.m." : ""
+  };
+}
+
+function appointmentAvailabilityError(candidate) {
+  const info = businessDayInfo(candidate.date);
+  if (!info.open) return "No hay atencion los domingos. Selecciona otra fecha.";
+  const appointmentStart = minutes(candidate.time);
+  const service = serviceByName(candidate.service);
+  const appointmentEnd = appointmentStart + Number(candidate.duration || service?.duration || state.config.interval);
+  if (appointmentStart < info.start || appointmentEnd > info.end) {
+    return info.message || `La atencion solo esta disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
+  }
+  return "";
+}
+
 function patientDebt(patientId) {
   const budget = state.treatments.filter((t) => t.patientId === patientId).reduce((sum, t) => sum + Number(t.budget || 0), 0);
   const historyDebt = state.clinicalHistory.filter((h) => h.patientId === patientId).reduce((sum, h) => sum + historyBalance(h.id), 0);
@@ -1084,10 +1114,15 @@ function renderAgenda() {
   const date = $("#agendaDate").value;
   const doctor = $("#doctorFilter").value;
   const unit = $("#unitFilter").value;
-  const start = minutes(state.config.start);
-  const end = minutes(state.config.end);
+  const dayInfo = businessDayInfo(date);
+  if (!dayInfo.open) {
+    $("#agendaBoard").innerHTML = `<div class="appointment-card nonwork-day"><strong>Domingo no laborable</strong><p class="muted">Selecciona otra fecha para registrar citas.</p></div>`;
+    return;
+  }
+  const start = dayInfo.start;
+  const end = dayInfo.end;
   const units = state.config.units.length ? state.config.units : seedData.config.units;
-  const rows = [];
+  const rows = dayInfo.message ? [`<div class="agenda-notice">${dayInfo.message}</div>`] : [];
   for (let cursor = start; cursor < end; cursor += Number(state.config.interval)) {
     const time = timeFromMinutes(cursor);
     const slots = units.map((unitName) => {
@@ -1981,6 +2016,11 @@ function bindEvents() {
       status: data.status,
       notes: data.notes
     };
+    const availabilityError = appointmentAvailabilityError(appointment);
+    if (availabilityError) {
+      alert(availabilityError);
+      return;
+    }
     const conflict = findAppointmentConflict(appointment);
     if (conflict) {
       alert(conflict.message);
@@ -2026,6 +2066,13 @@ function bindEvents() {
       status: "RESERVADA",
       notes: `Reprogramada desde ${formatDate(original.date)} ${original.time}. ${data.comment.trim()}`
     };
+    const availabilityError = appointmentAvailabilityError(newAppointment);
+    if (availabilityError) {
+      original.status = previousStatus;
+      original.notes = previousNotes;
+      alert(availabilityError);
+      return;
+    }
     const conflict = findAppointmentConflict(newAppointment);
     if (conflict) {
       original.status = previousStatus;
