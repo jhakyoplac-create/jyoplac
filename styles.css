@@ -8,12 +8,12 @@
   --green-soft: #d9fbe8;
   --aqua: #00a6d6;
   --aqua-soft: #dff7ff;
-  --coral: #ff5d57;
-  --amber: #f59f00;
-  --blue: #2f80ed;
-  --violet: #7c3aed;
-  --pink: #f72585;
-  --orange: #ff8a00;
+  --coral: #ff6b6b;
+  --amber: #ffd166;
+  --blue: #1479ff;
+  --violet: #5b7cfa;
+  --cyan: #04c8de;
+  --mint: #23d3a2;
   --shadow: 0 18px 42px rgba(0, 129, 167, 0.16);
 }
 
@@ -28,9 +28,9 @@ body {
   grid-template-columns: 280px 1fr;
   color: var(--ink);
   background:
-    radial-gradient(circle at top right, rgba(247, 37, 133, 0.12), transparent 24%),
-    radial-gradient(circle at 72% 8%, rgba(255, 138, 0, 0.12), transparent 20%),
-    radial-gradient(circle at top left, rgba(0, 166, 214, 0.2), transparent 32%),
+    radial-gradient(circle at top right, rgba(20, 121, 255, 0.12), transparent 24%),
+    radial-gradient(circle at 72% 8%, rgba(35, 211, 162, 0.16), transparent 20%),
+    radial-gradient(circle at top left, rgba(4, 200, 222, 0.22), transparent 32%),
     var(--bg);
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
@@ -104,7 +104,7 @@ textarea {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, #00a6d6, #12b886 58%, #ff8a00);
+  background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 48%, var(--green) 100%);
   color: #fff;
   font-weight: 800;
 }
@@ -158,9 +158,9 @@ textarea {
 
 .nav-item:hover,
 .nav-item.active {
-  background: linear-gradient(135deg, #dff7ff, #e2fbe8);
+  background: linear-gradient(135deg, #d7f8ff, #dcfff1);
   color: #006b88;
-  box-shadow: inset 5px 0 0 var(--pink), 0 8px 18px rgba(0, 166, 214, 0.1);
+  box-shadow: inset 5px 0 0 var(--blue), 0 8px 18px rgba(0, 166, 214, 0.1);
 }
 
 .nav-item[hidden],
@@ -323,10 +323,10 @@ label {
 }
 
 .primary {
-  background: linear-gradient(135deg, #00a6d6 0%, #12b886 58%, #ff8a00 100%);
+  background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 42%, var(--green) 100%);
   color: #fff;
   font-weight: 800;
-  box-shadow: 0 12px 26px rgba(0, 166, 214, 0.24), 0 5px 14px rgba(255, 138, 0, 0.16);
+  box-shadow: 0 12px 26px rgba(0, 166, 214, 0.24), 0 5px 14px rgba(18, 184, 134, 0.18);
 }
 
 .ghost {
@@ -380,8 +380,8 @@ label {
 }
 
 .kpi {
-  background: linear-gradient(135deg, #ffffff 0%, #e9fbff 72%, #fff3df 100%);
-  border-top: 3px solid rgba(247, 37, 133, 0.5);
+  background: linear-gradient(135deg, #ffffff 0%, #e9fbff 65%, #e5fff3 100%);
+  border-top: 3px solid rgba(20, 121, 255, 0.42);
 }
 
 .kpi {

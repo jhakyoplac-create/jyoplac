@@ -4,7 +4,7 @@ const API_ENABLED = location.protocol === "http:" || location.protocol === "http
 
 const seedData = {
   config: {
-    clinicName: "CM Odontologia Estetica",
+    clinicName: "CN Odontologia Estetica",
     start: "09:00",
     end: "20:00",
     interval: 30,
