@@ -350,7 +350,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/appointments":
-            if not require_role(self, {"ADMIN", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("appt")

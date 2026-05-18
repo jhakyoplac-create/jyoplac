@@ -109,6 +109,7 @@ let apiToken = localStorage.getItem(API_TOKEN_KEY) || "";
 let apiUser = null;
 let apiBootstrapped = false;
 let apiRefreshing = false;
+let historySaving = false;
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -801,7 +802,7 @@ function isAdmin() {
 }
 
 function canManageAppointments() {
-  return ["ADMIN", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageClinical() {
@@ -2038,13 +2039,26 @@ function bindEvents() {
 
   $("#historyForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (historySaving) return;
     if (!canManageClinical()) {
       alert("Tu usuario no tiene permiso para guardar historial clinico.");
       return;
     }
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    historySaving = true;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Guardando...";
+    }
     const data = formData(event.currentTarget);
     if (!data.attended) {
       alert("Marca la opcion Atendido para poder guardar el historial.");
+      historySaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar historial";
+      }
       return;
     }
     const entry = {
@@ -2066,6 +2080,11 @@ function bindEvents() {
       await saveClinicalHistoryApi(entry);
     } catch (error) {
       alert(error.message);
+      historySaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar historial";
+      }
       return;
     }
     upsert(state.clinicalHistory, entry);
@@ -2074,11 +2093,16 @@ function bindEvents() {
       .sort((a, b) => a.time.localeCompare(b.time))[0];
     if (appointment) appointment.status = "ATENDIDA";
     $("#historyPatientFilter").value = data.patientId;
-    event.currentTarget.reset();
-    event.currentTarget.attended.checked = false;
+    form.reset();
+    form.attended.checked = false;
     $('#historyForm input[name="date"]').value = todayISO();
     if (!API_ENABLED) saveState();
     render();
+    historySaving = false;
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Guardar historial";
+    }
   });
 
   $("#historyTimeline").addEventListener("click", (event) => {
