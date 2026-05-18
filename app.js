@@ -1736,6 +1736,13 @@ function bindEvents() {
     if (element) element.addEventListener(eventName, handler);
   };
 
+  document.addEventListener("click", (event) => {
+    const closeButton = event.target.closest("[data-close-dialog]");
+    if (!closeButton) return;
+    const dialog = document.getElementById(closeButton.dataset.closeDialog);
+    if (dialog?.open) dialog.close("cancel");
+  });
+
   $("#loginForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget;

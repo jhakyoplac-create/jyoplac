@@ -581,7 +581,7 @@
       <form method="dialog" class="form modal-form" id="appointmentForm">
         <div class="panel-head">
           <h2>Nueva cita</h2>
-          <button class="icon" value="cancel" type="submit" aria-label="Cerrar">x</button>
+          <button class="icon" data-close-dialog="appointmentDialog" type="button" aria-label="Cerrar">x</button>
         </div>
         <input type="hidden" name="id" />
         <label>Fecha<input name="date" type="date" required /></label>
@@ -593,7 +593,7 @@
         <label>Estado<select name="status" required></select></label>
         <label>Notas<textarea name="notes" rows="3"></textarea></label>
         <menu>
-          <button class="ghost" value="cancel" type="submit">Cancelar</button>
+          <button class="ghost" data-close-dialog="appointmentDialog" type="button">Cancelar</button>
           <button class="ghost" id="openRescheduleBtn" type="button">Reprogramar</button>
           <button class="primary" id="saveAppointmentBtn" value="default" type="button">Guardar cita</button>
         </menu>
@@ -604,7 +604,7 @@
       <form method="dialog" class="form modal-form" id="rescheduleForm">
         <div class="panel-head">
           <h2>Reprogramar cita</h2>
-          <button class="icon" value="cancel" type="submit" aria-label="Cerrar">x</button>
+          <button class="icon" data-close-dialog="rescheduleDialog" type="button" aria-label="Cerrar">x</button>
         </div>
         <input type="hidden" name="appointmentId" />
         <label>Comentario obligatorio<textarea name="comment" rows="3" required placeholder="Motivo o seguimiento realizado con el paciente"></textarea></label>
@@ -613,7 +613,7 @@
         <label>Unidad<select name="unit" required></select></label>
         <label>Doctor asignado<input name="doctor" readonly required /></label>
         <menu>
-          <button class="ghost" value="cancel" type="submit">Cancelar</button>
+          <button class="ghost" data-close-dialog="rescheduleDialog" type="button">Cancelar</button>
           <button class="primary" id="saveRescheduleBtn" type="button">Guardar reprogramacion</button>
         </menu>
       </form>
@@ -623,7 +623,7 @@
       <form method="dialog" class="form modal-form" id="expenseForm">
         <div class="panel-head">
           <h2>Registrar egreso</h2>
-          <button class="icon" value="cancel" type="submit" aria-label="Cerrar">x</button>
+          <button class="icon" data-close-dialog="expenseDialog" type="button" aria-label="Cerrar">x</button>
         </div>
         <label>Fecha<input name="date" type="date" required /></label>
         <label>Detalle<textarea name="detail" rows="3" required placeholder="Compra de productos, implementos, movilidad, etc."></textarea></label>
@@ -632,7 +632,7 @@
         <label>Origen del dinero<select name="source"></select></label>
         <label>Comprobante / nota<input name="receipt" placeholder="Boleta, factura o referencia" /></label>
         <menu>
-          <button class="ghost" value="cancel" type="submit">Cancelar</button>
+          <button class="ghost" data-close-dialog="expenseDialog" type="button">Cancelar</button>
           <button class="primary" id="saveExpenseBtn" type="button">Guardar egreso</button>
         </menu>
       </form>
