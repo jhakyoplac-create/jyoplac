@@ -20,7 +20,8 @@ const seedData = {
     expenseSources: ["INGRESO_DEL_DIA", "CAJA_CHICA", "CAJA_GENERAL"],
     staffPaymentTypes: ["DOCTOR", "ASISTENTE", "DOCTOR_EXTERNO", "CONTADOR", "LABORATORIO", "OTRO"],
     generalCashOpening: 9000,
-    generalBankOpening: 10000
+    generalBankOpening: 10000,
+    servicesCustomized: false
   },
   services: [
     { name: "Consulta", category: "General", duration: 20, price: 30, active: true },
@@ -35,6 +36,7 @@ const seedData = {
     { name: "Instalacion de Brackets Mor / autoliga", category: "Ortodoncia", duration: 90, price: 1000, active: true },
     { name: "Instalacion de Brackets Zafiro", category: "Ortodoncia", duration: 90, price: 2000, active: true },
     { name: "Control de Ortodoncia", category: "Ortodoncia", duration: 30, price: 80, active: true },
+    { name: "Retiro de Brackets", category: "Ortodoncia", duration: 60, price: 0, active: true },
     { name: "Endodoncia", category: "Endodoncia", duration: 60, price: 600, active: true },
     { name: "Curaciones Simples", category: "Operatoria", duration: 30, price: 40, active: true },
     { name: "Curaciones Compuestas", category: "Operatoria", duration: 60, price: 60, active: true },
@@ -134,6 +136,10 @@ function loadState() {
 function normalizeState(data) {
   const defaults = seedData.config;
   data.config = { ...defaults, ...(data.config || {}) };
+  if (!Array.isArray(data.services) || !data.services.length) data.services = structuredClone(seedData.services);
+  if (!data.config.servicesCustomized && !data.services.some((service) => String(service.name || "").toLowerCase() === "retiro de brackets")) {
+    data.services.push({ name: "Retiro de Brackets", category: "Ortodoncia", duration: 60, price: 0, active: true });
+  }
   if (!Array.isArray(data.config.doctors) || !data.config.doctors.filter(Boolean).length) data.config.doctors = [...defaults.doctors];
   if (!Array.isArray(data.config.units) || !data.config.units.filter(Boolean).length) data.config.units = [...defaults.units];
   if (!Array.isArray(data.config.statuses) || !data.config.statuses.filter(Boolean).length) data.config.statuses = [...defaults.statuses];
@@ -342,6 +348,28 @@ function parseApiList(value, fallback) {
   return fallback;
 }
 
+function parseApiServices(value, fallback) {
+  if (!value) return fallback;
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => {
+        if (typeof item === "string") return { name: item.trim(), category: "General", duration: 30, price: 0, active: true };
+        return {
+          name: String(item.name || "").trim(),
+          category: item.category || "General",
+          duration: Number(item.duration || 30),
+          price: Number(item.price || 0),
+          active: item.active !== false
+        };
+      }).filter((service) => service.name);
+    }
+  } catch {
+    return String(value).split(",").map((name) => name.trim()).filter(Boolean).map((name) => ({ name, category: "General", duration: 30, price: 0, active: true }));
+  }
+  return fallback;
+}
+
 function applyApiBootstrap(payload) {
   state.patients = (payload.patients || []).map(mapApiPatient);
   state.appointments = (payload.appointments || []).map(mapApiAppointment);
@@ -366,6 +394,12 @@ function applyApiBootstrap(payload) {
     state.config.whatsapp = payload.config.whatsapp || state.config.whatsapp;
     state.config.doctors = parseApiList(payload.config.doctors, state.config.doctors);
     state.config.units = parseApiList(payload.config.units, state.config.units);
+    if (payload.config.services) {
+      state.services = parseApiServices(payload.config.services, state.services);
+      state.config.servicesCustomized = true;
+    } else {
+      state = normalizeState(state);
+    }
   }
   apiUser = payload.user || apiUser;
   if (apiUser) currentUserId = apiUser.id;
@@ -1588,6 +1622,7 @@ function renderConfig() {
     form.whatsapp.value = state.config.whatsapp;
     form.doctors.value = state.config.doctors.join(", ");
     form.units.value = state.config.units.join(", ");
+    form.services.value = state.services.filter((service) => service.active).map((service) => service.name).join(", ");
   }
   renderUsers();
 }
@@ -2552,6 +2587,18 @@ function bindEvents() {
     const data = formData(event.currentTarget);
     const doctors = data.doctors.split(",").map((item) => item.trim()).filter(Boolean);
     const units = data.units.split(",").map((item) => item.trim()).filter(Boolean);
+    const serviceNames = data.services.split(",").map((item) => item.trim()).filter(Boolean);
+    const previousServices = new Map(state.services.map((service) => [service.name.toLowerCase(), service]));
+    state.services = (serviceNames.length ? serviceNames : seedData.services.map((service) => service.name)).map((name) => {
+      const existing = previousServices.get(name.toLowerCase()) || seedData.services.find((service) => service.name.toLowerCase() === name.toLowerCase());
+      return {
+        name,
+        category: existing?.category || "General",
+        duration: Number(existing?.duration || state.config.interval || 30),
+        price: Number(existing?.price || 0),
+        active: true
+      };
+    });
     state.config = {
       ...state.config,
       clinicName: data.clinicName,
@@ -2561,7 +2608,8 @@ function bindEvents() {
       inactiveDays: Number(data.inactiveDays),
       whatsapp: data.whatsapp,
       doctors: doctors.length ? doctors : seedData.config.doctors,
-      units: units.length ? units : seedData.config.units
+      units: units.length ? units : seedData.config.units,
+      servicesCustomized: true
     };
     try {
       await saveConfigApi({
@@ -2572,7 +2620,9 @@ function bindEvents() {
         inactiveDays: state.config.inactiveDays,
         whatsapp: state.config.whatsapp,
         doctors: state.config.doctors,
-        units: state.config.units
+        units: state.config.units,
+        services: state.services,
+        servicesCustomized: state.config.servicesCustomized
       });
     } catch (error) {
       alert(error.message);

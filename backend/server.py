@@ -670,6 +670,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
             for key in ["start", "end", "interval", "inactiveDays", "whatsapp", "doctors", "units"]:
                 if key in data:
                     values[key] = data[key]
+            if "services" in data:
+                values["services"] = data["services"]
+            if "servicesCustomized" in data:
+                values["servicesCustomized"] = data["servicesCustomized"]
             set_config(values)
             return send_json(self, {"ok": True})
 
