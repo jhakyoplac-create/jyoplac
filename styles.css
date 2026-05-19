@@ -1400,3 +1400,196 @@ menu {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 720px) {
+  body {
+    display: block;
+    background:
+      radial-gradient(circle at top right, rgba(20, 121, 255, 0.14), transparent 28%),
+      var(--bg);
+  }
+
+  .login-screen {
+    padding: 14px;
+  }
+
+  .login-card {
+    padding: 22px;
+  }
+
+  .sidebar {
+    max-height: 42vh;
+    overflow: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .brand {
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .brand strong {
+    font-size: 0.98rem;
+  }
+
+  .nav-item {
+    min-height: 42px;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .app {
+    padding: 14px;
+  }
+
+  .topbar {
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+
+  h2 {
+    font-size: 17px;
+  }
+
+  .top-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .top-actions .search {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .top-actions button,
+  .agenda-toolbar button,
+  .primary,
+  .ghost {
+    min-height: 44px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panel-head .top-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-grid {
+    gap: 10px;
+  }
+
+  .kpi {
+    padding: 14px;
+  }
+
+  .kpi strong {
+    font-size: 24px;
+  }
+
+  .content-grid,
+  .campaign-grid,
+  .doctor-grid {
+    gap: 12px;
+  }
+
+  .form {
+    gap: 12px;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  textarea {
+    min-height: 88px;
+  }
+
+  .check-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .table-wrap {
+    margin-inline: -4px;
+    padding-bottom: 4px;
+  }
+
+  table {
+    min-width: 680px;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
+  }
+
+  .agenda-board {
+    gap: 8px;
+  }
+
+  .agenda-row {
+    gap: 6px;
+  }
+
+  .time-cell {
+    min-height: 34px;
+    justify-content: start;
+    padding-left: 12px;
+  }
+
+  .slot {
+    min-height: 52px;
+    padding: 9px 10px;
+    font-size: 13px;
+  }
+
+  .slot strong {
+    font-size: 13px;
+  }
+
+  .cash-breakdown,
+  .odontogram-symbol-grid {
+    grid-template-columns: 1fr;
+  }
+
+  dialog {
+    width: min(100vw - 16px, 560px);
+    max-height: calc(100dvh - 18px);
+    overflow: auto;
+  }
+
+  .modal-form {
+    padding: 16px;
+  }
+
+  menu {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

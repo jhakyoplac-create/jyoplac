@@ -1,0 +1,19 @@
+{
+  "name": "CM Odontologia Estetica",
+  "short_name": "CM Dental",
+  "description": "Sistema dental para pacientes, citas, historial, pagos y caja.",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eefbff",
+  "theme_color": "#00a6d6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
