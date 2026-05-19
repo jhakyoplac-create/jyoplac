@@ -33,6 +33,7 @@ body {
     radial-gradient(circle at top left, rgba(4, 200, 222, 0.22), transparent 32%),
     var(--bg);
   font-family: Inter, "Segoe UI", Arial, sans-serif;
+  overflow-x: hidden;
 }
 
 body.locked {
@@ -446,6 +447,11 @@ label {
 .content-grid {
   display: grid;
   gap: 18px;
+  min-width: 0;
+}
+
+.content-grid > * {
+  min-width: 0;
 }
 
 .content-grid.two {
@@ -470,6 +476,7 @@ label {
 
 .panel {
   padding: 18px;
+  min-width: 0;
 }
 
 .panel-head {
@@ -655,6 +662,7 @@ label {
 
 .table-wrap {
   overflow: auto;
+  max-width: 100%;
 }
 
 table {
@@ -1407,6 +1415,7 @@ menu {
     background:
       radial-gradient(circle at top right, rgba(20, 121, 255, 0.14), transparent 28%),
       var(--bg);
+    width: 100%;
   }
 
   .login-screen {
@@ -1446,6 +1455,16 @@ menu {
 
   .app {
     padding: 14px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .view,
+  .content-grid,
+  .panel,
+  .table-wrap {
+    max-width: 100%;
   }
 
   .topbar {
@@ -1539,10 +1558,12 @@ menu {
   .table-wrap {
     margin-inline: -4px;
     padding-bottom: 4px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
   }
 
   table {
-    min-width: 680px;
+    min-width: 560px;
   }
 
   .row-actions {
