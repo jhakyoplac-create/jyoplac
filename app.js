@@ -109,6 +109,7 @@ let apiToken = localStorage.getItem(API_TOKEN_KEY) || "";
 let apiUser = null;
 let apiBootstrapped = false;
 let apiRefreshing = false;
+let patientSaving = false;
 let historySaving = false;
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -2102,7 +2103,15 @@ function bindEvents() {
 
   $("#patientForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = formData(event.currentTarget);
+    if (patientSaving) return;
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    patientSaving = true;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Guardando...";
+    }
+    const data = formData(form);
     const patient = {
       id: data.id || uid("p"),
       dni: data.dni,
@@ -2117,12 +2126,22 @@ function bindEvents() {
       await savePatientApi(patient);
     } catch (error) {
       alert(error.message);
+      patientSaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar paciente";
+      }
       return;
     }
     upsert(state.patients, patient);
-    event.currentTarget.reset();
+    form.reset();
     if (!API_ENABLED) saveState();
     render();
+    patientSaving = false;
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Guardar paciente";
+    }
   });
 
   $("#patientsTable").addEventListener("click", async (event) => {
