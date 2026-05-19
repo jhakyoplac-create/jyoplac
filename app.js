@@ -183,6 +183,11 @@ async function apiFetch(path, options = {}) {
     }
   });
   const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    localStorage.removeItem(API_TOKEN_KEY);
+    apiToken = "";
+    throw new Error("Sesion vencida. Cierra sesion e ingresa nuevamente.");
+  }
   if (!response.ok) throw new Error(payload.error || "No se pudo conectar con el servidor.");
   return payload;
 }

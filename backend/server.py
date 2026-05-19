@@ -27,12 +27,45 @@ SCHEMA_PATH = ROOT / "backend" / "schema.sql"
 SESSION_SECONDS = 60 * 60 * 10
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
+TOKEN_SECRET = os.environ.get("TOKEN_SECRET") or os.environ.get("ADMIN_PASSWORD", "cm-odontologia-local-secret")
 
 sessions = {}
 
 
 def now_id(prefix):
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def normalize_role(role):
+    value = str(role or "").strip().upper()
+    aliases = {
+        "ADMINISTRADOR": "ADMIN",
+        "RECEPCIONISTA": "RECEPCION",
+        "RECEPCIÓN": "RECEPCION",
+        "RECEPCION": "RECEPCION",
+        "DOCTORA": "DOCTOR",
+    }
+    return aliases.get(value, value)
+
+
+def make_token(user_id):
+    expires = int(time.time() + SESSION_SECONDS)
+    payload = f"{user_id}:{expires}"
+    signature = hmac.new(TOKEN_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}:{signature}".encode("utf-8")).decode("ascii")
+
+
+def read_token(token):
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
+        user_id, expires, signature = decoded.rsplit(":", 2)
+        payload = f"{user_id}:{expires}"
+        expected = hmac.new(TOKEN_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected) or int(expires) < time.time():
+            return None
+        return user_id
+    except Exception:
+        return None
 
 
 class CompatConnection:
@@ -158,12 +191,18 @@ def send_json(handler, payload, status=200):
 
 def auth_user(handler):
     token = handler.headers.get("Authorization", "").replace("Bearer ", "").strip()
-    session = sessions.get(token)
-    if not session or session["expires"] < time.time():
-        return None
+    user_id = read_token(token)
+    if not user_id:
+        session = sessions.get(token)
+        if not session or session["expires"] < time.time():
+            return None
+        user_id = session["user_id"]
     with db() as conn:
-      user = conn.execute("SELECT id, name, username, role, active FROM users WHERE id = ? AND active = 1", (session["user_id"],)).fetchone()
-      return row_to_dict(user) if user else None
+      user = conn.execute("SELECT id, name, username, role, active FROM users WHERE id = ? AND active = 1", (user_id,)).fetchone()
+      data = row_to_dict(user) if user else None
+      if data:
+          data["role"] = normalize_role(data["role"])
+      return data
 
 
 def require_auth(handler):
@@ -178,7 +217,7 @@ def require_role(handler, roles):
     user = require_auth(handler)
     if not user:
         return None
-    if user["role"] not in roles:
+    if normalize_role(user["role"]) not in {normalize_role(role) for role in roles}:
         send_json(handler, {"error": "No tienes permiso para esta accion"}, 403)
         return None
     return user
@@ -288,11 +327,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 row = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?) AND active = 1", (username,)).fetchone()
             if not row or not verify_password(password, row["password_hash"]):
                 return send_json(self, {"error": "Usuario o contraseña incorrectos"}, 401)
-            token = secrets.token_urlsafe(32)
+            token = make_token(row["id"])
             sessions[token] = {"user_id": row["id"], "expires": time.time() + SESSION_SECONDS}
             return send_json(self, {
                 "token": token,
-                "user": {"id": row["id"], "name": row["name"], "username": row["username"], "role": row["role"], "active": row["active"]},
+                "user": {"id": row["id"], "name": row["name"], "username": row["username"], "role": normalize_role(row["role"]), "active": row["active"]},
             })
 
         if parsed.path == "/api/logout":
@@ -326,7 +365,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             data["name"].strip(),
                             data["username"].strip(),
                             password_hash,
-                            data["role"],
+                            normalize_role(data["role"]),
                             1 if data.get("active", True) else 0,
                         ),
                     )
