@@ -114,6 +114,7 @@ let apiRefreshing = false;
 let patientSaving = false;
 let historySaving = false;
 let paymentSaving = false;
+let forcedPaymentHistoryId = "";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -689,8 +690,13 @@ function pendingHistories() {
   return state.clinicalHistory.filter((entry) => entry.attended && historyBalance(entry.id) > 0);
 }
 
+function pendingCashHistories() {
+  return pendingHistories().filter((entry) => !entry.creditPending || entry.id === forcedPaymentHistoryId);
+}
+
 function receivableEntries() {
   return pendingHistories()
+    .filter((entry) => entry.creditPending)
     .map((entry) => ({
       entry,
       patient: patientById(entry.patientId),
@@ -701,7 +707,7 @@ function receivableEntries() {
 }
 
 function pendingPatientIds() {
-  return [...new Set(pendingHistories().map((entry) => entry.patientId))];
+  return [...new Set(pendingCashHistories().map((entry) => entry.patientId))];
 }
 
 function cashSessionToday() {
@@ -1048,10 +1054,11 @@ function renderTreatmentPaymentOptions() {
   const historySelect = $('#paymentForm select[name="historyId"]');
   if (!patientSelect || !historySelect) return;
   const patientId = patientSelect.value;
-  const pending = pendingHistories().filter((entry) => entry.patientId === patientId);
+  const pending = pendingCashHistories().filter((entry) => entry.patientId === patientId);
   historySelect.innerHTML = pending.length
     ? pending.map((entry) => `<option value="${entry.id}">${formatDate(entry.date)} - ${escapeHtml(entry.reason)} - saldo ${money(historyBalance(entry.id))}</option>`).join("")
     : `<option value="">Sin atenciones pendientes</option>`;
+  if (forcedPaymentHistoryId && pending.some((entry) => entry.id === forcedPaymentHistoryId)) historySelect.value = forcedPaymentHistoryId;
   updatePaymentDue();
 }
 
@@ -1075,11 +1082,14 @@ function updatePaymentChange() {
 function openPaymentForHistory(historyId) {
   const history = historyById(historyId);
   if (!history) return;
+  forcedPaymentHistoryId = historyId;
   setView("pagos");
   fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), history.patientId);
   renderTreatmentPaymentOptions();
   const historySelect = $('#paymentForm select[name="historyId"]');
   if (historySelect) historySelect.value = historyId;
+  const form = $("#paymentForm");
+  if (form?.date) form.date.value = todayISO();
   updatePaymentDue();
   setTimeout(() => $('#paymentForm input[name="cashReceived"]')?.focus(), 0);
 }
@@ -1088,7 +1098,7 @@ function openCreditDialog() {
   const historyForm = $("#historyForm");
   const creditForm = $("#creditForm");
   if (!historyForm || !creditForm) return;
-  creditForm.creditAmount.value = historyForm.creditAmount.value || historyForm.agreedPrice.value || "";
+  creditForm.creditAmount.value = historyForm.agreedPrice.value || historyForm.creditAmount.value || "";
   creditForm.creditDueDate.value = historyForm.creditDueDate.value || todayISO();
   creditForm.creditNote.value = historyForm.creditNote.value || "";
   $("#creditDialog").showModal();
@@ -2381,6 +2391,7 @@ function bindEvents() {
       return;
     }
     const creditPending = data.creditPending === "on";
+    const creditAmount = Number(data.creditAmount || data.agreedPrice || 0);
     if (creditPending && !data.creditDueDate) {
       alert("Completa la fecha compromiso del pago pendiente.");
       historySaving = false;
@@ -2406,7 +2417,7 @@ function bindEvents() {
       instructions: data.instructions || "",
       agreedPrice: Number(data.agreedPrice || 0),
       creditPending,
-      creditAmount: Number(data.creditAmount || data.agreedPrice || 0),
+      creditAmount,
       creditDueDate: data.creditDueDate || "",
       creditNote: data.creditNote || ""
     };
@@ -2505,8 +2516,16 @@ function bindEvents() {
     renderOdontogram();
   });
 
-  $('#paymentForm select[name="patientId"]').addEventListener("change", renderTreatmentPaymentOptions);
-  $('#paymentForm select[name="historyId"]').addEventListener("change", updatePaymentDue);
+  $('#paymentForm select[name="patientId"]').addEventListener("change", () => {
+    const selectedPatient = $('#paymentForm select[name="patientId"]').value;
+    const forcedHistory = historyById(forcedPaymentHistoryId);
+    if (!forcedHistory || forcedHistory.patientId !== selectedPatient) forcedPaymentHistoryId = "";
+    renderTreatmentPaymentOptions();
+  });
+  $('#paymentForm select[name="historyId"]').addEventListener("change", () => {
+    forcedPaymentHistoryId = "";
+    updatePaymentDue();
+  });
   $('#paymentForm input[name="amount"]').addEventListener("input", updatePaymentChange);
   $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
   $("#paymentForm").addEventListener("submit", async (event) => {
@@ -2568,6 +2587,7 @@ function bindEvents() {
       return;
     }
     upsert(state.payments, payment);
+    if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
     form.reset();
     form.date.value = todayISO();
     if (!API_ENABLED) saveState();
