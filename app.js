@@ -605,6 +605,30 @@ function timeFromMinutes(total) {
   return `${hour}:${minute}`;
 }
 
+function agendaTimeLabel(time) {
+  const [hourText, minute] = time.split(":");
+  const hour = Number(hourText);
+  const displayHour = hour > 12 ? hour - 12 : hour;
+  return `${displayHour}:${minute}`;
+}
+
+function agendaTimesForDay(date, start, end) {
+  const interval = Number(state.config.interval || 30);
+  const lunchStart = minutes(state.config.lunchStart || "13:00");
+  const lunchEnd = minutes(state.config.lunchEnd || "15:00");
+  const times = [];
+  for (let cursor = start; cursor < end; cursor += interval) {
+    const isLunch = cursor >= lunchStart && cursor < lunchEnd;
+    if (!isLunch || cursor % 60 === 0) times.push(timeFromMinutes(cursor));
+  }
+  state.appointments
+    .filter((appointment) => appointment.date === date)
+    .forEach((appointment) => {
+      if (!times.includes(appointment.time)) times.push(appointment.time);
+    });
+  return times.sort((a, b) => minutes(a) - minutes(b));
+}
+
 function dayOfWeek(date) {
   return new Date(`${date}T00:00:00`).getDay();
 }
@@ -629,8 +653,13 @@ function appointmentAvailabilityError(candidate) {
   const appointmentStart = minutes(candidate.time);
   const service = serviceByName(candidate.service);
   const appointmentEnd = appointmentStart + Number(candidate.duration || service?.duration || state.config.interval);
+  const lunchStart = minutes(state.config.lunchStart);
+  const lunchEnd = minutes(state.config.lunchEnd);
   if (appointmentStart < info.start || appointmentEnd > info.end) {
     return info.message || `La atencion solo esta disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
+  }
+  if (appointmentStart < lunchEnd && appointmentEnd > lunchStart) {
+    return `No hay atencion de ${agendaTimeLabel(state.config.lunchStart)} a ${agendaTimeLabel(state.config.lunchEnd)} por horario de almuerzo.`;
   }
   return "";
 }
@@ -1164,8 +1193,8 @@ function renderAgenda() {
   const end = dayInfo.end;
   const units = state.config.units.length ? state.config.units : seedData.config.units;
   const rows = dayInfo.message ? [`<div class="agenda-notice">${dayInfo.message}</div>`] : [];
-  for (let cursor = start; cursor < end; cursor += Number(state.config.interval)) {
-    const time = timeFromMinutes(cursor);
+  agendaTimesForDay(date, start, end).forEach((time) => {
+    const cursor = minutes(time);
     const slots = units.map((unitName) => {
       const appointment = state.appointments.find((item) => {
         const doctorOk = !doctor || doctor === "Todos los doctores" || item.doctor === doctor;
@@ -1189,15 +1218,15 @@ function renderAgenda() {
           </div>
         </div>`;
       }
-      return `<div class="slot ${isLunch ? "lunch" : ""}" data-new-at="${time}" data-unit="${escapeHtml(unitName)}">
+      return `<div class="slot ${isLunch ? "lunch" : ""}" ${isLunch ? "" : `data-new-at="${time}" data-unit="${escapeHtml(unitName)}"`}>
         <div class="slot-main">
           <strong>${escapeHtml(unitName)}</strong>
           <span class="muted">${isLunch ? "Almuerzo flexible" : "Disponible"}</span>
         </div>
       </div>`;
     });
-    rows.push(`<div class="agenda-row" style="grid-template-columns: 56px repeat(${units.length}, minmax(0, 1fr));"><div class="time-cell">${time}</div>${slots.join("")}</div>`);
-  }
+    rows.push(`<div class="agenda-row" style="grid-template-columns: 50px repeat(${units.length}, minmax(0, 1fr));"><div class="time-cell">${agendaTimeLabel(time)}</div>${slots.join("")}</div>`);
+  });
   $("#agendaBoard").innerHTML = rows.join("") || `<div class="appointment-card"><strong>No se pudo construir la agenda.</strong><p class="muted">Revisa horario de inicio, fin e intervalo en Configuracion.</p></div>`;
 }
 
