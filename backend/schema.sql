@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS patients (
   dni TEXT NOT NULL,
   name TEXT NOT NULL,
   phone TEXT,
+  birth_date TEXT,
   doctor TEXT,
   main_treatment TEXT,
   notes TEXT,

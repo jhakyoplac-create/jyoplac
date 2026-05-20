@@ -207,6 +207,7 @@ function mapApiPatient(row) {
     dni: row.dni,
     name: row.name,
     phone: row.phone || "",
+    birthDate: row.birth_date || row.birthDate || "",
     doctor: row.doctor || "",
     mainTreatment: row.main_treatment || row.mainTreatment || "",
     notes: row.notes || "",
@@ -454,6 +455,7 @@ async function savePatientApi(patient) {
     dni: patient.dni,
     name: patient.name,
     phone: patient.phone,
+    birthDate: patient.birthDate || "",
     doctor: patient.doctor,
     mainTreatment: patient.mainTreatment,
     notes: patient.notes
@@ -581,6 +583,32 @@ function todayISO() {
 function formatDate(date) {
   if (!date) return "";
   return new Date(`${date}T00:00:00`).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function ageFromBirthDate(birthDate, referenceDate = todayISO()) {
+  if (!birthDate) return null;
+  const birth = new Date(`${birthDate}T00:00:00`);
+  const reference = new Date(`${referenceDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime()) || birth > reference) return null;
+  let age = reference.getFullYear() - birth.getFullYear();
+  const hadBirthday = reference.getMonth() > birth.getMonth() || (reference.getMonth() === birth.getMonth() && reference.getDate() >= birth.getDate());
+  if (!hadBirthday) age -= 1;
+  return age;
+}
+
+function patientAgeText(patient, referenceDate = todayISO()) {
+  const age = ageFromBirthDate(patient?.birthDate, referenceDate);
+  return age === null ? "" : `${age} anos`;
+}
+
+function patientAgeGroup(patient, referenceDate = todayISO()) {
+  const age = ageFromBirthDate(patient?.birthDate, referenceDate);
+  if (age === null) return "Sin fecha";
+  if (age <= 12) return "Ninos 0-12";
+  if (age <= 17) return "Adolescentes 13-17";
+  if (age <= 29) return "Jovenes 18-29";
+  if (age <= 59) return "Adultos 30-59";
+  return "Adultos mayores 60+";
 }
 
 function patientById(id) {
@@ -1243,12 +1271,13 @@ function renderAgenda() {
 function renderPatients() {
   const query = $("#globalSearch").value.trim().toLowerCase();
   const rows = state.patients
-    .filter((patient) => [patient.name, patient.dni, patient.phone].join(" ").toLowerCase().includes(query))
+    .filter((patient) => [patient.name, patient.dni, patient.phone, patient.birthDate].join(" ").toLowerCase().includes(query))
     .map((patient) => {
       const status = patientStatus(patient);
+      const ageText = patientAgeText(patient);
       return `<tr>
         <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
-        <td>${escapeHtml(patient.phone)}</td>
+        <td>${escapeHtml(patient.phone)}${patient.birthDate ? `<br><span class="muted">${formatDate(patient.birthDate)}${ageText ? ` | ${ageText}` : ""}</span>` : ""}</td>
         <td>${escapeHtml(patient.doctor)}</td>
         <td><span class="status ${status === "INACTIVO" ? "danger" : status === "NUEVO" ? "warn" : ""}">${status}</span></td>
         <td>${money(patientDebt(patient.id))}</td>
@@ -1644,6 +1673,14 @@ function reportMetrics(month) {
   const payments = state.payments.filter((payment) => payment.date.startsWith(month));
   const expenses = state.expenses.filter((expense) => expense.date.startsWith(month));
   const newPatients = state.patients.filter((patient) => patient.createdAt?.startsWith(month));
+  const seenPatients = [...new Set(appointments.map((appointment) => appointment.patientId).filter(Boolean))]
+    .map((patientId) => patientById(patientId))
+    .filter(Boolean);
+  const ageGroups = ["Ninos 0-12", "Adolescentes 13-17", "Jovenes 18-29", "Adultos 30-59", "Adultos mayores 60+", "Sin fecha"]
+    .map((group) => ({
+      group,
+      count: seenPatients.filter((patient) => patientAgeGroup(patient, `${month}-28`) === group).length
+    }));
   const oldPatientIds = new Set(
     appointments
       .map((appointment) => patientById(appointment.patientId))
@@ -1665,6 +1702,7 @@ function reportMetrics(month) {
     purchaseExpenses,
     totalExpenses: staffExpenses + purchaseExpenses,
     newPatients,
+    ageGroups,
     oldPatients: oldPatientIds.size,
     inactivePatients: state.patients.filter((patient) => patientStatus(patient) === "INACTIVO").length,
     attended: appointments.filter((appointment) => appointment.status === "ATENDIDA").length,
@@ -1717,6 +1755,11 @@ function renderReports() {
     .map(([service, count]) => `<tr><td>${escapeHtml(service)}</td><td>${count}</td></tr>`)
     .join("");
   $("#serviceReport").innerHTML = `<table><thead><tr><th>Servicio</th><th>Citas</th></tr></thead><tbody>${serviceRows || `<tr><td colspan="2">Sin datos</td></tr>`}</tbody></table>`;
+
+  const ageRows = metrics.ageGroups
+    .map((item) => `<tr><td>${escapeHtml(item.group)}</td><td>${item.count}</td></tr>`)
+    .join("");
+  $("#ageReport").innerHTML = `<table><thead><tr><th>Grupo de edad</th><th>Pacientes con cita</th></tr></thead><tbody>${ageRows}</tbody></table>`;
 }
 
 function renderConfig() {
@@ -2261,6 +2304,7 @@ function bindEvents() {
       dni: data.dni,
       name: data.name.trim().toUpperCase(),
       phone: data.phone,
+      birthDate: data.birthDate,
       doctor: data.doctor,
       mainTreatment: data.mainTreatment,
       createdAt: new Date().toISOString().slice(0, 10),
@@ -2982,6 +3026,7 @@ function bindEvents() {
       { seccion: "RESUMEN", indicador: "Pacientes nuevos", mes: month, cantidad: metrics.newPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes antiguos", mes: month, cantidad: metrics.oldPatients },
       { seccion: "RESUMEN", indicador: "Pacientes inactivos", mes: month, cantidad: metrics.inactivePatients },
+      ...metrics.ageGroups.map((item) => ({ seccion: "EDAD", grupo: item.group, mes: month, cantidad: item.count })),
       ...state.config.doctors.map((doctor) => ({
         seccion: "DOCTOR",
         doctor,

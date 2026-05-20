@@ -135,7 +135,10 @@
             <input type="hidden" name="id" />
             <label>DNI o identificador<input name="dni" required /></label>
             <label>Nombre completo<input name="name" required /></label>
-            <label>Telefono<input name="phone" inputmode="tel" /></label>
+            <div class="inline-fields">
+              <label>Telefono<input name="phone" inputmode="tel" /></label>
+              <label>Fecha de nacimiento<input name="birthDate" type="date" /></label>
+            </div>
             <label>Doctor principal<select name="doctor"></select></label>
             <label>Tratamiento principal<select name="mainTreatment"></select></label>
             <label>Observaciones<textarea name="notes" rows="3"></textarea></label>
@@ -566,6 +569,10 @@
           <section class="panel">
             <div class="panel-head"><h2>Resumen por servicio</h2></div>
             <div id="serviceReport" class="table-wrap"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>Edades de pacientes</h2></div>
+            <div id="ageReport" class="table-wrap"></div>
           </section>
         </div>
       </section>
