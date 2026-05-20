@@ -985,6 +985,8 @@ function applyAuthState() {
   });
   const quickAppointmentBtn = $("#quickAppointmentBtn");
   if (quickAppointmentBtn) quickAppointmentBtn.hidden = !canManageAppointments();
+  const patientTopActions = $("#patientTopActions");
+  if (patientTopActions) patientTopActions.hidden = currentView !== "pacientes";
   const agendaAppointmentBtn = $("#newAppointmentBtn");
   if (agendaAppointmentBtn) agendaAppointmentBtn.hidden = !canManageAppointments();
   const quickPatientBtn = $("#quickPatientBtn");
@@ -2071,20 +2073,35 @@ function bindEvents() {
   $("#loginForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
     const data = formData(event.currentTarget);
     if (API_ENABLED) {
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = "Ingresando...";
+      }
+      $("#loginMessage").textContent = "Conectando con el sistema...";
       apiFetch("/api/login", { method: "POST", body: JSON.stringify({ username: data.username, password: data.password }) })
         .then((payload) => {
           apiToken = payload.token;
           apiUser = payload.user;
           currentUserId = payload.user.id;
           localStorage.setItem(API_TOKEN_KEY, apiToken);
-          $("#loginMessage").textContent = "";
+          $("#loginMessage").textContent = "Cargando datos...";
           form.reset();
           return loadFromApi();
         })
+        .then(() => {
+          $("#loginMessage").textContent = "";
+        })
         .catch((error) => {
           $("#loginMessage").textContent = error.message;
+        })
+        .finally(() => {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = "Ingresar";
+          }
         });
       return;
     }
