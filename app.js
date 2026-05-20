@@ -113,6 +113,7 @@ let apiBootstrapped = false;
 let apiRefreshing = false;
 let patientSaving = false;
 let historySaving = false;
+let paymentSaving = false;
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -2481,23 +2482,42 @@ function bindEvents() {
   $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
   $("#paymentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (paymentSaving) return;
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const restorePaymentButton = () => {
+      paymentSaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar pago";
+      }
+    };
+    paymentSaving = true;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Guardando...";
+    }
     if (!cashSessionToday()) {
       alert("Primero abre la caja del dia para registrar pagos.");
+      restorePaymentButton();
       return;
     }
     if (!canManagePayments()) {
       alert("Tu usuario no tiene permiso para registrar pagos.");
+      restorePaymentButton();
       return;
     }
-    const data = formData(event.currentTarget);
+    const data = formData(form);
     const due = historyBalance(data.historyId);
     const amount = Number(data.amount || 0);
     if (!data.historyId) {
       alert("Selecciona una atencion pendiente para registrar el pago.");
+      restorePaymentButton();
       return;
     }
     if (amount <= 0 || amount > due) {
       alert("El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
+      restorePaymentButton();
       return;
     }
     const payment = {
@@ -2515,13 +2535,15 @@ function bindEvents() {
       await savePaymentApi(payment);
     } catch (error) {
       alert(error.message);
+      restorePaymentButton();
       return;
     }
     upsert(state.payments, payment);
-    event.currentTarget.reset();
-    event.currentTarget.date.value = todayISO();
+    form.reset();
+    form.date.value = todayISO();
     if (!API_ENABLED) saveState();
     render();
+    restorePaymentButton();
   });
 
   $("#openCashBtn").addEventListener("click", async () => {
