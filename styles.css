@@ -508,6 +508,19 @@ label {
   min-width: 0;
 }
 
+.patient-contact-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  align-items: start;
+}
+
+.patient-contact-row .compact-label {
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .form.wide {
   max-width: 980px;
 }
@@ -1547,6 +1560,15 @@ menu {
 
   .form {
     gap: 12px;
+  }
+
+  .patient-contact-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 8px;
+  }
+
+  .patient-contact-row .compact-label {
+    font-size: 11px;
   }
 
   input,
