@@ -1582,23 +1582,91 @@ function renderReminders() {
   }).join("") || `<p class="muted">No hay citas futuras para recordar.</p>`;
 }
 
-function renderReports() {
-  if (!$("#reportMonth").value) $("#reportMonth").value = todayISO().slice(0, 7);
-  const month = $("#reportMonth").value;
+function monthLabel(month) {
+  if (!month) return "";
+  const [year, value] = month.split("-");
+  const date = new Date(Number(year), Number(value) - 1, 1);
+  return date.toLocaleDateString("es-PE", { month: "short", year: "numeric" });
+}
+
+function previousMonth(month) {
+  const [year, value] = month.split("-").map(Number);
+  const date = new Date(year, value - 2, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function uniquePatientCount(items) {
+  return new Set(items.map((item) => item.patientId).filter(Boolean)).size;
+}
+
+function reportMetrics(month) {
   const appointments = state.appointments.filter((appointment) => appointment.date.startsWith(month));
   const payments = state.payments.filter((payment) => payment.date.startsWith(month));
+  const expenses = state.expenses.filter((expense) => expense.date.startsWith(month));
   const newPatients = state.patients.filter((patient) => patient.createdAt?.startsWith(month));
+  const oldPatientIds = new Set(
+    appointments
+      .map((appointment) => patientById(appointment.patientId))
+      .filter((patient) => patient && !patient.createdAt?.startsWith(month))
+      .map((patient) => patient.id)
+  );
+  const staffExpenses = expenses
+    .filter((expense) => expense.category === "PERSONAL_TERCERO")
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const purchaseExpenses = expenses
+    .filter((expense) => expense.category !== "PERSONAL_TERCERO")
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  return {
+    appointments,
+    payments,
+    expenses,
+    income: payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
+    staffExpenses,
+    purchaseExpenses,
+    totalExpenses: staffExpenses + purchaseExpenses,
+    newPatients,
+    oldPatients: oldPatientIds.size,
+    inactivePatients: state.patients.filter((patient) => patientStatus(patient) === "INACTIVO").length,
+    attended: appointments.filter((appointment) => appointment.status === "ATENDIDA").length,
+    patientsSeen: uniquePatientCount(appointments)
+  };
+}
+
+function renderReports() {
+  if (!$("#reportMonth").value) $("#reportMonth").value = todayISO().slice(0, 7);
+  if (!$("#compareMonth").value) $("#compareMonth").value = previousMonth($("#reportMonth").value);
+  const month = $("#reportMonth").value;
+  const compareMonth = $("#compareMonth").value;
+  const metrics = reportMetrics(month);
+  const compare = reportMetrics(compareMonth);
+  const appointments = metrics.appointments;
   $("#reportAppointments").textContent = appointments.length;
-  $("#reportIncome").textContent = money(payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
+  $("#reportIncome").textContent = money(metrics.income);
   $("#reportTreatments").textContent = state.treatments.filter((treatment) => treatment.status === "EN_PROCESO").length;
-  $("#reportNewPatients").textContent = newPatients.length;
+  $("#reportNewPatients").textContent = metrics.newPatients.length;
+  $("#reportOldPatients").textContent = metrics.oldPatients;
+  $("#reportInactivePatients").textContent = metrics.inactivePatients;
+  $("#reportStaffExpenses").textContent = money(metrics.staffExpenses);
+  $("#reportPurchaseExpenses").textContent = money(metrics.purchaseExpenses);
+
+  const compareRows = [
+    ["Ingresos", money(metrics.income), money(compare.income), money(metrics.income - compare.income)],
+    ["Gastos personal", money(metrics.staffExpenses), money(compare.staffExpenses), money(metrics.staffExpenses - compare.staffExpenses)],
+    ["Gastos compras", money(metrics.purchaseExpenses), money(compare.purchaseExpenses), money(metrics.purchaseExpenses - compare.purchaseExpenses)],
+    ["Pacientes nuevos", metrics.newPatients.length, compare.newPatients.length, metrics.newPatients.length - compare.newPatients.length],
+    ["Pacientes atendidos", metrics.attended, compare.attended, metrics.attended - compare.attended],
+    ["Pacientes con cita", metrics.patientsSeen, compare.patientsSeen, metrics.patientsSeen - compare.patientsSeen]
+  ].map(([label, current, previous, variation]) => `<tr><td>${label}</td><td>${current}</td><td>${previous}</td><td><strong>${variation}</strong></td></tr>`).join("");
+  $("#monthCompareReport").innerHTML = `<table><thead><tr><th>Indicador</th><th>${monthLabel(month)}</th><th>${monthLabel(compareMonth)}</th><th>Variacion</th></tr></thead><tbody>${compareRows}</tbody></table>`;
 
   const doctorRows = state.config.doctors.map((doctor) => {
     const count = appointments.filter((appointment) => appointment.doctor === doctor).length;
     const attended = appointments.filter((appointment) => appointment.doctor === doctor && appointment.status === "ATENDIDA").length;
-    return `<tr><td>${escapeHtml(doctor)}</td><td>${count}</td><td>${attended}</td></tr>`;
+    const assignedPatients = state.patients.filter((patient) => patient.doctor === doctor).length;
+    const newAssigned = metrics.newPatients.filter((patient) => patient.doctor === doctor).length;
+    return `<tr><td>${escapeHtml(doctor)}</td><td>${assignedPatients}</td><td>${newAssigned}</td><td>${count}</td><td>${attended}</td></tr>`;
   }).join("");
-  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th>Citas</th><th>Atendidas</th></tr></thead><tbody>${doctorRows}</tbody></table>`;
+  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th>Pacientes</th><th>Nuevos mes</th><th>Citas</th><th>Atendidas</th></tr></thead><tbody>${doctorRows}</tbody></table>`;
 
   const serviceMap = appointments.reduce((map, appointment) => {
     map[appointment.service] = (map[appointment.service] || 0) + 1;
@@ -1964,6 +2032,7 @@ function bindEvents() {
   on("#globalSearch", "input", renderPatients);
   on("#agendaDate", "change", renderAgenda);
   on("#reportMonth", "change", renderReports);
+  on("#compareMonth", "change", renderReports);
   on("#historyPatientFilter", "change", renderClinicalHistory);
   on("#odontogramPatientFilter", "change", renderOdontogram);
   on("#doctorFilter", "change", renderAgenda);
@@ -2834,7 +2903,33 @@ function bindEvents() {
   $("#exportRemindersBtn").addEventListener("click", () => exportCsv("recordatorios.csv", state.appointments.filter((appointment) => appointment.date >= todayISO()).map((appointment) => ({ fecha: appointment.date, hora: appointment.time, paciente: patientById(appointment.patientId)?.name, telefono: patientById(appointment.patientId)?.phone, servicio: appointment.service, doctor: appointment.doctor, estado: appointment.status }))));
   $("#exportReportsBtn").addEventListener("click", () => {
     const month = $("#reportMonth").value || todayISO().slice(0, 7);
-    exportCsv("reporte-mensual.csv", state.appointments.filter((appointment) => appointment.date.startsWith(month)).map((appointment) => ({ fecha: appointment.date, hora: appointment.time, paciente: patientById(appointment.patientId)?.name, servicio: appointment.service, doctor: appointment.doctor, estado: appointment.status })));
+    const metrics = reportMetrics(month);
+    const rows = [
+      { seccion: "RESUMEN", indicador: "Ingresos", mes: month, monto: metrics.income },
+      { seccion: "RESUMEN", indicador: "Gastos personal", mes: month, monto: -metrics.staffExpenses },
+      { seccion: "RESUMEN", indicador: "Gastos compras", mes: month, monto: -metrics.purchaseExpenses },
+      { seccion: "RESUMEN", indicador: "Pacientes nuevos", mes: month, cantidad: metrics.newPatients.length },
+      { seccion: "RESUMEN", indicador: "Pacientes antiguos", mes: month, cantidad: metrics.oldPatients },
+      { seccion: "RESUMEN", indicador: "Pacientes inactivos", mes: month, cantidad: metrics.inactivePatients },
+      ...state.config.doctors.map((doctor) => ({
+        seccion: "DOCTOR",
+        doctor,
+        pacientes_asignados: state.patients.filter((patient) => patient.doctor === doctor).length,
+        pacientes_nuevos_mes: metrics.newPatients.filter((patient) => patient.doctor === doctor).length,
+        citas_mes: metrics.appointments.filter((appointment) => appointment.doctor === doctor).length,
+        atendidas_mes: metrics.appointments.filter((appointment) => appointment.doctor === doctor && appointment.status === "ATENDIDA").length
+      })),
+      ...metrics.appointments.map((appointment) => ({
+        seccion: "CITA",
+        fecha: appointment.date,
+        hora: appointment.time,
+        paciente: patientById(appointment.patientId)?.name,
+        servicio: appointment.service,
+        doctor: appointment.doctor,
+        estado: appointment.status
+      }))
+    ];
+    exportCsv("reporte-mensual.csv", rows);
   });
 }
 
@@ -2844,6 +2939,7 @@ function init() {
   $('#historyForm input[name="date"]').value = todayISO();
   $('#staffPaymentForm input[name="date"]').value = todayISO();
   $("#reportMonth").value = todayISO().slice(0, 7);
+  $("#compareMonth").value = previousMonth($("#reportMonth").value);
   bindEvents();
   setupApiAutoRefresh();
   if (API_ENABLED && apiToken) loadFromApi();

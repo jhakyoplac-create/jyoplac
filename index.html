@@ -517,6 +517,7 @@
       <section id="reportes" class="view">
         <div class="toolbar">
           <input id="reportMonth" type="month" />
+          <input id="compareMonth" type="month" />
           <button class="ghost" id="exportReportsBtn">Exportar CSV</button>
         </div>
         <div class="kpi-grid compact">
@@ -536,8 +537,28 @@
             <span>Pacientes nuevos</span>
             <strong id="reportNewPatients">0</strong>
           </article>
+          <article class="kpi">
+            <span>Pacientes antiguos</span>
+            <strong id="reportOldPatients">0</strong>
+          </article>
+          <article class="kpi">
+            <span>Pacientes inactivos</span>
+            <strong id="reportInactivePatients">0</strong>
+          </article>
+          <article class="kpi">
+            <span>Gastos personal</span>
+            <strong id="reportStaffExpenses">S/ 0</strong>
+          </article>
+          <article class="kpi">
+            <span>Gastos compras</span>
+            <strong id="reportPurchaseExpenses">S/ 0</strong>
+          </article>
         </div>
         <div class="content-grid two">
+          <section class="panel">
+            <div class="panel-head"><h2>Mes a mes</h2></div>
+            <div id="monthCompareReport" class="table-wrap"></div>
+          </section>
           <section class="panel">
             <div class="panel-head"><h2>Resumen por doctor</h2></div>
             <div id="doctorReport" class="table-wrap"></div>
