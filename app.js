@@ -983,10 +983,12 @@ function applyAuthState() {
   $$(".nav-item").forEach((button) => {
     button.hidden = !hasRoleView(button.dataset.view);
   });
-  $("#quickAppointmentBtn").hidden = !canManageAppointments();
+  const quickAppointmentBtn = $("#quickAppointmentBtn");
+  if (quickAppointmentBtn) quickAppointmentBtn.hidden = !canManageAppointments();
   const agendaAppointmentBtn = $("#newAppointmentBtn");
   if (agendaAppointmentBtn) agendaAppointmentBtn.hidden = !canManageAppointments();
-  $("#quickPatientBtn").hidden = !canCreatePatients();
+  const quickPatientBtn = $("#quickPatientBtn");
+  if (quickPatientBtn) quickPatientBtn.hidden = !canCreatePatients();
   $("#backupBtn").hidden = !isAdmin();
   $(".file-label").hidden = !isAdmin();
   const userAdminPanel = $("#userAdminPanel");
@@ -1269,7 +1271,7 @@ function renderAgenda() {
 }
 
 function renderPatients() {
-  const query = $("#globalSearch").value.trim().toLowerCase();
+  const query = ($("#globalSearch")?.value || "").trim().toLowerCase();
   const rows = state.patients
     .filter((patient) => [patient.name, patient.dni, patient.phone, patient.birthDate].join(" ").toLowerCase().includes(query))
     .map((patient) => {
