@@ -934,12 +934,21 @@ function fillPaymentPatientSelect(select, selected = "") {
 
 function fillAppointmentPatientSelectForDate(select, date, selected = "") {
   if (!select) return;
-  const attendedIds = new Set(state.clinicalHistory
+  const historyCountByPatient = state.clinicalHistory
     .filter((entry) => entry.date === date && entry.attended && entry.id !== $("#historyForm")?.id?.value)
-    .map((entry) => entry.patientId));
-  const ids = [...new Set(state.appointments
-    .filter((appointment) => appointment.date === date && !attendedIds.has(appointment.patientId))
-    .map((appointment) => appointment.patientId))];
+    .reduce((map, entry) => {
+      map[entry.patientId] = (map[entry.patientId] || 0) + 1;
+      return map;
+    }, {});
+  const appointmentCountByPatient = state.appointments
+    .filter((appointment) => appointment.date === date && !["CANCELADA", "REPROGRAMADA"].includes(appointment.status))
+    .reduce((map, appointment) => {
+      map[appointment.patientId] = (map[appointment.patientId] || 0) + 1;
+      return map;
+    }, {});
+  const ids = Object.entries(appointmentCountByPatient)
+    .filter(([patientId, count]) => Number(count) > Number(historyCountByPatient[patientId] || 0))
+    .map(([patientId]) => patientId);
   const patients = state.patients
     .filter((patient) => ids.includes(patient.id))
     .sort((a, b) => a.name.localeCompare(b.name));
