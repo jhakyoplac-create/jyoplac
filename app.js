@@ -668,6 +668,10 @@ function agendaTimesForDay(date, start, end) {
     const isLunch = cursor >= lunchStart && cursor < lunchEnd;
     if (!isLunch || cursor % 60 === 0) times.push(timeFromMinutes(cursor));
   }
+  if (dayOfWeek(date) === 6 && end === lunchStart) {
+    const closingTime = timeFromMinutes(end);
+    if (!times.includes(closingTime)) times.push(closingTime);
+  }
   state.appointments
     .filter((appointment) => appointment.date === date)
     .forEach((appointment) => {
