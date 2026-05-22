@@ -877,14 +877,16 @@ function fillSelect(select, options, selected = "") {
   else if (cleanOptions.length) select.value = cleanOptions[0];
 }
 
-function fillPatientSelect(select, selected = "") {
+function fillPatientSelect(select, selected = "", includeBlank = false) {
   if (!select) return;
-  select.innerHTML = state.patients
+  const blankOption = includeBlank ? `<option value="">Selecciona paciente</option>` : "";
+  select.innerHTML = blankOption + state.patients
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni)}</option>`)
     .join("");
   if (selected && state.patients.some((patient) => patient.id === selected)) select.value = selected;
+  else if (includeBlank) select.value = "";
   else if (state.patients[0]) select.value = state.patients[0].id;
 }
 
@@ -1877,11 +1879,13 @@ function renderStaffPayments() {
 
 function openAppointment(appointment = {}) {
   const form = $("#appointmentForm");
+  const isNew = !appointment.id;
+  fillPatientSelect(form.patientId, appointment.patientId || "", isNew);
   form.id.value = appointment.id || "";
   form.date.value = appointment.date || $("#agendaDate").value || todayISO();
   form.time.value = appointment.time || "09:00";
   form.unit.value = appointment.unit || state.config.units[0];
-  form.patientId.value = appointment.patientId || state.patients[0]?.id || "";
+  form.patientId.value = appointment.patientId || "";
   form.doctor.value = appointment.doctor || patientById(form.patientId.value)?.doctor || "";
   form.service.value = appointment.service || state.services[0]?.name || "";
   form.status.value = appointment.status || "RESERVADA";
@@ -2215,6 +2219,10 @@ function bindEvents() {
       return;
     }
     const data = formData($("#appointmentForm"));
+    if (!data.patientId) {
+      alert("Selecciona el paciente antes de guardar la cita.");
+      return;
+    }
     const service = serviceByName(data.service);
     const appointment = {
       id: data.id || `CI-${String(state.appointments.length + 1).padStart(6, "0")}`,
