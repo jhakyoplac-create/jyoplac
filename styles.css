@@ -699,6 +699,24 @@ label {
   padding-right: 4px;
 }
 
+.patients-scroll table {
+  font-size: 13px;
+}
+
+.patients-scroll th,
+.patients-scroll td {
+  padding: 8px 8px;
+}
+
+.patients-scroll td strong {
+  font-size: 13px;
+  line-height: 1.15;
+}
+
+.patients-scroll .muted {
+  font-size: 12px;
+}
+
 .patients-scroll thead th {
   position: sticky;
   top: 0;
