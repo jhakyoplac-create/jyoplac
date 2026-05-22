@@ -1709,8 +1709,58 @@ function uniquePatientCount(items) {
   return new Set(items.map((item) => item.patientId).filter(Boolean)).size;
 }
 
+function isReportAppointment(appointment) {
+  return !["CANCELADA", "REPROGRAMADA"].includes(appointment.status);
+}
+
+function agendaExportRow(appointment) {
+  const patient = patientById(appointment.patientId);
+  return {
+    fecha: appointment.date,
+    hora: appointment.time,
+    unidad: appointment.unit,
+    paciente: patient?.name || "",
+    dni: patient?.dni || "",
+    telefono: patient?.phone || "",
+    doctor: appointment.doctor,
+    servicio: appointment.service,
+    estado: appointment.status,
+    notas: appointment.notes || ""
+  };
+}
+
+function exportAgendaDay() {
+  const date = $("#agendaDate")?.value || todayISO();
+  if (date < todayISO()) {
+    alert("Por seguridad solo se puede exportar agenda de hoy o fechas futuras.");
+    return;
+  }
+  const rows = state.appointments
+    .filter((appointment) => appointment.date === date && appointment.status !== "CANCELADA")
+    .sort((a, b) => `${a.time} ${a.unit}`.localeCompare(`${b.time} ${b.unit}`))
+    .map(agendaExportRow);
+  if (!rows.length) {
+    alert("No hay citas para exportar en esa fecha.");
+    return;
+  }
+  exportCsv(`agenda-${date}.csv`, rows);
+}
+
+function exportFutureAgenda() {
+  const today = todayISO();
+  const rows = state.appointments
+    .filter((appointment) => appointment.date >= today && appointment.status !== "CANCELADA")
+    .sort((a, b) => `${a.date} ${a.time} ${a.unit}`.localeCompare(`${b.date} ${b.time} ${b.unit}`))
+    .map(agendaExportRow);
+  if (!rows.length) {
+    alert("No hay citas futuras para exportar.");
+    return;
+  }
+  exportCsv(`agenda-desde-${today}.csv`, rows);
+}
+
 function reportMetrics(month) {
-  const appointments = state.appointments.filter((appointment) => appointment.date.startsWith(month));
+  const appointments = state.appointments.filter((appointment) => appointment.date.startsWith(month) && isReportAppointment(appointment));
   const payments = state.payments.filter((payment) => payment.date.startsWith(month));
   const expenses = state.expenses.filter((expense) => expense.date.startsWith(month));
   const newPatients = state.patients.filter((patient) => patient.createdAt?.startsWith(month));
@@ -3103,6 +3153,8 @@ function bindEvents() {
     })));
   });
   $("#exportCampaignBtn").addEventListener("click", () => exportCsv("campanas.csv", state.patients.map((patient) => ({ nombre: patient.name, telefono: patient.phone, estado: patientStatus(patient), saldo: patientDebt(patient.id) }))));
+  $("#exportAgendaDayBtn").addEventListener("click", exportAgendaDay);
+  $("#exportAgendaFutureBtn").addEventListener("click", exportFutureAgenda);
   $("#exportRemindersBtn").addEventListener("click", () => exportCsv("recordatorios.csv", state.appointments.filter((appointment) => appointment.date >= todayISO()).map((appointment) => ({ fecha: appointment.date, hora: appointment.time, paciente: patientById(appointment.patientId)?.name, telefono: patientById(appointment.patientId)?.phone, servicio: appointment.service, doctor: appointment.doctor, estado: appointment.status }))));
   $("#exportReportsBtn").addEventListener("click", () => {
     const month = $("#reportMonth").value || todayISO().slice(0, 7);
