@@ -586,6 +586,10 @@ function uid(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function appointmentId() {
+  return `CI-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+}
+
 function money(value) {
   return `S/ ${Number(value || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
@@ -2245,7 +2249,7 @@ function bindEvents() {
     }
     const service = serviceByName(data.service);
     const appointment = {
-      id: data.id || `CI-${String(state.appointments.length + 1).padStart(6, "0")}`,
+      id: data.id || appointmentId(),
       date: data.date,
       time: data.time,
       unit: data.unit,
@@ -2308,7 +2312,7 @@ function bindEvents() {
     original.status = "REPROGRAMADA";
     original.notes = data.comment.trim();
     const newAppointment = {
-      id: `CI-${String(state.appointments.length + 1).padStart(6, "0")}`,
+      id: appointmentId(),
       date: data.date,
       time: data.time,
       unit: data.unit,
