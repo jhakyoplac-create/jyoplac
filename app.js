@@ -689,15 +689,17 @@ function businessDayInfo(date) {
   if (day === 0) return { open: false, start: null, end: null, message: "Domingo no laborable" };
   const start = minutes(state.config.start);
   const normalEnd = minutes(state.config.end);
+  const end = day === 6 ? Math.min(normalEnd, minutes("13:00")) : normalEnd;
   return {
-    open: start < normalEnd,
+    open: start < end,
     start,
-    end: normalEnd,
-    message: ""
+    end,
+    message: day === 6 ? "Sabado: atencion hasta la 1:00 p.m." : ""
   };
 }
 
 function appointmentAvailabilityError(candidate) {
+  const day = dayOfWeek(candidate.date);
   const info = businessDayInfo(candidate.date);
   if (!info.open) return "No hay atencion los domingos. Selecciona otra fecha.";
   const appointmentStart = minutes(candidate.time);
@@ -705,6 +707,12 @@ function appointmentAvailabilityError(candidate) {
   const appointmentEnd = appointmentStart + Number(candidate.duration || service?.duration || state.config.interval);
   const lunchStart = minutes(state.config.lunchStart);
   const lunchEnd = minutes(state.config.lunchEnd);
+  if (day === 6) {
+    if (appointmentStart < info.start || appointmentStart > info.end) {
+      return info.message || `La atencion solo esta disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
+    }
+    return "";
+  }
   if (appointmentStart < info.start || appointmentEnd > info.end) {
     return info.message || `La atencion solo esta disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
   }
