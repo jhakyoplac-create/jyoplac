@@ -116,6 +116,7 @@ let historySaving = false;
 let paymentSaving = false;
 let forcedPaymentHistoryId = "";
 let lastSavedPatientId = "";
+let patientEditingId = "";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -2054,6 +2055,15 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function resetPatientFormMode() {
+  patientEditingId = "";
+  const form = $("#patientForm");
+  if (!form) return;
+  form.id.value = "";
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.textContent = "Guardar paciente";
+}
+
 function upsert(collection, item) {
   const index = collection.findIndex((current) => current.id === item.id);
   if (index >= 0) collection[index] = item;
@@ -2485,7 +2495,7 @@ function bindEvents() {
     }
     const data = formData(form);
     const patient = {
-      id: data.id || uid("p"),
+      id: patientEditingId || uid("p"),
       dni: data.dni,
       name: data.name.trim().toUpperCase(),
       phone: data.phone,
@@ -2510,6 +2520,7 @@ function bindEvents() {
     if (!API_ENABLED || !apiToken) upsert(state.patients, patient);
     lastSavedPatientId = patient.id;
     form.reset();
+    resetPatientFormMode();
     const search = $("#globalSearch");
     if (search) search.value = "";
     if (!API_ENABLED) saveState();
@@ -2528,6 +2539,10 @@ function bindEvents() {
     }
   });
 
+  $("#patientForm").addEventListener("reset", () => {
+    setTimeout(resetPatientFormMode, 0);
+  });
+
   $("#patientsTable").addEventListener("click", async (event) => {
     const edit = event.target.closest("[data-edit-patient]");
     const pay = event.target.closest("[data-pay-patient]");
@@ -2535,9 +2550,12 @@ function bindEvents() {
     if (edit) {
       const patient = patientById(edit.dataset.editPatient);
       const form = $("#patientForm");
+      patientEditingId = patient.id;
       Object.entries(patient).forEach(([key, value]) => {
         if (form[key]) form[key].value = value;
       });
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton) submitButton.textContent = "Actualizar paciente";
     }
     if (pay) {
       setView("pagos");
