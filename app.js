@@ -689,12 +689,11 @@ function businessDayInfo(date) {
   if (day === 0) return { open: false, start: null, end: null, message: "Domingo no laborable" };
   const start = minutes(state.config.start);
   const normalEnd = minutes(state.config.end);
-  const end = day === 6 ? Math.min(normalEnd, minutes("13:00")) : normalEnd;
   return {
-    open: start < end,
+    open: start < normalEnd,
     start,
-    end,
-    message: day === 6 ? "Sabado: atencion hasta la 1:00 p.m." : ""
+    end: normalEnd,
+    message: ""
   };
 }
 
