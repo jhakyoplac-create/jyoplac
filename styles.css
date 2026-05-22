@@ -693,6 +693,19 @@ label {
   max-width: 100%;
 }
 
+.patients-scroll {
+  max-height: calc(100vh - 245px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.patients-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -1597,6 +1610,12 @@ menu {
     padding-bottom: 4px;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
+  }
+
+  .patients-scroll {
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   table {
