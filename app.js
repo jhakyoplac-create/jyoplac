@@ -513,6 +513,11 @@ async function savePaymentApi(payment) {
   if (result.id) payment.id = result.id;
 }
 
+async function deletePaymentApi(id) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/payments", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+}
+
 async function saveExpenseApi(expense) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/expenses", { method: "POST", body: JSON.stringify(expense) });
@@ -1520,6 +1525,18 @@ function renderPayments() {
   $("#totalDebt").textContent = money(state.patients.reduce((sum, patient) => sum + patientDebt(patient.id), 0));
   renderCashBox();
   renderExpenses();
+  const paymentsTable = $("#paymentsTable");
+  const paymentsHeader = paymentsTable?.closest("table")?.querySelector("thead tr");
+  if (paymentsHeader) {
+    paymentsHeader.innerHTML = `
+      <th>Fecha</th>
+      <th>Paciente</th>
+      <th>Metodo</th>
+      <th>Monto</th>
+      <th>Comprobante</th>
+      ${isAdmin() ? "<th>Accion</th>" : ""}
+    `;
+  }
   $("#paymentsTable").innerHTML = openPaymentsForDate(todayISO())
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -1532,8 +1549,9 @@ function renderPayments() {
         <td>${escapeHtml(payment.method)}</td>
         <td><strong>${money(payment.amount)}</strong><br><span class="muted">Vuelto: ${money(payment.change || 0)}</span></td>
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}</td>
+        ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="5">No hay pagos registrados.</td></tr>`;
+    }).join("") || `<tr><td colspan="${isAdmin() ? 6 : 5}">No hay pagos registrados.</td></tr>`;
 }
 
 function renderReceivables() {
@@ -2514,6 +2532,24 @@ function bindEvents() {
       if (!API_ENABLED) saveState();
       render();
     }
+  });
+
+  $("#paymentsTable")?.addEventListener("click", async (event) => {
+    const del = event.target.closest("[data-delete-payment]");
+    if (!del || !isAdmin()) return;
+    const payment = state.payments.find((item) => item.id === del.dataset.deletePayment);
+    if (!payment) return;
+    const patient = patientById(payment.patientId);
+    if (!confirm(`Eliminar este pago de ${patient?.name || "paciente"} por ${money(payment.amount)}? La caja se recalculara automaticamente.`)) return;
+    try {
+      await deletePaymentApi(payment.id);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.payments = state.payments.filter((item) => item.id !== payment.id);
+    if (!API_ENABLED) saveState();
+    render();
   });
 
   $("#receivablesTable")?.addEventListener("click", (event) => {
