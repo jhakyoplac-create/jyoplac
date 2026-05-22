@@ -706,6 +706,11 @@ label {
   background: var(--surface);
 }
 
+tr.row-highlight td {
+  background: #eafff3;
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

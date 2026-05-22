@@ -115,6 +115,7 @@ let patientSaving = false;
 let historySaving = false;
 let paymentSaving = false;
 let forcedPaymentHistoryId = "";
+let lastSavedPatientId = "";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -462,6 +463,14 @@ async function savePatientApi(patient) {
   };
   const result = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify(payload) });
   if (result.id) patient.id = result.id;
+}
+
+async function refreshPatientsApi() {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/patients");
+  if (Array.isArray(result.patients)) {
+    state.patients = result.patients.map(mapApiPatient);
+  }
 }
 
 async function deletePatientApi(id) {
@@ -1276,12 +1285,18 @@ function renderAgenda() {
 
 function renderPatients() {
   const query = ($("#globalSearch")?.value || "").trim().toLowerCase();
-  const rows = state.patients
-    .filter((patient) => [patient.name, patient.dni, patient.phone, patient.birthDate].join(" ").toLowerCase().includes(query))
+  const filteredPatients = state.patients
+    .filter((patient) => [patient.name, patient.dni, patient.phone, patient.birthDate].join(" ").toLowerCase().includes(query));
+  const counter = $("#patientCount");
+  if (counter) {
+    counter.textContent = query ? `${filteredPatients.length} de ${state.patients.length} pacientes` : `${state.patients.length} pacientes`;
+  }
+  const rows = filteredPatients
     .map((patient) => {
       const status = patientStatus(patient);
       const ageText = patientAgeText(patient);
-      return `<tr>
+      const highlight = patient.id === lastSavedPatientId ? "row-highlight" : "";
+      return `<tr class="${highlight}" data-patient-row="${patient.id}">
         <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
         <td>${escapeHtml(patient.phone)}${patient.birthDate ? `<br><span class="muted">${formatDate(patient.birthDate)}${ageText ? ` | ${ageText}` : ""}</span>` : ""}</td>
         <td>${escapeHtml(patient.doctor)}</td>
@@ -2320,7 +2335,9 @@ function bindEvents() {
     if (patientSaving) return;
     const form = event.currentTarget;
     const submitButton = form.querySelector('button[type="submit"]');
+    const saveMessage = $("#patientSaveMessage");
     patientSaving = true;
+    if (saveMessage) saveMessage.hidden = true;
     if (submitButton) {
       submitButton.disabled = true;
       submitButton.textContent = "Guardando...";
@@ -2339,6 +2356,7 @@ function bindEvents() {
     };
     try {
       await savePatientApi(patient);
+      if (API_ENABLED && apiToken) await refreshPatientsApi();
     } catch (error) {
       alert(error.message);
       patientSaving = false;
@@ -2348,10 +2366,20 @@ function bindEvents() {
       }
       return;
     }
-    upsert(state.patients, patient);
+    if (!API_ENABLED || !apiToken) upsert(state.patients, patient);
+    lastSavedPatientId = patient.id;
     form.reset();
+    const search = $("#globalSearch");
+    if (search) search.value = "";
     if (!API_ENABLED) saveState();
     render();
+    if (saveMessage) {
+      saveMessage.textContent = `Paciente guardado correctamente. Total registrado: ${state.patients.length} pacientes.`;
+      saveMessage.hidden = false;
+    }
+    setTimeout(() => {
+      document.querySelector(`[data-patient-row="${lastSavedPatientId}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
     patientSaving = false;
     if (submitButton) {
       submitButton.disabled = false;

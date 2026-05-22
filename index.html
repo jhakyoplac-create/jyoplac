@@ -142,11 +142,13 @@
             <label>Tratamiento principal<select name="mainTreatment"></select></label>
             <label>Observaciones<textarea name="notes" rows="3"></textarea></label>
             <button class="primary" type="submit">Guardar paciente</button>
+            <p class="notice subtle" id="patientSaveMessage" hidden></p>
           </form>
 
           <section class="panel">
             <div class="panel-head">
               <h2>Pacientes</h2>
+              <span class="status" id="patientCount">0 pacientes</span>
               <button class="ghost" id="exportPatientsBtn">CSV</button>
             </div>
             <div class="table-wrap patients-scroll">
