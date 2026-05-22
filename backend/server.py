@@ -414,6 +414,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
                 return
             data = read_json(self)
+            if data.get("delete"):
+                item_id = data.get("id")
+                if not item_id:
+                    return send_json(self, {"error": "Cita no indicada."}, 400)
+                with db() as conn:
+                    conn.execute("DELETE FROM appointments WHERE id = ?", (item_id,))
+                return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("appt")
             with db() as conn:
                 conflict_unit = conn.execute(

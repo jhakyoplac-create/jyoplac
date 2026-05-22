@@ -484,6 +484,11 @@ async function saveAppointmentApi(appointment) {
   if (result.id) appointment.id = result.id;
 }
 
+async function deleteAppointmentApi(id) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/appointments", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+}
+
 async function saveClinicalHistoryApi(entry) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/clinical-history", { method: "POST", body: JSON.stringify(entry) });
@@ -1252,7 +1257,7 @@ function renderAgenda() {
       const appointment = state.appointments.find((item) => {
         const doctorOk = !doctor || doctor === "Todos los doctores" || item.doctor === doctor;
         const unitOk = !unit || unit === "Todas las unidades" || item.unit === unit;
-        return item.date === date && item.time === time && item.unit === unitName && doctorOk && unitOk;
+        return item.status !== "CANCELADA" && item.date === date && item.time === time && item.unit === unitName && doctorOk && unitOk;
       });
       const isLunch = cursor >= minutes(state.config.lunchStart) && cursor < minutes(state.config.lunchEnd);
       if (appointment) {
@@ -2251,6 +2256,19 @@ function bindEvents() {
       status: data.status,
       notes: data.notes
     };
+    if (appointment.status === "CANCELADA") {
+      try {
+        if (data.id) await deleteAppointmentApi(data.id);
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      state.appointments = state.appointments.filter((item) => item.id !== appointment.id);
+      if (!API_ENABLED) saveState();
+      $("#appointmentDialog").close();
+      render();
+      return;
+    }
     const availabilityError = appointmentAvailabilityError(appointment);
     if (availabilityError) {
       alert(availabilityError);
