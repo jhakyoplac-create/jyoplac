@@ -1267,7 +1267,7 @@ function renderAgenda() {
         const unitOk = !unit || unit === "Todas las unidades" || item.unit === unit;
         return item.status !== "CANCELADA" && item.date === date && item.time === time && item.unit === unitName && doctorOk && unitOk;
       });
-      const isLunch = cursor >= minutes(state.config.lunchStart) && cursor < minutes(state.config.lunchEnd);
+      const isLunch = dayOfWeek(date) !== 6 && cursor >= minutes(state.config.lunchStart) && cursor < minutes(state.config.lunchEnd);
       if (appointment) {
         const patient = patientById(appointment.patientId);
         const debt = patient ? patientDebt(patient.id) : 0;
