@@ -275,6 +275,7 @@
             <input type="hidden" name="id" />
             <label>Paciente<select name="patientId" required></select></label>
             <label>Atencion pendiente<select name="historyId"></select></label>
+            <button type="button" class="ghost danger-btn admin-only-action" id="clearHistoryDebtBtn" hidden>Quitar deuda</button>
             <label>Saldo a pagar<input name="amountDue" type="number" readonly /></label>
             <label>Fecha<input name="date" type="date" required /></label>
             <label>Monto que paga S/<input name="amount" type="number" min="0" step="0.01" readonly required /></label>

@@ -1145,7 +1145,38 @@ function updatePaymentDue() {
   const due = historyBalance(form.historyId.value);
   form.amountDue.value = due || 0;
   form.amount.value = due || "";
+  const clearDebtBtn = $("#clearHistoryDebtBtn");
+  if (clearDebtBtn) clearDebtBtn.hidden = !isAdmin() || !form.historyId.value || due <= 0;
   updatePaymentChange();
+}
+
+async function clearSelectedHistoryDebt() {
+  if (!isAdmin()) return;
+  const form = $("#paymentForm");
+  const history = historyById(form?.historyId?.value);
+  if (!history) return;
+  const balance = historyBalance(history.id);
+  if (balance <= 0) return;
+  const patient = patientById(history.patientId);
+  if (!confirm(`Quitar la deuda pendiente de ${patient?.name || "paciente"} por ${money(balance)}? La atencion y la agenda quedaran registradas.`)) return;
+  const updated = {
+    ...history,
+    agreedPrice: historyPaid(history.id),
+    creditPending: false,
+    creditAmount: 0,
+    creditDueDate: "",
+    creditNote: ""
+  };
+  try {
+    await saveClinicalHistoryApi(updated);
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  upsert(state.clinicalHistory, updated);
+  if (forcedPaymentHistoryId === history.id) forcedPaymentHistoryId = "";
+  if (!API_ENABLED) saveState();
+  render();
 }
 
 function updatePaymentChange() {
@@ -2753,6 +2784,7 @@ function bindEvents() {
     forcedPaymentHistoryId = "";
     updatePaymentDue();
   });
+  $("#clearHistoryDebtBtn")?.addEventListener("click", clearSelectedHistoryDebt);
   $('#paymentForm input[name="amount"]').addEventListener("input", updatePaymentChange);
   $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
   $("#paymentForm").addEventListener("submit", async (event) => {
