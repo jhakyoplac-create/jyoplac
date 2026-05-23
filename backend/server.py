@@ -241,7 +241,7 @@ def list_users():
 
 def open_cash_date(conn):
     row = conn.execute(
-        "SELECT date FROM cash_sessions WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1"
+        "SELECT date FROM cash_sessions WHERE closed_at IS NULL ORDER BY opened_at ASC LIMIT 1"
     ).fetchone()
     return row["date"] if row else None
 
@@ -750,9 +750,15 @@ class DentalHandler(SimpleHTTPRequestHandler):
             date = data.get("date")
             opening_cash = float(data.get("openingCash") or 0)
             with db() as conn:
-                existing = conn.execute("SELECT id FROM cash_sessions WHERE date=? AND closed_at IS NULL", (date,)).fetchone()
+                existing = conn.execute(
+                    "SELECT date FROM cash_sessions WHERE closed_at IS NULL ORDER BY opened_at ASC LIMIT 1"
+                ).fetchone()
                 if existing:
-                    return send_json(self, {"error": "La caja del dia ya esta abierta."}, 409)
+                    return send_json(
+                        self,
+                        {"error": f"La caja de {existing['date']} sigue abierta. Primero debes cerrar esa caja antes de abrir otra."},
+                        409,
+                    )
                 item_id = data.get("id") or now_id("cash")
                 conn.execute(
                     """
@@ -799,6 +805,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 )
                 conn.execute(f"UPDATE payments SET date=? WHERE date IN ({placeholders}) AND closed=0", date_params)
                 conn.execute(f"UPDATE expenses SET date=? WHERE date IN ({placeholders}) AND closed=0", date_params)
+                extra_open_dates = [item for item in included_dates if item != date]
+                if extra_open_dates:
+                    extra_placeholders = ",".join(["?"] * len(extra_open_dates))
+                    conn.execute(
+                        f"DELETE FROM cash_sessions WHERE date IN ({extra_placeholders}) AND closed_at IS NULL",
+                        extra_open_dates,
+                    )
                 conn.execute("UPDATE payments SET closed=1 WHERE date=?", (date,))
                 conn.execute("UPDATE expenses SET closed=1 WHERE date=?", (date,))
                 conn.execute(

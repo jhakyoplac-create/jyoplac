@@ -618,10 +618,14 @@ function utcTodayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function operatingDate() {
-  const openSession = state.cashSessions
+function activeOpenCashSession() {
+  return state.cashSessions
     .filter((session) => !session.closedAt)
-    .sort((a, b) => String(b.openedAt || "").localeCompare(String(a.openedAt || "")))[0];
+    .sort((a, b) => String(a.openedAt || "").localeCompare(String(b.openedAt || "")))[0];
+}
+
+function operatingDate() {
+  const openSession = activeOpenCashSession();
   return openSession?.date || todayISO();
 }
 
@@ -805,10 +809,7 @@ function pendingPatientIds() {
 }
 
 function cashSessionToday() {
-  const date = operatingDate();
-  return state.cashSessions
-    .filter((session) => session.date === date && !session.closedAt)
-    .slice(-1)[0];
+  return activeOpenCashSession();
 }
 
 function cashSessionsToday() {
@@ -820,6 +821,12 @@ function cashViewDate() {
 }
 
 function cashSessionForDate(date) {
+  const active = activeOpenCashSession();
+  if (active && active.date !== date) {
+    return state.cashSessions
+      .filter((session) => session.date === date && session.closedAt)
+      .sort((a, b) => String(b.openedAt || "").localeCompare(String(a.openedAt || "")))[0];
+  }
   return state.cashSessions
     .filter((session) => session.date === date)
     .sort((a, b) => String(b.openedAt || "").localeCompare(String(a.openedAt || "")))[0];
@@ -2050,10 +2057,10 @@ function generalCashBalances() {
     .filter((payment) => ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"].includes(String(payment.method || "").toUpperCase()))
     .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const cashExpenses = state.expenses
-    .filter((expense) => expense.source === "CAJA_GENERAL" && String(expense.method || "").toUpperCase() === "EFECTIVO")
+    .filter((expense) => String(expense.method || "").toUpperCase() === "EFECTIVO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const bankExpenses = state.expenses
-    .filter((expense) => expense.source === "CAJA_GENERAL" && ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"].includes(String(expense.method || "").toUpperCase()))
+    .filter((expense) => ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"].includes(String(expense.method || "").toUpperCase()))
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const cash = Number(state.config.generalCashOpening || 0) + cashIncome - cashExpenses - pettyCashDeliveredTotal();
   const bank = Number(state.config.generalBankOpening || 0) + bankIncome - bankExpenses;
@@ -2999,7 +3006,7 @@ function bindEvents() {
     }
     const existing = cashSessionToday();
     if (existing) {
-      alert("La caja del dia ya esta abierta.");
+      alert(`La caja de ${formatDate(existing.date)} sigue abierta. Primero debes cerrar esa caja antes de abrir otra.`);
       return;
     }
     const cashDate = operatingDate();
@@ -3069,6 +3076,7 @@ function bindEvents() {
     state.expenses.forEach((expense) => {
       if (cashDates.includes(expense.date)) expense.closed = true;
     });
+    state.cashSessions = state.cashSessions.filter((item) => item.date === cashDate || item.closedAt);
     setPettyCashAllocation(cashDate, 0);
     const existingClosureIndex = state.dailyClosures.findIndex((closure) => closure.date === cashDate);
     const closure = { id: uid("close"), date: cashDate, closedAt: session.closedAt, rows: closureRows, csvRows: closureCsvRows };
