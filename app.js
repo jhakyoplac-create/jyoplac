@@ -601,6 +601,14 @@ function money(value) {
 }
 
 function todayISO() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function utcTodayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -614,8 +622,10 @@ function operatingDate() {
 function cashOperationDates(date = operatingDate()) {
   const dates = [date];
   const realDate = todayISO();
+  const utcDate = utcTodayISO();
   const hasOpenSession = state.cashSessions.some((session) => session.date === date && !session.closedAt);
   if (hasOpenSession && realDate !== date) dates.push(realDate);
+  if (hasOpenSession && utcDate !== date) dates.push(utcDate);
   return [...new Set(dates)];
 }
 
@@ -1595,7 +1605,7 @@ function renderPayments() {
       const patient = patientById(payment.patientId);
       const history = historyById(payment.historyId);
       return `<tr>
-        <td>${formatDate(payment.date)}</td>
+        <td>${formatDate(cashDate)}</td>
         <td>${escapeHtml(patient?.name || "")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
         <td>${escapeHtml(payment.method)}</td>
         <td><strong>${money(payment.amount)}</strong><br><span class="muted">Vuelto: ${money(payment.change || 0)}</span></td>
@@ -2132,7 +2142,7 @@ function csvRowsForDailyClose(date = todayISO()) {
   state.payments.filter((payment) => dates.includes(payment.date) && !payment.closed).forEach((payment) => {
     rows.push({
       seccion: "PAGO",
-      fecha: payment.date,
+      fecha: date,
       concepto: patientById(payment.patientId)?.name || "",
       metodo: payment.method,
       origen: "INGRESO",
@@ -2145,7 +2155,7 @@ function csvRowsForDailyClose(date = todayISO()) {
   state.expenses.filter((expense) => dates.includes(expense.date) && !expense.closed).forEach((expense) => {
     rows.push({
       seccion: "EGRESO",
-      fecha: expense.date,
+      fecha: date,
       concepto: expense.detail,
       metodo: expense.method,
       origen: expense.source,
@@ -2525,7 +2535,7 @@ function bindEvents() {
       birthDate: data.birthDate,
       doctor: data.doctor,
       mainTreatment: data.mainTreatment,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: todayISO(),
       notes: data.notes
     };
     try {
