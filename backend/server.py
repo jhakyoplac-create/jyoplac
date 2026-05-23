@@ -747,13 +747,24 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return
             data = read_json(self)
             date = data.get("date")
+            included_dates = data.get("includedDates") or [date]
+            included_dates = [str(item) for item in included_dates if item]
+            if date and date not in included_dates:
+                included_dates.append(date)
             closing_cash = float(data.get("closingCash") or 0)
             with db() as conn:
                 session = conn.execute("SELECT * FROM cash_sessions WHERE date=? AND closed_at IS NULL", (date,)).fetchone()
                 if not session:
                     return send_json(self, {"error": "Primero abre la caja del dia."}, 400)
-                income = conn.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE date=? AND closed=0", (date,)).fetchone()["total"]
-                expenses = conn.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date=? AND closed=0 AND source <> 'CAJA_GENERAL'", (date,)).fetchone()["total"]
+                placeholders = ",".join(["?"] * len(included_dates))
+                income = conn.execute(
+                    f"SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE date IN ({placeholders}) AND closed=0",
+                    included_dates,
+                ).fetchone()["total"]
+                expenses = conn.execute(
+                    f"SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date IN ({placeholders}) AND closed=0 AND source <> 'CAJA_GENERAL'",
+                    included_dates,
+                ).fetchone()["total"]
                 expected = float(session["opening_cash"] or 0) + float(income or 0) - float(expenses or 0)
                 difference = closing_cash - expected
                 conn.execute(
@@ -764,8 +775,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """,
                     (closing_cash, difference, income, expenses, data.get("closedAt") or time.strftime("%Y-%m-%dT%H:%M:%S"), session["id"]),
                 )
-                conn.execute("UPDATE payments SET closed=1 WHERE date=?", (date,))
-                conn.execute("UPDATE expenses SET closed=1 WHERE date=?", (date,))
+                conn.execute(f"UPDATE payments SET closed=1 WHERE date IN ({placeholders})", included_dates)
+                conn.execute(f"UPDATE expenses SET closed=1 WHERE date IN ({placeholders})", included_dates)
                 conn.execute(
                     """
                     INSERT INTO petty_cash_allocations (id, date, amount)

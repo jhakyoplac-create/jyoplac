@@ -611,6 +611,14 @@ function operatingDate() {
   return openSession?.date || todayISO();
 }
 
+function cashOperationDates(date = operatingDate()) {
+  const dates = [date];
+  const realDate = todayISO();
+  const hasOpenSession = state.cashSessions.some((session) => session.date === date && !session.closedAt);
+  if (hasOpenSession && realDate !== date) dates.push(realDate);
+  return [...new Set(dates)];
+}
+
 function formatDate(date) {
   if (!date) return "";
   return new Date(`${date}T00:00:00`).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
@@ -860,11 +868,13 @@ function expensesForDate(date) {
 }
 
 function openPaymentsForDate(date) {
-  return state.payments.filter((payment) => payment.date === date && !payment.closed);
+  const dates = cashOperationDates(date);
+  return state.payments.filter((payment) => dates.includes(payment.date) && !payment.closed);
 }
 
 function openExpensesForDate(date) {
-  return state.expenses.filter((expense) => expense.date === date && !expense.closed);
+  const dates = cashOperationDates(date);
+  return state.expenses.filter((expense) => dates.includes(expense.date) && !expense.closed);
 }
 
 function expenseAffectsDaily(expense) {
@@ -2099,12 +2109,13 @@ function csvCell(value) {
 function csvRowsForDailyClose(date = todayISO()) {
   const stored = state.dailyClosures.find((closure) => closure.date === date && Array.isArray(closure.csvRows));
   if (stored) return stored.csvRows;
+  const dates = cashOperationDates(date);
   const session = state.cashSessions.find((item) => item.date === date) || {};
   const opening = Number(session.openingCash || 0);
   const incomeCash = incomeByMethodsForDate(date, ["EFECTIVO"]);
   const incomeWallet = incomeByMethodsForDate(date, ["YAPE", "PLIN"]);
   const incomeBank = incomeByMethodsForDate(date, ["TARJETA", "TRANSFERENCIA"]);
-  const incomeTotal = incomeForDate(date);
+  const incomeTotal = openIncomeForDate(date);
   const operatingExpenses = dailyCashAffectingExpenseTotal(date);
   const expected = opening + incomeTotal - operatingExpenses;
   const rows = [
@@ -2118,7 +2129,7 @@ function csvRowsForDailyClose(date = todayISO()) {
     { seccion: "RESUMEN", fecha: date, concepto: "Contado al cierre", metodo: "", origen: "", ingreso: "", egreso: "", saldo: Number(session.closingCash || 0), comprobante: "" },
     { seccion: "RESUMEN", fecha: date, concepto: "Diferencia", metodo: "", origen: "", ingreso: "", egreso: "", saldo: Number(session.difference || 0), comprobante: "" }
   ];
-  state.payments.filter((payment) => payment.date === date).forEach((payment) => {
+  state.payments.filter((payment) => dates.includes(payment.date) && !payment.closed).forEach((payment) => {
     rows.push({
       seccion: "PAGO",
       fecha: payment.date,
@@ -2131,7 +2142,7 @@ function csvRowsForDailyClose(date = todayISO()) {
       comprobante: payment.receipt || ""
     });
   });
-  expensesForDate(date).forEach((expense) => {
+  state.expenses.filter((expense) => dates.includes(expense.date) && !expense.closed).forEach((expense) => {
     rows.push({
       seccion: "EGRESO",
       fecha: expense.date,
@@ -2150,13 +2161,14 @@ function csvRowsForDailyClose(date = todayISO()) {
 function printableRowsForDailyClose(date = todayISO()) {
   const stored = state.dailyClosures.find((closure) => closure.date === date && Array.isArray(closure.rows));
   if (stored) return stored.rows;
+  const dates = cashOperationDates(date);
   const session = state.cashSessions.find((item) => item.date === date) || {};
   const opening = Number(session.openingCash || 0);
   const incomeCash = incomeByMethodsForDate(date, ["EFECTIVO"]);
   const incomeWallet = incomeByMethodsForDate(date, ["YAPE", "PLIN"]);
   const incomeBank = incomeByMethodsForDate(date, ["TARJETA", "TRANSFERENCIA"]);
   const operatingExpenses = dailyCashAffectingExpenseTotal(date);
-  const expected = opening + incomeForDate(date) - operatingExpenses;
+  const expected = opening + openIncomeForDate(date) - operatingExpenses;
   const rows = [
     { tipo: "RESUMEN", detalle: "Caja chica inicial", metodo: "", origen: "", monto: opening, comprobante: "" },
     { tipo: "RESUMEN", detalle: "Ingresos efectivo", metodo: "EFECTIVO", origen: "", monto: incomeCash, comprobante: "" },
@@ -2167,7 +2179,7 @@ function printableRowsForDailyClose(date = todayISO()) {
     { tipo: "RESUMEN", detalle: "Contado cierre", metodo: "", origen: "", monto: Number(session.closingCash || 0), comprobante: "" },
     { tipo: "RESUMEN", detalle: "Diferencia", metodo: "", origen: "", monto: Number(session.difference || 0), comprobante: "" }
   ];
-  state.payments.filter((payment) => payment.date === date).forEach((payment) => {
+  state.payments.filter((payment) => dates.includes(payment.date) && !payment.closed).forEach((payment) => {
     rows.push({
       tipo: "PAGO",
       detalle: patientById(payment.patientId)?.name || "",
@@ -2177,7 +2189,7 @@ function printableRowsForDailyClose(date = todayISO()) {
       comprobante: payment.receipt || ""
     });
   });
-  expensesForDate(date).forEach((expense) => {
+  state.expenses.filter((expense) => dates.includes(expense.date) && !expense.closed).forEach((expense) => {
     rows.push({
       tipo: "EGRESO",
       detalle: expense.detail,
@@ -2941,6 +2953,7 @@ function bindEvents() {
     }
     const expected = Number(session.openingCash || 0) + todayIncome() - dailyCashAffectingExpenseTotal(cashDate);
     const closing = Number($("#closingCash").value || 0);
+    const cashDates = cashOperationDates(cashDate);
     const closureRows = printableRowsForDailyClose(cashDate);
     const closureCsvRows = csvRowsForDailyClose(cashDate);
     session.closingCash = closing;
@@ -2949,16 +2962,16 @@ function bindEvents() {
     session.expenseTotal = dailyCashAffectingExpenseTotal(cashDate);
     session.closedAt = new Date().toISOString();
     try {
-      await closeCashApi({ date: cashDate, closingCash: closing, closedAt: session.closedAt });
+      await closeCashApi({ date: cashDate, includedDates: cashDates, closingCash: closing, closedAt: session.closedAt });
     } catch (error) {
       alert(error.message);
       return;
     }
     state.payments.forEach((payment) => {
-      if (payment.date === cashDate) payment.closed = true;
+      if (cashDates.includes(payment.date)) payment.closed = true;
     });
     state.expenses.forEach((expense) => {
-      if (expense.date === cashDate) expense.closed = true;
+      if (cashDates.includes(expense.date)) expense.closed = true;
     });
     setPettyCashAllocation(cashDate, 0);
     const existingClosureIndex = state.dailyClosures.findIndex((closure) => closure.date === cashDate);
