@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DB_DIR = Path(os.environ.get("DATA_DIR", ROOT / "database"))
 DB_PATH = DB_DIR / "dental.sqlite3"
 SCHEMA_PATH = ROOT / "backend" / "schema.sql"
-SESSION_SECONDS = 60 * 60 * 10
+SESSION_SECONDS = int(os.environ.get("SESSION_SECONDS", 60 * 60 * 4))
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
 TOKEN_SECRET = os.environ.get("TOKEN_SECRET") or os.environ.get("ADMIN_PASSWORD", "cm-odontologia-local-secret")
@@ -48,8 +48,8 @@ def normalize_role(role):
     return aliases.get(value, value)
 
 
-def make_token(user_id):
-    expires = int(time.time() + SESSION_SECONDS)
+def make_token(user_id, expires=None):
+    expires = int(expires or time.time() + SESSION_SECONDS)
     payload = f"{user_id}:{expires}"
     signature = hmac.new(TOKEN_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return base64.urlsafe_b64encode(f"{payload}:{signature}".encode("utf-8")).decode("ascii")
@@ -335,10 +335,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 row = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?) AND active = 1", (username,)).fetchone()
             if not row or not verify_password(password, row["password_hash"]):
                 return send_json(self, {"error": "Usuario o contraseña incorrectos"}, 401)
-            token = make_token(row["id"])
-            sessions[token] = {"user_id": row["id"], "expires": time.time() + SESSION_SECONDS}
+            expires_at = int(time.time() + SESSION_SECONDS)
+            token = make_token(row["id"], expires_at)
+            sessions[token] = {"user_id": row["id"], "expires": expires_at}
             return send_json(self, {
                 "token": token,
+                "expiresAt": expires_at * 1000,
                 "user": {"id": row["id"], "name": row["name"], "username": row["username"], "role": normalize_role(row["role"]), "active": row["active"]},
             })
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "cm-dental-shell-v4";
+const CACHE_NAME = "cm-dental-shell-v5";
 const SHELL_FILES = [
   "/",
   "/index.html",

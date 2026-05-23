@@ -1,6 +1,8 @@
 const STORAGE_KEY = "cm-dental-system-v3";
 const API_TOKEN_KEY = `${STORAGE_KEY}-api-token`;
+const API_TOKEN_EXPIRES_KEY = `${STORAGE_KEY}-api-token-expires`;
 const API_ENABLED = location.protocol === "http:" || location.protocol === "https:";
+const API_SESSION_MS = 4 * 60 * 60 * 1000;
 
 const seedData = {
   config: {
@@ -122,6 +124,30 @@ let selectedCashViewDate = "";
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
+function clearApiSession() {
+  apiToken = "";
+  apiUser = null;
+  localStorage.removeItem(API_TOKEN_KEY);
+  localStorage.removeItem(API_TOKEN_EXPIRES_KEY);
+}
+
+function rememberApiSession(token, expiresAt) {
+  apiToken = token || "";
+  if (!apiToken) {
+    clearApiSession();
+    return;
+  }
+  const fallbackExpires = Date.now() + API_SESSION_MS;
+  const normalizedExpires = Number(expiresAt) || fallbackExpires;
+  localStorage.setItem(API_TOKEN_KEY, apiToken);
+  localStorage.setItem(API_TOKEN_EXPIRES_KEY, String(normalizedExpires));
+}
+
+function apiSessionExpired() {
+  const expiresAt = Number(localStorage.getItem(API_TOKEN_EXPIRES_KEY) || 0);
+  return Boolean(expiresAt && Date.now() >= expiresAt);
+}
+
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return normalizeState(structuredClone(seedData));
@@ -196,8 +222,7 @@ async function apiFetch(path, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
-    localStorage.removeItem(API_TOKEN_KEY);
-    apiToken = "";
+    clearApiSession();
     throw new Error("Sesion vencida. Cierra sesion e ingresa nuevamente.");
   }
   if (!response.ok) throw new Error(payload.error || "No se pudo conectar con el servidor.");
@@ -420,9 +445,7 @@ async function loadFromApi() {
     const payload = await apiFetch("/api/bootstrap");
     applyApiBootstrap(payload);
   } catch {
-    apiToken = "";
-    apiUser = null;
-    localStorage.removeItem(API_TOKEN_KEY);
+    clearApiSession();
     render();
   } finally {
     apiRefreshing = false;
@@ -2349,10 +2372,9 @@ function bindEvents() {
       $("#loginMessage").textContent = "Conectando con el sistema...";
       apiFetch("/api/login", { method: "POST", body: JSON.stringify({ username: data.username, password: data.password }) })
         .then((payload) => {
-          apiToken = payload.token;
+          rememberApiSession(payload.token, payload.expiresAt);
           apiUser = payload.user;
           currentUserId = payload.user.id;
-          localStorage.setItem(API_TOKEN_KEY, apiToken);
           $("#loginMessage").textContent = "Cargando datos...";
           form.reset();
           return loadFromApi();
@@ -2388,9 +2410,7 @@ function bindEvents() {
     if (API_ENABLED && apiToken) {
       apiFetch("/api/logout", { method: "POST", body: "{}" }).catch(() => {});
     }
-    apiToken = "";
-    apiUser = null;
-    localStorage.removeItem(API_TOKEN_KEY);
+    clearApiSession();
     currentUserId = "";
     localStorage.removeItem(`${STORAGE_KEY}-current-user`);
     render();
@@ -3434,6 +3454,7 @@ function bindEvents() {
 }
 
 function init() {
+  if (API_ENABLED && apiSessionExpired()) clearApiSession();
   $("#agendaDate").value = todayISO();
   $('#paymentForm input[name="date"]').value = operatingDate();
   $('#historyForm input[name="date"]').value = todayISO();
