@@ -604,6 +604,13 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function operatingDate() {
+  const openSession = state.cashSessions
+    .filter((session) => !session.closedAt)
+    .sort((a, b) => String(b.openedAt || "").localeCompare(String(a.openedAt || "")))[0];
+  return openSession?.date || todayISO();
+}
+
 function formatDate(date) {
   if (!date) return "";
   return new Date(`${date}T00:00:00`).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
@@ -774,13 +781,14 @@ function pendingPatientIds() {
 }
 
 function cashSessionToday() {
+  const date = operatingDate();
   return state.cashSessions
-    .filter((session) => session.date === todayISO() && !session.closedAt)
+    .filter((session) => session.date === date && !session.closedAt)
     .slice(-1)[0];
 }
 
 function cashSessionsToday() {
-  return state.cashSessions.filter((session) => session.date === todayISO());
+  return state.cashSessions.filter((session) => session.date === operatingDate());
 }
 
 function pettyCashAllocation(date = todayISO()) {
@@ -822,7 +830,7 @@ function openIncomeForDate(date, method = null) {
 }
 
 function todayIncome(method = null) {
-  return openIncomeForDate(todayISO(), method);
+  return openIncomeForDate(operatingDate(), method);
 }
 
 function incomeByMethodsForDate(date, methods) {
@@ -833,7 +841,7 @@ function incomeByMethodsForDate(date, methods) {
 }
 
 function todayIncomeByMethods(methods) {
-  return incomeByMethodsForDate(todayISO(), methods);
+  return incomeByMethodsForDate(operatingDate(), methods);
 }
 
 function expenseByMethodsForDate(date, methods) {
@@ -844,7 +852,7 @@ function expenseByMethodsForDate(date, methods) {
 }
 
 function todayExpenseByMethods(methods) {
-  return expenseByMethodsForDate(todayISO(), methods);
+  return expenseByMethodsForDate(operatingDate(), methods);
 }
 
 function expensesForDate(date) {
@@ -1198,7 +1206,7 @@ function openPaymentForHistory(historyId) {
   const historySelect = $('#paymentForm select[name="historyId"]');
   if (historySelect) historySelect.value = historyId;
   const form = $("#paymentForm");
-  if (form?.date) form.date.value = todayISO();
+  if (form?.date) form.date.value = operatingDate();
   updatePaymentDue();
   setTimeout(() => $('#paymentForm input[name="cashReceived"]')?.focus(), 0);
 }
@@ -1551,7 +1559,8 @@ function renderOdontogram() {
 }
 
 function renderPayments() {
-  const month = todayISO().slice(0, 7);
+  const cashDate = operatingDate();
+  const month = cashDate.slice(0, 7);
   const monthIncome = state.payments.filter((payment) => payment.date.startsWith(month)).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   $("#monthIncome").textContent = money(monthIncome);
   $("#totalDebt").textContent = money(state.patients.reduce((sum, patient) => sum + patientDebt(patient.id), 0));
@@ -1569,7 +1578,7 @@ function renderPayments() {
       ${isAdmin() ? "<th>Accion</th>" : ""}
     `;
   }
-  $("#paymentsTable").innerHTML = openPaymentsForDate(todayISO())
+  $("#paymentsTable").innerHTML = openPaymentsForDate(cashDate)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((payment) => {
@@ -1614,14 +1623,15 @@ function renderReceivables() {
 }
 
 function renderCashBox() {
+  const cashDate = operatingDate();
   const session = cashSessionToday();
   const lastSession = cashSessionsToday().slice(-1)[0];
-  const suggestedOpening = pettyCashAmount(todayISO());
+  const suggestedOpening = pettyCashAmount(cashDate);
   const openingInput = $("#openingCash");
   if (!session && openingInput && document.activeElement !== openingInput) openingInput.value = suggestedOpening || "";
   const opening = Number(session?.openingCash ?? openingInput?.value ?? suggestedOpening ?? 0);
   const income = todayIncome();
-  const expenses = dailyCashAffectingExpenseTotal(todayISO());
+  const expenses = dailyCashAffectingExpenseTotal(cashDate);
   const cashIncome = todayIncomeByMethods(["EFECTIVO"]);
   const walletIncome = todayIncomeByMethods(["YAPE", "PLIN"]);
   const bankIncome = todayIncomeByMethods(["TARJETA", "TRANSFERENCIA"]);
@@ -1648,7 +1658,7 @@ function renderCashBox() {
 }
 
 function renderExpenses() {
-  const rows = openExpensesForDate(todayISO()).filter(expenseAffectsDaily).map((expense) => `<tr>
+  const rows = openExpensesForDate(operatingDate()).filter(expenseAffectsDaily).map((expense) => `<tr>
     <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
     <td>${escapeHtml(expense.method)}</td>
     <td>${escapeHtml(expense.source)}</td>
@@ -1962,6 +1972,7 @@ function generalCashBalances() {
 }
 
 function renderGeneralCash() {
+  const cashDate = operatingDate();
   const balances = generalCashBalances();
   $("#generalCashBalance").textContent = money(balances.cash);
   $("#generalBankBalance").textContent = money(balances.bank);
@@ -1971,7 +1982,7 @@ function renderGeneralCash() {
   if (form && (!document.activeElement || !form.contains(document.activeElement))) {
     form.cash.value = state.config.generalCashOpening;
     form.bank.value = state.config.generalBankOpening;
-    form.pettyCash.value = pettyCashAmount(todayISO()) || "";
+    form.pettyCash.value = pettyCashAmount(cashDate) || "";
   }
   if (form) {
     form.cash.readOnly = !isAdmin();
@@ -2316,7 +2327,7 @@ function bindEvents() {
       return;
     }
     const form = $("#expenseForm");
-    form.date.value = todayISO();
+    form.date.value = operatingDate();
     form.detail.value = "";
     form.amount.value = "";
     form.receipt.value = "";
@@ -2833,6 +2844,7 @@ function bindEvents() {
       return;
     }
     const data = formData(form);
+    const cashDate = operatingDate();
     const due = historyBalance(data.historyId);
     const amount = Number(data.amount || 0);
     if (!data.historyId) {
@@ -2849,7 +2861,7 @@ function bindEvents() {
       id: data.id || uid("pay"),
       patientId: data.patientId,
       historyId: data.historyId,
-      date: data.date,
+      date: cashDate,
       amount,
       cashReceived: Number(data.cashReceived || amount),
       change: Math.max(0, Number(data.cashReceived || amount) - amount),
@@ -2866,7 +2878,7 @@ function bindEvents() {
     upsert(state.payments, payment);
     if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
     form.reset();
-    form.date.value = todayISO();
+    form.date.value = operatingDate();
     if (!API_ENABLED) saveState();
     render();
     restorePaymentButton();
@@ -2882,12 +2894,13 @@ function bindEvents() {
       alert("La caja del dia ya esta abierta.");
       return;
     }
-    const openingCash = Number(pettyCashAmount(todayISO()) || 0);
+    const cashDate = operatingDate();
+    const openingCash = Number(pettyCashAmount(cashDate) || 0);
     if (openingCash > generalCashBalances().cash) {
       alert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
       return;
     }
-    const session = { id: uid("cash"), date: todayISO(), openingCash, openedAt: new Date().toISOString(), closedAt: "", closingCash: 0, difference: 0 };
+    const session = { id: uid("cash"), date: cashDate, openingCash, openedAt: new Date().toISOString(), closedAt: "", closingCash: 0, difference: 0 };
     try {
       await openCashApi(session);
     } catch (error) {
@@ -2905,12 +2918,13 @@ function bindEvents() {
       return;
     }
     const session = cashSessionToday();
+    const cashDate = operatingDate();
     if (!session) {
       alert("Primero abre la caja del dia.");
       return;
     }
     const unresolved = state.appointments.filter((appointment) => {
-      if (appointment.date !== todayISO()) return false;
+      if (appointment.date !== cashDate) return false;
       if (appointment.status === "ATENDIDA") return false;
       if (appointment.status === "REPROGRAMADA" && appointment.notes?.trim()) return false;
       return true;
@@ -2925,35 +2939,35 @@ function bindEvents() {
       $("#closingCash").focus();
       return;
     }
-    const expected = Number(session.openingCash || 0) + todayIncome() - dailyCashAffectingExpenseTotal(todayISO());
+    const expected = Number(session.openingCash || 0) + todayIncome() - dailyCashAffectingExpenseTotal(cashDate);
     const closing = Number($("#closingCash").value || 0);
-    const closureRows = printableRowsForDailyClose(todayISO());
-    const closureCsvRows = csvRowsForDailyClose(todayISO());
+    const closureRows = printableRowsForDailyClose(cashDate);
+    const closureCsvRows = csvRowsForDailyClose(cashDate);
     session.closingCash = closing;
     session.difference = closing - expected;
     session.incomeTotal = todayIncome();
-    session.expenseTotal = dailyCashAffectingExpenseTotal(todayISO());
+    session.expenseTotal = dailyCashAffectingExpenseTotal(cashDate);
     session.closedAt = new Date().toISOString();
     try {
-      await closeCashApi({ date: todayISO(), closingCash: closing, closedAt: session.closedAt });
+      await closeCashApi({ date: cashDate, closingCash: closing, closedAt: session.closedAt });
     } catch (error) {
       alert(error.message);
       return;
     }
     state.payments.forEach((payment) => {
-      if (payment.date === todayISO()) payment.closed = true;
+      if (payment.date === cashDate) payment.closed = true;
     });
     state.expenses.forEach((expense) => {
-      if (expense.date === todayISO()) expense.closed = true;
+      if (expense.date === cashDate) expense.closed = true;
     });
-    setPettyCashAllocation(todayISO(), 0);
-    const existingClosureIndex = state.dailyClosures.findIndex((closure) => closure.date === todayISO());
-    const closure = { id: uid("close"), date: todayISO(), closedAt: session.closedAt, rows: closureRows, csvRows: closureCsvRows };
+    setPettyCashAllocation(cashDate, 0);
+    const existingClosureIndex = state.dailyClosures.findIndex((closure) => closure.date === cashDate);
+    const closure = { id: uid("close"), date: cashDate, closedAt: session.closedAt, rows: closureRows, csvRows: closureCsvRows };
     if (existingClosureIndex >= 0) state.dailyClosures[existingClosureIndex] = closure;
     else state.dailyClosures.push(closure);
     if (!API_ENABLED) saveState();
     render();
-    printDailyClose(todayISO());
+    printDailyClose(cashDate);
     alert(`Caja cerrada. Diferencia: ${money(session.difference)}`);
   });
 
@@ -2976,7 +2990,7 @@ function bindEvents() {
     }
     const expense = {
       id: uid("exp"),
-      date: data.date || todayISO(),
+      date: operatingDate(),
       detail: data.detail.trim(),
       amount: Number(data.amount || 0),
       method: data.method,
@@ -3094,8 +3108,11 @@ function bindEvents() {
     monto_pendiente: balance,
     comentario: entry.creditNote || entry.reason || ""
   }))));
-  $("#exportCloseBtn").addEventListener("click", () => exportCsv(`cierre-caja-${todayISO()}.csv`, csvRowsForDailyClose(todayISO())));
-  $("#printCloseBtn").addEventListener("click", () => printDailyClose(todayISO()));
+  $("#exportCloseBtn").addEventListener("click", () => {
+    const cashDate = operatingDate();
+    exportCsv(`cierre-caja-${cashDate}.csv`, csvRowsForDailyClose(cashDate));
+  });
+  $("#printCloseBtn").addEventListener("click", () => printDailyClose(operatingDate()));
   $("#generalCashForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = formData(event.currentTarget);
@@ -3107,14 +3124,15 @@ function bindEvents() {
       configUpdates.generalBankOpening = state.config.generalBankOpening;
     }
     const pettyAmount = Number(data.pettyCash || 0);
+    const cashDate = operatingDate();
     try {
       await saveConfigApi(configUpdates);
-      await savePettyCashApi(todayISO(), pettyAmount);
+      await savePettyCashApi(cashDate, pettyAmount);
     } catch (error) {
       alert(error.message);
       return;
     }
-    setPettyCashAllocation(todayISO(), pettyAmount);
+    setPettyCashAllocation(cashDate, pettyAmount);
     const session = cashSessionToday();
     if (session) session.openingCash = pettyAmount;
     if (!API_ENABLED) saveState();
@@ -3204,7 +3222,7 @@ function bindEvents() {
     }
     const expense = {
       id: uid("staff"),
-      date: data.date || todayISO(),
+      date: data.date || operatingDate(),
       person: data.person.trim().toUpperCase(),
       type: data.type || "OTRO",
       detail: data.detail.trim(),
@@ -3222,7 +3240,7 @@ function bindEvents() {
     }
     state.expenses.push(expense);
     event.currentTarget.reset();
-    event.currentTarget.date.value = todayISO();
+    event.currentTarget.date.value = operatingDate();
     if (!API_ENABLED) saveState();
     render();
   });
@@ -3286,9 +3304,9 @@ function bindEvents() {
 
 function init() {
   $("#agendaDate").value = todayISO();
-  $('#paymentForm input[name="date"]').value = todayISO();
+  $('#paymentForm input[name="date"]').value = operatingDate();
   $('#historyForm input[name="date"]').value = todayISO();
-  $('#staffPaymentForm input[name="date"]').value = todayISO();
+  $('#staffPaymentForm input[name="date"]').value = operatingDate();
   $("#reportMonth").value = todayISO().slice(0, 7);
   $("#compareMonth").value = previousMonth($("#reportMonth").value);
   bindEvents();
