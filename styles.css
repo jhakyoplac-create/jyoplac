@@ -287,6 +287,16 @@ h2 {
   flex-wrap: wrap;
 }
 
+.cash-date-control {
+  display: grid;
+  gap: 6px;
+  max-width: 220px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
 .agenda-toolbar {
   display: grid;
   grid-template-columns: 150px minmax(160px, 1fr) minmax(160px, 1fr) auto auto auto;

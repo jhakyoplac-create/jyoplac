@@ -117,6 +117,7 @@ let paymentSaving = false;
 let forcedPaymentHistoryId = "";
 let lastSavedPatientId = "";
 let patientEditingId = "";
+let selectedCashViewDate = "";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -809,6 +810,16 @@ function cashSessionsToday() {
   return state.cashSessions.filter((session) => session.date === operatingDate());
 }
 
+function cashViewDate() {
+  return selectedCashViewDate || operatingDate();
+}
+
+function cashSessionForDate(date) {
+  return state.cashSessions
+    .filter((session) => session.date === date)
+    .sort((a, b) => String(b.openedAt || "").localeCompare(String(a.openedAt || "")))[0];
+}
+
 function pettyCashAllocation(date = todayISO()) {
   return state.pettyCashAllocations.find((item) => item.date === date);
 }
@@ -885,6 +896,44 @@ function openPaymentsForDate(date) {
 function openExpensesForDate(date) {
   const dates = cashOperationDates(date);
   return state.expenses.filter((expense) => dates.includes(expense.date) && !expense.closed);
+}
+
+function paymentsForCashView(date) {
+  const session = cashSessionForDate(date);
+  if (session && !session.closedAt) return openPaymentsForDate(date);
+  return state.payments.filter((payment) => payment.date === date);
+}
+
+function expensesForCashView(date) {
+  const session = cashSessionForDate(date);
+  if (session && !session.closedAt) return openExpensesForDate(date);
+  return expensesForDate(date);
+}
+
+function incomeForCashView(date, method = null) {
+  return paymentsForCashView(date)
+    .filter((payment) => !method || payment.method === method)
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+}
+
+function incomeByMethodsForCashView(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return paymentsForCashView(date)
+    .filter((payment) => normalized.includes(String(payment.method || "").toUpperCase()))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+}
+
+function expenseByMethodsForCashView(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return expensesForCashView(date)
+    .filter((expense) => expenseAffectsDaily(expense) && normalized.includes(String(expense.method || "").toUpperCase()))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function cashAffectingExpenseTotalForView(date) {
+  return expensesForCashView(date)
+    .filter((expense) => expenseAffectsDaily(expense))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 }
 
 function expenseAffectsDaily(expense) {
@@ -1579,13 +1628,15 @@ function renderOdontogram() {
 }
 
 function renderPayments() {
-  const cashDate = operatingDate();
+  const cashDate = cashViewDate();
+  const cashDateInput = $("#cashViewDate");
+  if (cashDateInput && document.activeElement !== cashDateInput) cashDateInput.value = cashDate;
   const month = cashDate.slice(0, 7);
   const monthIncome = state.payments.filter((payment) => payment.date.startsWith(month)).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   $("#monthIncome").textContent = money(monthIncome);
   $("#totalDebt").textContent = money(state.patients.reduce((sum, patient) => sum + patientDebt(patient.id), 0));
-  renderCashBox();
-  renderExpenses();
+  renderCashBox(cashDate);
+  renderExpenses(cashDate);
   const paymentsTable = $("#paymentsTable");
   const paymentsHeader = paymentsTable?.closest("table")?.querySelector("thead tr");
   if (paymentsHeader) {
@@ -1598,7 +1649,7 @@ function renderPayments() {
       ${isAdmin() ? "<th>Accion</th>" : ""}
     `;
   }
-  $("#paymentsTable").innerHTML = openPaymentsForDate(cashDate)
+  $("#paymentsTable").innerHTML = paymentsForCashView(cashDate)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((payment) => {
@@ -1642,24 +1693,23 @@ function renderReceivables() {
   }).join("") || `<tr><td colspan="7">No hay cuentas por cobrar pendientes.</td></tr>`;
 }
 
-function renderCashBox() {
-  const cashDate = operatingDate();
-  const session = cashSessionToday();
-  const lastSession = cashSessionsToday().slice(-1)[0];
+function renderCashBox(cashDate = cashViewDate()) {
+  const session = cashSessionForDate(cashDate);
+  const isOpen = Boolean(session && !session.closedAt);
   const suggestedOpening = pettyCashAmount(cashDate);
   const openingInput = $("#openingCash");
   if (!session && openingInput && document.activeElement !== openingInput) openingInput.value = suggestedOpening || "";
   const opening = Number(session?.openingCash ?? openingInput?.value ?? suggestedOpening ?? 0);
-  const income = todayIncome();
-  const expenses = dailyCashAffectingExpenseTotal(cashDate);
-  const cashIncome = todayIncomeByMethods(["EFECTIVO"]);
-  const walletIncome = todayIncomeByMethods(["YAPE", "PLIN"]);
-  const bankIncome = todayIncomeByMethods(["TARJETA", "TRANSFERENCIA"]);
-  const cashNet = opening + cashIncome - todayExpenseByMethods(["EFECTIVO"]);
-  const walletNet = walletIncome - todayExpenseByMethods(["YAPE", "PLIN"]);
-  const bankNet = bankIncome - todayExpenseByMethods(["TARJETA", "TRANSFERENCIA"]);
+  const income = incomeForCashView(cashDate);
+  const expenses = cashAffectingExpenseTotalForView(cashDate);
+  const cashIncome = incomeByMethodsForCashView(cashDate, ["EFECTIVO"]);
+  const walletIncome = incomeByMethodsForCashView(cashDate, ["YAPE", "PLIN"]);
+  const bankIncome = incomeByMethodsForCashView(cashDate, ["TARJETA", "TRANSFERENCIA"]);
+  const cashNet = opening + cashIncome - expenseByMethodsForCashView(cashDate, ["EFECTIVO"]);
+  const walletNet = walletIncome - expenseByMethodsForCashView(cashDate, ["YAPE", "PLIN"]);
+  const bankNet = bankIncome - expenseByMethodsForCashView(cashDate, ["TARJETA", "TRANSFERENCIA"]);
   const expected = opening + income - expenses;
-  $("#cashStatus").textContent = session ? "ABIERTA" : lastSession?.closedAt ? "CERRADA" : "SIN APERTURA";
+  $("#cashStatus").textContent = isOpen ? "ABIERTA" : session?.closedAt ? "CERRADA" : "SIN APERTURA";
   $("#cashOpeningLabel").textContent = money(opening);
   $("#cashIncomeLabel").textContent = money(income);
   $("#cashExpenseLabel").textContent = money(expenses);
@@ -1672,13 +1722,15 @@ function renderCashBox() {
     openingInput.readOnly = true;
     openingInput.title = "La caja chica se modifica desde Caja general.";
   }
-  const counted = Number($("#closingCash").value || session?.closingCash || 0);
+  const closingInput = $("#closingCash");
+  if (session?.closedAt && closingInput && document.activeElement !== closingInput) closingInput.value = Number(session.closingCash || 0);
+  const counted = Number(closingInput?.value || session?.closingCash || 0);
   $("#cashDifference").value = counted ? (counted - expected).toFixed(2) : "";
-  toggleCashLockedState(Boolean(session));
+  toggleCashLockedState(isOpen && cashDate === operatingDate());
 }
 
-function renderExpenses() {
-  const rows = openExpensesForDate(operatingDate()).filter(expenseAffectsDaily).map((expense) => `<tr>
+function renderExpenses(cashDate = cashViewDate()) {
+  const rows = expensesForCashView(cashDate).filter(expenseAffectsDaily).map((expense) => `<tr>
     <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
     <td>${escapeHtml(expense.method)}</td>
     <td>${escapeHtml(expense.source)}</td>
@@ -2994,8 +3046,12 @@ function bindEvents() {
     alert(`Caja cerrada. Diferencia: ${money(session.difference)}`);
   });
 
-  $("#openingCash").addEventListener("input", renderCashBox);
-  $("#closingCash").addEventListener("input", renderCashBox);
+  $("#openingCash").addEventListener("input", () => renderCashBox());
+  $("#closingCash").addEventListener("input", () => renderCashBox());
+  $("#cashViewDate")?.addEventListener("change", (event) => {
+    selectedCashViewDate = event.target.value || "";
+    renderPayments();
+  });
 
   $("#saveExpenseBtn").addEventListener("click", async () => {
     if (!canManageExpenses()) {
@@ -3122,7 +3178,17 @@ function bindEvents() {
 
   $("#exportPatientsBtn").addEventListener("click", () => exportCsv("pacientes.csv", state.patients));
   $("#exportTreatmentsBtn").addEventListener("click", () => exportCsv("tratamientos.csv", state.treatments));
-  $("#exportPaymentsBtn").addEventListener("click", () => exportCsv("pagos.csv", state.payments));
+  $("#exportPaymentsBtn").addEventListener("click", () => {
+    const cashDate = cashViewDate();
+    exportCsv(`pagos-${cashDate}.csv`, paymentsForCashView(cashDate).map((payment) => ({
+      fecha: cashDate,
+      paciente: patientById(payment.patientId)?.name || "",
+      metodo: payment.method,
+      monto: Number(payment.amount || 0),
+      vuelto: Number(payment.change || 0),
+      comprobante: payment.receipt || historyById(payment.historyId)?.reason || ""
+    })));
+  });
   $("#exportReceivablesBtn").addEventListener("click", () => exportCsv("cuentas-por-cobrar.csv", receivableEntries().map(({ entry, patient, balance, dueDate }) => ({
     fecha_compromiso: dueDate,
     paciente: patient?.name || "",
@@ -3132,10 +3198,10 @@ function bindEvents() {
     comentario: entry.creditNote || entry.reason || ""
   }))));
   $("#exportCloseBtn").addEventListener("click", () => {
-    const cashDate = operatingDate();
+    const cashDate = cashViewDate();
     exportCsv(`cierre-caja-${cashDate}.csv`, csvRowsForDailyClose(cashDate));
   });
-  $("#printCloseBtn").addEventListener("click", () => printDailyClose(operatingDate()));
+  $("#printCloseBtn").addEventListener("click", () => printDailyClose(cashViewDate()));
   $("#generalCashForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = formData(event.currentTarget);
