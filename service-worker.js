@@ -1,4 +1,4 @@
-const CACHE_NAME = "cm-dental-shell-v1";
+const CACHE_NAME = "cm-dental-shell-v2";
 const SHELL_FILES = [
   "/",
   "/index.html",
@@ -41,14 +41,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(request)
+      .then((response) => {
+        if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });

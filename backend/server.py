@@ -239,6 +239,13 @@ def list_users():
         ]
 
 
+def open_cash_date(conn):
+    row = conn.execute(
+        "SELECT date FROM cash_sessions WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1"
+    ).fetchone()
+    return row["date"] if row else None
+
+
 def app_config():
     with db() as conn:
         return {row["key"]: row["value"] for row in conn.execute("SELECT key, value FROM app_config").fetchall()}
@@ -582,6 +589,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             amount = float(data.get("amount") or 0)
             cash_received = float(data.get("cashReceived") or amount)
             with db() as conn:
+                payment_date = open_cash_date(conn) or data["date"]
                 history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (data.get("historyId"),)).fetchone()
                 if not history:
                     return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
@@ -611,7 +619,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         item_id,
                         data["patientId"],
                         data.get("historyId"),
-                        data["date"],
+                        payment_date,
                         amount,
                         cash_received,
                         max(0, cash_received - amount),
@@ -628,6 +636,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             data = read_json(self)
             item_id = data.get("id") or now_id("exp")
             with db() as conn:
+                expense_date = open_cash_date(conn) or data["date"]
                 conn.execute(
                     """
                     INSERT INTO expenses (
@@ -643,7 +652,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """,
                     (
                         item_id,
-                        data["date"],
+                        expense_date,
                         data["detail"],
                         float(data.get("amount") or 0),
                         data["method"],
@@ -767,6 +776,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 ).fetchone()["total"]
                 expected = float(session["opening_cash"] or 0) + float(income or 0) - float(expenses or 0)
                 difference = closing_cash - expected
+                date_params = [date] + included_dates
                 conn.execute(
                     """
                     UPDATE cash_sessions
@@ -775,8 +785,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """,
                     (closing_cash, difference, income, expenses, data.get("closedAt") or time.strftime("%Y-%m-%dT%H:%M:%S"), session["id"]),
                 )
-                conn.execute(f"UPDATE payments SET closed=1 WHERE date IN ({placeholders})", included_dates)
-                conn.execute(f"UPDATE expenses SET closed=1 WHERE date IN ({placeholders})", included_dates)
+                conn.execute(f"UPDATE payments SET date=? WHERE date IN ({placeholders}) AND closed=0", date_params)
+                conn.execute(f"UPDATE expenses SET date=? WHERE date IN ({placeholders}) AND closed=0", date_params)
+                conn.execute("UPDATE payments SET closed=1 WHERE date=?", (date,))
+                conn.execute("UPDATE expenses SET closed=1 WHERE date=?", (date,))
                 conn.execute(
                     """
                     INSERT INTO petty_cash_allocations (id, date, amount)
