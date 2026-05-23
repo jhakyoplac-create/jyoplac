@@ -526,6 +526,11 @@ async function saveExpenseApi(expense) {
   if (result.id) expense.id = result.id;
 }
 
+async function deleteExpenseApi(id) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/expenses", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+}
+
 async function savePettyCashApi(date, amount) {
   if (!API_ENABLED || !apiToken) return;
   await apiFetch("/api/petty-cash", { method: "POST", body: JSON.stringify({ date, amount }) });
@@ -1730,13 +1735,25 @@ function renderCashBox(cashDate = cashViewDate()) {
 }
 
 function renderExpenses(cashDate = cashViewDate()) {
+  const expensesTable = $("#expensesTable");
+  const expensesHeader = expensesTable?.closest("table")?.querySelector("thead tr");
+  if (expensesHeader) {
+    expensesHeader.innerHTML = `
+      <th>Detalle</th>
+      <th>Metodo</th>
+      <th>Origen</th>
+      <th>Monto</th>
+      ${isAdmin() ? "<th>Accion</th>" : ""}
+    `;
+  }
   const rows = expensesForCashView(cashDate).filter(expenseAffectsDaily).map((expense) => `<tr>
     <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
     <td>${escapeHtml(expense.method)}</td>
     <td>${escapeHtml(expense.source)}</td>
     <td><strong>${money(expense.amount)}</strong></td>
+    ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-expense="${expense.id}">Eliminar</button></td>` : ""}
   </tr>`);
-  $("#expensesTable").innerHTML = rows.join("") || `<tr><td colspan="4">No hay egresos registrados hoy.</td></tr>`;
+  expensesTable.innerHTML = rows.join("") || `<tr><td colspan="${isAdmin() ? 5 : 4}">No hay egresos registrados hoy.</td></tr>`;
 }
 
 function toggleCashLockedState(isOpen) {
@@ -2682,6 +2699,23 @@ function bindEvents() {
       return;
     }
     state.payments = state.payments.filter((item) => item.id !== payment.id);
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#expensesTable")?.addEventListener("click", async (event) => {
+    const del = event.target.closest("[data-delete-expense]");
+    if (!del || !isAdmin()) return;
+    const expense = state.expenses.find((item) => item.id === del.dataset.deleteExpense);
+    if (!expense) return;
+    if (!confirm(`Eliminar este egreso por ${money(expense.amount)}? La caja se recalculara automaticamente.`)) return;
+    try {
+      await deleteExpenseApi(expense.id);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.expenses = state.expenses.filter((item) => item.id !== expense.id);
     if (!API_ENABLED) saveState();
     render();
   });

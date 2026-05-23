@@ -634,6 +634,18 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not require_role(self, {"ADMIN", "RECEPCION"}):
                 return
             data = read_json(self)
+            if data.get("delete"):
+                if not require_role(self, {"ADMIN"}):
+                    return
+                item_id = data.get("id")
+                if not item_id:
+                    return send_json(self, {"error": "Egreso no indicado."}, 400)
+                with db() as conn:
+                    row = conn.execute("SELECT id FROM expenses WHERE id = ?", (item_id,)).fetchone()
+                    if not row:
+                        return send_json(self, {"error": "Egreso no encontrado."}, 404)
+                    conn.execute("DELETE FROM expenses WHERE id = ?", (item_id,))
+                return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("exp")
             with db() as conn:
                 expense_date = open_cash_date(conn) or data["date"]
