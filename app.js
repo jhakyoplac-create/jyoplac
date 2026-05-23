@@ -2189,7 +2189,8 @@ function resetPatientFormMode() {
   patientEditingId = "";
   const form = $("#patientForm");
   if (!form) return;
-  form.id.value = "";
+  const idInput = form.elements.namedItem("id");
+  if (idInput) idInput.value = "";
   const submitButton = form.querySelector('button[type="submit"]');
   if (submitButton) submitButton.textContent = "Guardar paciente";
 }
@@ -2433,6 +2434,11 @@ function bindEvents() {
   });
   on("#quickPatientBtn", "click", () => {
     setView("pacientes");
+    const form = $("#patientForm");
+    if (form) {
+      form.reset();
+      resetPatientFormMode();
+    }
     setTimeout(() => $('#patientForm input[name="dni"]')?.focus(), 0);
   });
   on("#openExpenseBtn", "click", () => {
@@ -2623,8 +2629,9 @@ function bindEvents() {
       submitButton.textContent = "Guardando...";
     }
     const data = formData(form);
+    const editingId = form.elements.namedItem("id")?.value || "";
     const patient = {
-      id: patientEditingId || uid("p"),
+      id: editingId || uid("p"),
       dni: data.dni,
       name: data.name.trim().toUpperCase(),
       phone: data.phone,
@@ -2681,7 +2688,8 @@ function bindEvents() {
       const form = $("#patientForm");
       patientEditingId = patient.id;
       Object.entries(patient).forEach(([key, value]) => {
-        if (form[key]) form[key].value = value;
+        const field = form.elements.namedItem(key);
+        if (field) field.value = value;
       });
       const submitButton = form.querySelector('button[type="submit"]');
       if (submitButton) submitButton.textContent = "Actualizar paciente";
