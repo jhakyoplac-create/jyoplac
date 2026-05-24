@@ -535,6 +535,10 @@ label {
   margin: 0;
 }
 
+.mixed-payment-fields .ghost {
+  width: 100%;
+}
+
 .mixed-payment-summary {
   margin: 0;
   font-weight: 800;

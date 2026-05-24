@@ -922,9 +922,12 @@ function paymentMethodLabel(payment) {
   const method = String(payment.method || "").toUpperCase();
   if (method !== "MIXTO") return payment.method || "";
   const split = paymentSplit(payment);
-  const parts = paymentSplitFields
-    .filter((field) => Number(split[field.method] || 0) > 0)
-    .map((field) => `${field.label} ${money(split[field.method])}`);
+  const walletAmount = Number(split.YAPE || 0) + Number(split.PLIN || 0) + Number(split.TRANSFERENCIA || 0);
+  const parts = [
+    Number(split.EFECTIVO || 0) > 0 ? `Efectivo ${money(split.EFECTIVO)}` : "",
+    walletAmount > 0 ? `Yape/Plin/Transf. ${money(walletAmount)}` : "",
+    Number(split.TARJETA || 0) > 0 ? `Tarjeta ${money(split.TARJETA)}` : ""
+  ].filter(Boolean);
   return parts.length ? `MIXTO (${parts.join(" + ")})` : "MIXTO";
 }
 
@@ -1350,12 +1353,65 @@ function updatePaymentChange() {
   updateMixedPaymentSummary();
 }
 
+function mixedPaymentTotalFromDialog() {
+  const dialogForm = $("#mixedPaymentForm");
+  if (!dialogForm) return 0;
+  return Number(dialogForm.cashAmount.value || 0) + Number(dialogForm.walletAmount.value || 0);
+}
+
+function updateMixedPaymentDialogSummary() {
+  const paymentForm = $("#paymentForm");
+  const dialogSummary = $("#mixedPaymentDialogSummary");
+  if (!paymentForm || !dialogSummary) return;
+  const amount = Number(paymentForm.amount.value || 0);
+  const total = mixedPaymentTotalFromDialog();
+  const diff = amount - total;
+  dialogSummary.textContent = cents(diff) === 0
+    ? `Distribuido ${money(total)} completo.`
+    : `${diff > 0 ? "Falta" : "Sobra"} ${money(Math.abs(diff))}`;
+  dialogSummary.classList.toggle("invalid", cents(diff) !== 0);
+}
+
+function openMixedPaymentDialog() {
+  const paymentForm = $("#paymentForm");
+  const dialog = $("#mixedPaymentDialog");
+  const dialogForm = $("#mixedPaymentForm");
+  if (!paymentForm || !dialog || !dialogForm) return;
+  dialogForm.cashAmount.value = Number(paymentForm.cashAmount?.value || 0) || "";
+  dialogForm.walletAmount.value = Number(paymentForm.yapeAmount?.value || 0) || "";
+  updateMixedPaymentDialogSummary();
+  dialog.showModal();
+}
+
+function applyMixedPaymentDialog() {
+  const paymentForm = $("#paymentForm");
+  const dialog = $("#mixedPaymentDialog");
+  const dialogForm = $("#mixedPaymentForm");
+  if (!paymentForm || !dialogForm) return;
+  const amount = Number(paymentForm.amount.value || 0);
+  const cashAmount = Number(dialogForm.cashAmount.value || 0);
+  const walletAmount = Number(dialogForm.walletAmount.value || 0);
+  if (cents(cashAmount + walletAmount) !== cents(amount)) {
+    alert("La suma del pago mixto debe coincidir con el monto que paga.");
+    updateMixedPaymentDialogSummary();
+    return;
+  }
+  paymentForm.cashAmount.value = cashAmount || "";
+  paymentForm.yapeAmount.value = walletAmount || "";
+  paymentForm.plinAmount.value = "";
+  paymentForm.cardAmount.value = "";
+  paymentForm.transferAmount.value = "";
+  updatePaymentChange();
+  dialog?.close();
+}
+
 function toggleMixedPaymentFields() {
   const form = $("#paymentForm");
   const fields = $("#mixedPaymentFields");
   if (!form || !fields) return;
   const isMixed = String(form.method?.value || "").toUpperCase() === "MIXTO";
   fields.hidden = !isMixed;
+  if (isMixed) openMixedPaymentDialog();
   updateMixedPaymentSummary();
 }
 
@@ -1373,7 +1429,7 @@ function updateMixedPaymentSummary() {
   const total = paymentSplitFields.reduce((sum, field) => sum + Number(form[field.key]?.value || 0), 0);
   const diff = amount - total;
   summary.textContent = cents(diff) === 0
-    ? `Distribuido ${money(total)} completo.`
+    ? `Mixto: efectivo ${money(Number(form.cashAmount?.value || 0))} + Yape/Plin/Transferencia ${money(Number(form.yapeAmount?.value || 0))}.`
     : `${diff > 0 ? "Falta" : "Sobra"} ${money(Math.abs(diff))}`;
   summary.classList.toggle("invalid", cents(diff) !== 0);
 }
@@ -3057,7 +3113,9 @@ function bindEvents() {
     toggleMixedPaymentFields();
     updatePaymentChange();
   });
-  $$("#mixedPaymentFields input").forEach((input) => input.addEventListener("input", updatePaymentChange));
+  $("#openMixedPaymentBtn")?.addEventListener("click", openMixedPaymentDialog);
+  $("#saveMixedPaymentBtn")?.addEventListener("click", applyMixedPaymentDialog);
+  $("#mixedPaymentForm")?.addEventListener("input", updateMixedPaymentDialogSummary);
   $("#paymentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (paymentSaving) return;

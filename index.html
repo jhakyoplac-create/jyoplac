@@ -7,7 +7,7 @@
     <title>CM Odontologia Estetica | Sistema Dental</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260524-1" />
+    <link rel="stylesheet" href="styles.css?v=20260524-2" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -283,15 +283,13 @@
             <label>Vuelto S/<input name="change" type="number" readonly /></label>
             <label>Metodo<select name="method"></select></label>
             <div class="mixed-payment-fields" id="mixedPaymentFields" hidden>
-              <p class="muted">Divide el pago segun lo recibido. La suma debe coincidir con el monto que paga.</p>
-              <div class="inline-fields">
-                <label>Efectivo S/<input name="cashAmount" type="number" min="0" step="0.01" /></label>
-                <label>Yape S/<input name="yapeAmount" type="number" min="0" step="0.01" /></label>
-                <label>Plin S/<input name="plinAmount" type="number" min="0" step="0.01" /></label>
-                <label>Tarjeta S/<input name="cardAmount" type="number" min="0" step="0.01" /></label>
-                <label>Transferencia S/<input name="transferAmount" type="number" min="0" step="0.01" /></label>
-              </div>
+              <input name="cashAmount" type="hidden" />
+              <input name="yapeAmount" type="hidden" />
+              <input name="plinAmount" type="hidden" />
+              <input name="cardAmount" type="hidden" />
+              <input name="transferAmount" type="hidden" />
               <p class="mixed-payment-summary" id="mixedPaymentSummary">Falta S/ 0</p>
+              <button class="ghost" id="openMixedPaymentBtn" type="button">Editar pago mixto</button>
             </div>
             <label>Comprobante<input name="receipt" placeholder="Boleta, factura o referencia" /></label>
             <button class="primary" type="submit">Guardar pago</button>
@@ -746,6 +744,23 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260524-1"></script>
+    <dialog id="mixedPaymentDialog">
+      <form method="dialog" class="form modal-form" id="mixedPaymentForm">
+        <div class="panel-head">
+          <h2>Pago mixto</h2>
+          <button class="icon" data-close-dialog="mixedPaymentDialog" type="button" aria-label="Cerrar">x</button>
+        </div>
+        <p class="muted">Ingresa cuanto paga en efectivo y cuanto paga por Yape, Plin o transferencia.</p>
+        <label>Efectivo S/<input name="cashAmount" type="number" min="0" step="0.01" /></label>
+        <label>Yape / Plin / Transferencia S/<input name="walletAmount" type="number" min="0" step="0.01" /></label>
+        <p class="mixed-payment-summary" id="mixedPaymentDialogSummary">Falta S/ 0</p>
+        <menu>
+          <button class="ghost" data-close-dialog="mixedPaymentDialog" type="button">Cancelar</button>
+          <button class="primary" id="saveMixedPaymentBtn" type="button">Aplicar</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js?v=20260524-2"></script>
   </body>
 </html>
