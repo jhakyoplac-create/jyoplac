@@ -147,6 +147,11 @@ def migrate_db(conn):
     ensure_column(conn, "clinical_history", "credit_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_due_date", "TEXT")
     ensure_column(conn, "clinical_history", "credit_note", "TEXT")
+    ensure_column(conn, "payments", "cash_amount", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "payments", "yape_amount", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "payments", "plin_amount", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "payments", "card_amount", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "payments", "transfer_amount", "REAL NOT NULL DEFAULT 0")
 
 
 def init_db():
@@ -589,7 +594,29 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("pay")
             amount = float(data.get("amount") or 0)
-            cash_received = float(data.get("cashReceived") or amount)
+            method = str(data.get("method") or "").upper()
+            split = {
+                "cash_amount": float(data.get("cashAmount") or 0),
+                "yape_amount": float(data.get("yapeAmount") or 0),
+                "plin_amount": float(data.get("plinAmount") or 0),
+                "card_amount": float(data.get("cardAmount") or 0),
+                "transfer_amount": float(data.get("transferAmount") or 0),
+            }
+            if method == "MIXTO":
+                if round(sum(split.values()), 2) != round(amount, 2):
+                    return send_json(self, {"error": "La suma del pago mixto debe coincidir con el monto que paga."}, 400)
+            else:
+                split = {key: 0.0 for key in split}
+                method_map = {
+                    "EFECTIVO": "cash_amount",
+                    "YAPE": "yape_amount",
+                    "PLIN": "plin_amount",
+                    "TARJETA": "card_amount",
+                    "TRANSFERENCIA": "transfer_amount",
+                }
+                if method in method_map:
+                    split[method_map[method]] = amount
+            cash_received = float(data.get("cashReceived") or split["cash_amount"] or 0)
             with db() as conn:
                 payment_date = open_cash_date(conn) or data["date"]
                 history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (data.get("historyId"),)).fetchone()
@@ -606,14 +633,20 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """
                     INSERT INTO payments (
                       id, patient_id, history_id, date, amount, cash_received,
-                      change_amount, method, receipt, closed
+                      change_amount, cash_amount, yape_amount, plin_amount,
+                      card_amount, transfer_amount, method, receipt, closed
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_id=excluded.patient_id, history_id=excluded.history_id,
                       date=excluded.date, amount=excluded.amount,
                       cash_received=excluded.cash_received,
                       change_amount=excluded.change_amount,
+                      cash_amount=excluded.cash_amount,
+                      yape_amount=excluded.yape_amount,
+                      plin_amount=excluded.plin_amount,
+                      card_amount=excluded.card_amount,
+                      transfer_amount=excluded.transfer_amount,
                       method=excluded.method, receipt=excluded.receipt,
                       closed=excluded.closed
                     """,
@@ -624,8 +657,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         payment_date,
                         amount,
                         cash_received,
-                        max(0, cash_received - amount),
-                        data["method"],
+                        max(0, cash_received - split["cash_amount"]),
+                        split["cash_amount"],
+                        split["yape_amount"],
+                        split["plin_amount"],
+                        split["card_amount"],
+                        split["transfer_amount"],
+                        method,
                         data.get("receipt", ""),
                         1 if data.get("closed") else 0,
                     ),

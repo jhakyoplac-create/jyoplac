@@ -282,6 +282,17 @@
             <label>Monto recibido S/<input name="cashReceived" type="number" min="0" step="0.01" /></label>
             <label>Vuelto S/<input name="change" type="number" readonly /></label>
             <label>Metodo<select name="method"></select></label>
+            <div class="mixed-payment-fields" id="mixedPaymentFields" hidden>
+              <p class="muted">Divide el pago segun lo recibido. La suma debe coincidir con el monto que paga.</p>
+              <div class="inline-fields">
+                <label>Efectivo S/<input name="cashAmount" type="number" min="0" step="0.01" /></label>
+                <label>Yape S/<input name="yapeAmount" type="number" min="0" step="0.01" /></label>
+                <label>Plin S/<input name="plinAmount" type="number" min="0" step="0.01" /></label>
+                <label>Tarjeta S/<input name="cardAmount" type="number" min="0" step="0.01" /></label>
+                <label>Transferencia S/<input name="transferAmount" type="number" min="0" step="0.01" /></label>
+              </div>
+              <p class="mixed-payment-summary" id="mixedPaymentSummary">Falta S/ 0</p>
+            </div>
             <label>Comprobante<input name="receipt" placeholder="Boleta, factura o referencia" /></label>
             <button class="primary" type="submit">Guardar pago</button>
           </form>

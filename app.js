@@ -313,6 +313,11 @@ function mapApiPayment(row) {
     cashReceived: Number(row.cash_received ?? row.cashReceived ?? 0),
     change: Number(row.change_amount ?? row.change ?? 0),
     method: row.method,
+    cashAmount: Number(row.cash_amount ?? row.cashAmount ?? 0),
+    yapeAmount: Number(row.yape_amount ?? row.yapeAmount ?? 0),
+    plinAmount: Number(row.plin_amount ?? row.plinAmount ?? 0),
+    cardAmount: Number(row.card_amount ?? row.cardAmount ?? 0),
+    transferAmount: Number(row.transfer_amount ?? row.transferAmount ?? 0),
     receipt: row.receipt || "",
     closed: Boolean(row.closed)
   };
@@ -881,16 +886,57 @@ function pettyCashDeliveredTotal() {
   }, 0);
 }
 
+const paymentSplitFields = [
+  { method: "EFECTIVO", key: "cashAmount", label: "Efectivo" },
+  { method: "YAPE", key: "yapeAmount", label: "Yape" },
+  { method: "PLIN", key: "plinAmount", label: "Plin" },
+  { method: "TARJETA", key: "cardAmount", label: "Tarjeta" },
+  { method: "TRANSFERENCIA", key: "transferAmount", label: "Transferencia" }
+];
+
+function cents(value) {
+  return Math.round(Number(value || 0) * 100);
+}
+
+function paymentSplit(payment) {
+  const amount = Number(payment.amount || 0);
+  const split = paymentSplitFields.reduce((result, field) => {
+    result[field.method] = Number(payment[field.key] || 0);
+    return result;
+  }, {});
+  const explicitSplit = paymentSplitFields.some((field) => Number(payment[field.key] || 0) > 0);
+  const method = String(payment.method || "").toUpperCase();
+  if (explicitSplit || method === "MIXTO") return split;
+  if (Object.prototype.hasOwnProperty.call(split, method)) split[method] = amount;
+  return split;
+}
+
+function paymentAmountForMethods(payment, methods) {
+  const split = paymentSplit(payment);
+  return methods
+    .map((method) => String(method || "").toUpperCase())
+    .reduce((sum, method) => sum + Number(split[method] || 0), 0);
+}
+
+function paymentMethodLabel(payment) {
+  const method = String(payment.method || "").toUpperCase();
+  if (method !== "MIXTO") return payment.method || "";
+  const split = paymentSplit(payment);
+  const parts = paymentSplitFields
+    .filter((field) => Number(split[field.method] || 0) > 0)
+    .map((field) => `${field.label} ${money(split[field.method])}`);
+  return parts.length ? `MIXTO (${parts.join(" + ")})` : "MIXTO";
+}
+
 function incomeForDate(date, method = null) {
   return state.payments
-    .filter((payment) => payment.date === date && (!method || payment.method === method))
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .filter((payment) => payment.date === date)
+    .reduce((sum, payment) => sum + (method ? paymentAmountForMethods(payment, [method]) : Number(payment.amount || 0)), 0);
 }
 
 function openIncomeForDate(date, method = null) {
   return openPaymentsForDate(date)
-    .filter((payment) => !method || payment.method === method)
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .reduce((sum, payment) => sum + (method ? paymentAmountForMethods(payment, [method]) : Number(payment.amount || 0)), 0);
 }
 
 function todayIncome(method = null) {
@@ -898,10 +944,8 @@ function todayIncome(method = null) {
 }
 
 function incomeByMethodsForDate(date, methods) {
-  const normalized = methods.map((method) => method.toUpperCase());
   return openPaymentsForDate(date)
-    .filter((payment) => normalized.includes(String(payment.method || "").toUpperCase()))
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, methods), 0);
 }
 
 function todayIncomeByMethods(methods) {
@@ -947,15 +991,12 @@ function expensesForCashView(date) {
 
 function incomeForCashView(date, method = null) {
   return paymentsForCashView(date)
-    .filter((payment) => !method || payment.method === method)
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .reduce((sum, payment) => sum + (method ? paymentAmountForMethods(payment, [method]) : Number(payment.amount || 0)), 0);
 }
 
 function incomeByMethodsForCashView(date, methods) {
-  const normalized = methods.map((method) => method.toUpperCase());
   return paymentsForCashView(date)
-    .filter((payment) => normalized.includes(String(payment.method || "").toUpperCase()))
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, methods), 0);
 }
 
 function expenseByMethodsForCashView(date, methods) {
@@ -1219,7 +1260,12 @@ function hydrateForms() {
     const options = select.closest("#treatmentForm") ? state.config.treatmentStatuses : state.config.statuses;
     fillSelect(select, options, select.value);
   });
-  $$('select[name="method"]').forEach((select) => fillSelect(select, state.config.paymentMethods, select.value));
+  $$('select[name="method"]').forEach((select) => {
+    const methods = select.closest("#paymentForm")
+      ? [...state.config.paymentMethods, "MIXTO"].filter((value, index, list) => list.indexOf(value) === index)
+      : state.config.paymentMethods;
+    fillSelect(select, methods, select.value);
+  });
   $$('select[name="source"]').forEach((select) => fillSelect(select, state.config.expenseSources, select.value));
   $$('#staffPaymentForm select[name="type"]').forEach((select) => fillSelect(select, state.config.staffPaymentTypes, select.value));
   $$('select[name="attendedBy"]').forEach((select) => fillSelect(select, state.config.doctors, select.value));
@@ -1237,6 +1283,7 @@ function hydrateForms() {
   fillSelect($("#doctorFilter"), ["Todos los doctores", ...state.config.doctors], $("#doctorFilter").value);
   fillSelect($("#unitFilter"), ["Todas las unidades", ...state.config.units], $("#unitFilter").value);
   renderTreatmentPaymentOptions();
+  toggleMixedPaymentFields();
 }
 
 function renderTreatmentPaymentOptions() {
@@ -1295,9 +1342,58 @@ async function clearSelectedHistoryDebt() {
 function updatePaymentChange() {
   const form = $("#paymentForm");
   if (!form) return;
-  const received = Number(form.cashReceived.value || 0);
   const amount = Number(form.amount.value || 0);
-  form.change.value = Math.max(0, received - amount).toFixed(2);
+  const method = String(form.method?.value || "").toUpperCase();
+  const cashPortion = method === "MIXTO" ? Number(form.cashAmount?.value || 0) : method === "EFECTIVO" ? amount : 0;
+  const received = Number(form.cashReceived.value || cashPortion || 0);
+  form.change.value = Math.max(0, received - cashPortion).toFixed(2);
+  updateMixedPaymentSummary();
+}
+
+function toggleMixedPaymentFields() {
+  const form = $("#paymentForm");
+  const fields = $("#mixedPaymentFields");
+  if (!form || !fields) return;
+  const isMixed = String(form.method?.value || "").toUpperCase() === "MIXTO";
+  fields.hidden = !isMixed;
+  updateMixedPaymentSummary();
+}
+
+function updateMixedPaymentSummary() {
+  const form = $("#paymentForm");
+  const summary = $("#mixedPaymentSummary");
+  if (!form || !summary) return;
+  const isMixed = String(form.method?.value || "").toUpperCase() === "MIXTO";
+  if (!isMixed) {
+    summary.textContent = "";
+    summary.classList.remove("invalid");
+    return;
+  }
+  const amount = Number(form.amount.value || 0);
+  const total = paymentSplitFields.reduce((sum, field) => sum + Number(form[field.key]?.value || 0), 0);
+  const diff = amount - total;
+  summary.textContent = cents(diff) === 0
+    ? `Distribuido ${money(total)} completo.`
+    : `${diff > 0 ? "Falta" : "Sobra"} ${money(Math.abs(diff))}`;
+  summary.classList.toggle("invalid", cents(diff) !== 0);
+}
+
+function paymentSplitFromForm(data, amount) {
+  const method = String(data.method || "").toUpperCase();
+  const split = { cashAmount: 0, yapeAmount: 0, plinAmount: 0, cardAmount: 0, transferAmount: 0 };
+  if (method === "MIXTO") {
+    paymentSplitFields.forEach((field) => {
+      split[field.key] = Number(data[field.key] || 0);
+    });
+    const total = Object.values(split).reduce((sum, value) => sum + Number(value || 0), 0);
+    if (cents(total) !== cents(amount)) {
+      return { error: "La suma del pago mixto debe coincidir con el monto que paga.", split };
+    }
+    return { split };
+  }
+  const field = paymentSplitFields.find((item) => item.method === method);
+  if (field) split[field.key] = amount;
+  return { split };
 }
 
 function openPaymentForHistory(historyId) {
@@ -1693,7 +1789,7 @@ function renderPayments() {
       return `<tr>
         <td>${formatDate(cashDate)}</td>
         <td>${escapeHtml(patient?.name || "")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
-        <td>${escapeHtml(payment.method)}</td>
+        <td>${escapeHtml(paymentMethodLabel(payment))}</td>
         <td><strong>${money(payment.amount)}</strong><br><span class="muted">Vuelto: ${money(payment.change || 0)}</span></td>
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}</td>
         ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
@@ -2074,11 +2170,9 @@ function renderUsers() {
 
 function generalCashBalances() {
   const cashIncome = state.payments
-    .filter((payment) => String(payment.method || "").toUpperCase() === "EFECTIVO")
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["EFECTIVO"]), 0);
   const bankIncome = state.payments
-    .filter((payment) => ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"].includes(String(payment.method || "").toUpperCase()))
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"]), 0);
   const cashExpenses = state.expenses
     .filter((expense) => String(expense.method || "").toUpperCase() === "EFECTIVO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
@@ -2244,7 +2338,7 @@ function csvRowsForDailyClose(date = todayISO()) {
       seccion: "PAGO",
       fecha: date,
       concepto: patientById(payment.patientId)?.name || "",
-      metodo: payment.method,
+      metodo: paymentMethodLabel(payment),
       origen: "INGRESO",
       ingreso: Number(payment.amount || 0),
       egreso: "",
@@ -2293,7 +2387,7 @@ function printableRowsForDailyClose(date = todayISO()) {
     rows.push({
       tipo: "PAGO",
       detalle: patientById(payment.patientId)?.name || "",
-      metodo: payment.method,
+      metodo: paymentMethodLabel(payment),
       origen: "INGRESO",
       monto: Number(payment.amount || 0),
       comprobante: payment.receipt || ""
@@ -2959,6 +3053,11 @@ function bindEvents() {
   $("#clearHistoryDebtBtn")?.addEventListener("click", clearSelectedHistoryDebt);
   $('#paymentForm input[name="amount"]').addEventListener("input", updatePaymentChange);
   $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
+  $('#paymentForm select[name="method"]').addEventListener("change", () => {
+    toggleMixedPaymentFields();
+    updatePaymentChange();
+  });
+  $$("#mixedPaymentFields input").forEach((input) => input.addEventListener("input", updatePaymentChange));
   $("#paymentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (paymentSaving) return;
@@ -3000,15 +3099,24 @@ function bindEvents() {
       restorePaymentButton();
       return;
     }
+    const splitResult = paymentSplitFromForm(data, amount);
+    if (splitResult.error) {
+      alert(splitResult.error);
+      restorePaymentButton();
+      return;
+    }
+    const split = splitResult.split;
+    const cashReceived = Number(data.cashReceived || split.cashAmount || 0);
     const payment = {
       id: data.id || uid("pay"),
       patientId: data.patientId,
       historyId: data.historyId,
       date: cashDate,
       amount,
-      cashReceived: Number(data.cashReceived || amount),
-      change: Math.max(0, Number(data.cashReceived || amount) - amount),
-      method: data.method,
+      cashReceived,
+      change: Math.max(0, cashReceived - Number(split.cashAmount || 0)),
+      method: String(data.method || "").toUpperCase(),
+      ...split,
       receipt: data.receipt
     };
     try {

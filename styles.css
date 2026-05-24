@@ -518,6 +518,33 @@ label {
   min-width: 0;
 }
 
+.mixed-payment-fields {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(223, 247, 255, 0.9), rgba(217, 251, 232, 0.75));
+}
+
+.mixed-payment-fields[hidden] {
+  display: none;
+}
+
+.mixed-payment-fields .muted {
+  margin: 0;
+}
+
+.mixed-payment-summary {
+  margin: 0;
+  font-weight: 800;
+  color: var(--green);
+}
+
+.mixed-payment-summary.invalid {
+  color: var(--coral);
+}
+
 .patient-contact-row {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
   align-items: start;
