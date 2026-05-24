@@ -3069,6 +3069,7 @@ function bindEvents() {
     const unresolved = state.appointments.filter((appointment) => {
       if (appointment.date !== cashDate) return false;
       if (appointment.status === "ATENDIDA") return false;
+      if (appointment.status === "CANCELADA") return false;
       if (appointment.status === "REPROGRAMADA" && appointment.notes?.trim()) return false;
       return true;
     });
