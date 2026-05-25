@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   duration INTEGER,
   status TEXT NOT NULL,
   notes TEXT,
+  follow_up_status TEXT,
+  follow_up_comment TEXT,
+  new_appointment_id TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE

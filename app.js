@@ -254,7 +254,10 @@ function mapApiAppointment(row) {
     service: row.service,
     duration: row.duration,
     status: row.status,
-    notes: row.notes || ""
+    notes: row.notes || "",
+    followUpStatus: row.follow_up_status || row.followUpStatus || "",
+    followUpComment: row.follow_up_comment || row.followUpComment || "",
+    newAppointmentId: row.new_appointment_id || row.newAppointmentId || ""
   };
 }
 
@@ -1103,7 +1106,7 @@ function fillAppointmentPatientSelectForDate(select, date, selected = "") {
       return map;
     }, {});
   const appointmentCountByPatient = state.appointments
-    .filter((appointment) => appointment.date === date && !["CANCELADA", "REPROGRAMADA"].includes(appointment.status))
+    .filter((appointment) => appointment.date === date && isSlotBlockingAppointment(appointment))
     .reduce((map, appointment) => {
       map[appointment.patientId] = (map[appointment.patientId] || 0) + 1;
       return map;
@@ -1133,9 +1136,9 @@ const roleLabels = {
 };
 
 const roleViews = {
-  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
-  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "panel", "recordatorios", "reportes", "campanas"],
-  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "cuentas-cobrar", "panel", "recordatorios"]
+  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
+  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -1247,6 +1250,7 @@ function render() {
   renderPayments();
   renderGeneralCash();
   renderReceivables();
+  renderAppointmentFollowUps();
   renderStaffPanel();
   renderReminders();
   renderReports();
@@ -1503,12 +1507,61 @@ function syncAppointmentDoctor() {
   if (patient?.doctor) form.doctor.value = patient.doctor;
 }
 
+const SLOT_FREE_STATUSES = ["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"];
+
+function isSlotBlockingAppointment(appointment) {
+  return Boolean(appointment && !SLOT_FREE_STATUSES.includes(appointment.status));
+}
+
+function appointmentFollowUpStatus(appointment) {
+  if (!appointment) return "";
+  if (appointment.followUpStatus) return appointment.followUpStatus;
+  if (["CANCELADA", "NO_ASISTIO"].includes(appointment.status)) return "PENDIENTE_REPROGRAMAR";
+  if (appointment.status === "REPROGRAMADA") return appointment.newAppointmentId ? "REPROGRAMADO" : "PENDIENTE_REPROGRAMAR";
+  return "";
+}
+
+function isFollowUpOpen(appointment) {
+  const status = appointmentFollowUpStatus(appointment);
+  if (!status || status === "CERRADO") return false;
+  if (status === "REPROGRAMADO") {
+    const next = appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null;
+    return !next || next.status !== "ATENDIDA";
+  }
+  return status === "PENDIENTE_REPROGRAMAR";
+}
+
+function appointmentFollowUps() {
+  return state.appointments
+    .filter(isFollowUpOpen)
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+}
+
+function followUpLabel(appointment) {
+  return appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "REPROGRAMADO" : "PENDIENTE";
+}
+
+function followUpClass(appointment) {
+  return appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "followup-rescheduled" : "followup-pending";
+}
+
+function followUpNextText(appointment) {
+  const next = appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null;
+  return next ? `${formatDate(next.date)} ${agendaTimeLabel(next.time)} | ${next.status}` : "Pendiente de reprogramar";
+}
+
+function whatsappPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("51") ? digits : `51${digits}`;
+}
+
 function findAppointmentConflict(candidate) {
   const sameDateTime = state.appointments.filter((appointment) =>
     appointment.id !== candidate.id &&
     appointment.date === candidate.date &&
     appointment.time === candidate.time &&
-    !["CANCELADA", "REPROGRAMADA"].includes(appointment.status)
+    isSlotBlockingAppointment(appointment)
   );
   const unitConflict = sameDateTime.find((appointment) => appointment.unit === candidate.unit);
   if (unitConflict) {
@@ -1582,7 +1635,7 @@ function renderAgenda() {
       const appointment = state.appointments.find((item) => {
         const doctorOk = !doctor || doctor === "Todos los doctores" || item.doctor === doctor;
         const unitOk = !unit || unit === "Todas las unidades" || item.unit === unit;
-        return item.status !== "CANCELADA" && item.date === date && item.time === time && item.unit === unitName && doctorOk && unitOk;
+        return isSlotBlockingAppointment(item) && item.date === date && item.time === time && item.unit === unitName && doctorOk && unitOk;
       });
       const isLunch = dayOfWeek(date) !== 6 && cursor >= minutes(state.config.lunchStart) && cursor < minutes(state.config.lunchEnd);
       if (appointment) {
@@ -1880,6 +1933,33 @@ function renderReceivables() {
   }).join("") || `<tr><td colspan="7">No hay cuentas por cobrar pendientes.</td></tr>`;
 }
 
+function renderAppointmentFollowUps() {
+  const table = $("#appointmentFollowUpsTable");
+  if (!table) return;
+  const rows = appointmentFollowUps();
+  const count = $("#followUpCount");
+  if (count) count.textContent = `${rows.length} pendientes`;
+  table.innerHTML = rows.map((appointment) => {
+    const patient = patientById(appointment.patientId);
+    const waPhone = whatsappPhone(patient?.phone);
+    const message = `Hola ${patient?.name || ""}, le saludamos de ${state.config.clinicName}. Tenemos pendiente reprogramar su cita dental. Podemos ayudarle con una nueva fecha.`;
+    const wa = `https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`;
+    return `<tr class="${followUpClass(appointment)}">
+      <td>${formatDate(appointment.date)}<br><span class="muted">${agendaTimeLabel(appointment.time)} | ${escapeHtml(appointment.unit || "")}</span></td>
+      <td><strong>${escapeHtml(patient?.name || "Paciente")}</strong><br><span class="muted">${escapeHtml(appointment.service || "")}</span></td>
+      <td>${escapeHtml(patient?.phone || "-")}</td>
+      <td><span class="status ${appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "warn" : "danger"}">${escapeHtml(followUpLabel(appointment))}</span></td>
+      <td>${escapeHtml(followUpNextText(appointment))}</td>
+      <td>${escapeHtml(appointment.followUpComment || appointment.notes || "")}</td>
+      <td class="row-actions">
+        ${canManageAppointments() ? `<button class="small-btn" data-followup-reschedule="${appointment.id}">Reprogramar</button>` : ""}
+        ${waPhone ? `<a class="small-btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+        ${canManageAppointments() ? `<button class="small-btn danger-btn" data-followup-close="${appointment.id}">Cerrar</button>` : ""}
+      </td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="7">No hay citas en seguimiento.</td></tr>`;
+}
+
 function renderCashBox(cashDate = cashViewDate()) {
   const session = cashSessionForDate(cashDate);
   const isOpen = Boolean(session && !session.closedAt);
@@ -2013,7 +2093,7 @@ function renderStaffPanel() {
 
 function renderReminders() {
   const upcoming = state.appointments
-    .filter((appointment) => appointment.date >= todayISO() && !["CANCELADA", "NO_ASISTIO"].includes(appointment.status))
+    .filter((appointment) => appointment.date >= todayISO() && isSlotBlockingAppointment(appointment))
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
     .slice(0, 30);
   $("#remindersList").innerHTML = upcoming.map((appointment) => {
@@ -2050,7 +2130,7 @@ function uniquePatientCount(items) {
 }
 
 function isReportAppointment(appointment) {
-  return !["CANCELADA", "REPROGRAMADA"].includes(appointment.status);
+  return isSlotBlockingAppointment(appointment);
 }
 
 function agendaExportRow(appointment) {
@@ -2076,7 +2156,7 @@ function exportAgendaDay() {
     return;
   }
   const rows = state.appointments
-    .filter((appointment) => appointment.date === date && appointment.status !== "CANCELADA")
+    .filter((appointment) => appointment.date === date && isSlotBlockingAppointment(appointment))
     .sort((a, b) => `${a.time} ${a.unit}`.localeCompare(`${b.time} ${b.unit}`))
     .map(agendaExportRow);
   if (!rows.length) {
@@ -2089,7 +2169,7 @@ function exportAgendaDay() {
 function exportFutureAgenda() {
   const today = todayISO();
   const rows = state.appointments
-    .filter((appointment) => appointment.date >= today && appointment.status !== "CANCELADA")
+    .filter((appointment) => appointment.date >= today && isSlotBlockingAppointment(appointment))
     .sort((a, b) => `${a.date} ${a.time} ${a.unit}`.localeCompare(`${b.date} ${b.time} ${b.unit}`))
     .map(agendaExportRow);
   if (!rows.length) {
@@ -2651,6 +2731,38 @@ function bindEvents() {
     if (empty) openAppointment({ date: $("#agendaDate").value, time: empty.dataset.newAt, unit: empty.dataset.unit });
   });
 
+  const followUpsTable = $("#appointmentFollowUpsTable");
+  if (followUpsTable) {
+    followUpsTable.addEventListener("click", async (event) => {
+      const reschedule = event.target.closest("[data-followup-reschedule]");
+      if (reschedule && canManageAppointments()) {
+        const appointment = state.appointments.find((item) => item.id === reschedule.dataset.followupReschedule);
+        if (appointment) openReschedule(appointment);
+        return;
+      }
+      const close = event.target.closest("[data-followup-close]");
+      if (close && canManageAppointments()) {
+        const appointment = state.appointments.find((item) => item.id === close.dataset.followupClose);
+        if (!appointment) return;
+        if (!confirm("Cerrar este seguimiento? La cita original quedara gestionada y no volvera a alertar.")) return;
+        const updated = {
+          ...appointment,
+          followUpStatus: "CERRADO",
+          followUpComment: appointment.followUpComment || appointment.notes || "No continuara"
+        };
+        try {
+          await saveAppointmentApi(updated);
+        } catch (error) {
+          alert(error.message);
+          return;
+        }
+        upsert(state.appointments, updated);
+        if (!API_ENABLED) saveState();
+        render();
+      }
+    });
+  }
+
   $("#saveAppointmentBtn").addEventListener("click", async () => {
     if (!canManageAppointments()) {
       alert("Tu usuario solo puede visualizar la agenda.");
@@ -2662,6 +2774,7 @@ function bindEvents() {
       return;
     }
     const service = serviceByName(data.service);
+    const existingAppointment = state.appointments.find((item) => item.id === (data.id || ""));
     const appointment = {
       id: data.id || appointmentId(),
       date: data.date,
@@ -2674,28 +2787,30 @@ function bindEvents() {
       status: data.status,
       notes: data.notes
     };
-    if (appointment.status === "CANCELADA") {
-      try {
-        if (data.id) await deleteAppointmentApi(data.id);
-      } catch (error) {
-        alert(error.message);
+    if (["CANCELADA", "NO_ASISTIO"].includes(appointment.status)) {
+      appointment.followUpStatus = "PENDIENTE_REPROGRAMAR";
+      appointment.followUpComment = appointment.notes || existingAppointment?.followUpComment || "";
+      appointment.newAppointmentId = "";
+    } else if (appointment.status === "REPROGRAMADA") {
+      appointment.followUpStatus = existingAppointment?.newAppointmentId ? "REPROGRAMADO" : "PENDIENTE_REPROGRAMAR";
+      appointment.followUpComment = appointment.notes || existingAppointment?.followUpComment || "";
+      appointment.newAppointmentId = existingAppointment?.newAppointmentId || "";
+    } else {
+      appointment.followUpStatus = "";
+      appointment.followUpComment = "";
+      appointment.newAppointmentId = "";
+    }
+    if (isSlotBlockingAppointment(appointment)) {
+      const availabilityError = appointmentAvailabilityError(appointment);
+      if (availabilityError) {
+        alert(availabilityError);
         return;
       }
-      state.appointments = state.appointments.filter((item) => item.id !== appointment.id);
-      if (!API_ENABLED) saveState();
-      $("#appointmentDialog").close();
-      render();
-      return;
-    }
-    const availabilityError = appointmentAvailabilityError(appointment);
-    if (availabilityError) {
-      alert(availabilityError);
-      return;
-    }
-    const conflict = findAppointmentConflict(appointment);
-    if (conflict) {
-      alert(conflict.message);
-      return;
+      const conflict = findAppointmentConflict(appointment);
+      if (conflict) {
+        alert(conflict.message);
+        return;
+      }
     }
     try {
       await saveAppointmentApi(appointment);
@@ -2723,6 +2838,9 @@ function bindEvents() {
     }
     const previousStatus = original.status;
     const previousNotes = original.notes;
+    const previousFollowUpStatus = original.followUpStatus;
+    const previousFollowUpComment = original.followUpComment;
+    const previousNewAppointmentId = original.newAppointmentId;
     original.status = "REPROGRAMADA";
     original.notes = data.comment.trim();
     const newAppointment = {
@@ -2735,12 +2853,21 @@ function bindEvents() {
       service: original.service,
       duration: original.duration || serviceByName(original.service)?.duration || state.config.interval,
       status: "RESERVADA",
-      notes: `Reprogramada desde ${formatDate(original.date)} ${original.time}. ${data.comment.trim()}`
+      notes: `Reprogramada desde ${formatDate(original.date)} ${original.time}. ${data.comment.trim()}`,
+      followUpStatus: "",
+      followUpComment: "",
+      newAppointmentId: ""
     };
+    original.followUpStatus = "REPROGRAMADO";
+    original.followUpComment = data.comment.trim();
+    original.newAppointmentId = newAppointment.id;
     const availabilityError = appointmentAvailabilityError(newAppointment);
     if (availabilityError) {
       original.status = previousStatus;
       original.notes = previousNotes;
+      original.followUpStatus = previousFollowUpStatus;
+      original.followUpComment = previousFollowUpComment;
+      original.newAppointmentId = previousNewAppointmentId;
       alert(availabilityError);
       return;
     }
@@ -2748,6 +2875,9 @@ function bindEvents() {
     if (conflict) {
       original.status = previousStatus;
       original.notes = previousNotes;
+      original.followUpStatus = previousFollowUpStatus;
+      original.followUpComment = previousFollowUpComment;
+      original.newAppointmentId = previousNewAppointmentId;
       alert(conflict.message);
       return;
     }
@@ -2757,6 +2887,9 @@ function bindEvents() {
     } catch (error) {
       original.status = previousStatus;
       original.notes = previousNotes;
+      original.followUpStatus = previousFollowUpStatus;
+      original.followUpComment = previousFollowUpComment;
+      original.newAppointmentId = previousNewAppointmentId;
       alert(error.message);
       return;
     }
@@ -3232,17 +3365,18 @@ function bindEvents() {
       alert("Primero abre la caja del dia.");
       return;
     }
-    const unresolved = state.appointments.filter((appointment) => {
-      if (appointment.date !== cashDate) return false;
-      if (appointment.status === "ATENDIDA") return false;
-      if (appointment.status === "CANCELADA") return false;
-      if (appointment.status === "REPROGRAMADA" && appointment.notes?.trim()) return false;
-      return true;
-    });
+    const unresolved = state.appointments.filter(
+      (appointment) => appointment.date === cashDate && isSlotBlockingAppointment(appointment) && appointment.status !== "ATENDIDA"
+    );
     if (unresolved.length) {
       const names = unresolved.map((appointment) => patientById(appointment.patientId)?.name || "Paciente").join(", ");
       alert(`No puedes cerrar caja. Debes atender o reprogramar con comentario a: ${names}`);
       return;
+    }
+    const pendingFollowUps = appointmentFollowUps().filter((appointment) => appointment.date === cashDate);
+    if (pendingFollowUps.length) {
+      const names = pendingFollowUps.map((appointment) => patientById(appointment.patientId)?.name || "Paciente").join(", ");
+      if (!confirm(`Hay citas en seguimiento pendientes: ${names}. Puedes cerrar caja, pero recuerda gestionarlas. ¿Continuar?`)) return;
     }
     if ($("#closingCash").value === "") {
       alert("Ingresa el efectivo contado al cierre antes de cerrar caja.");

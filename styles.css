@@ -683,6 +683,22 @@ label {
   background: linear-gradient(135deg, #ffd3d0, #fff0ed);
 }
 
+tr.followup-rescheduled td {
+  background: #fff8db;
+}
+
+tr.followup-pending td {
+  background: #ffe8e8;
+}
+
+tr.followup-rescheduled td:first-child {
+  border-left: 4px solid #f4b942;
+}
+
+tr.followup-pending td:first-child {
+  border-left: 4px solid #ff6b6b;
+}
+
 .slot.lunch {
   background: linear-gradient(135deg, #fff7df, #fffaf0);
 }

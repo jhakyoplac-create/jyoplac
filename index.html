@@ -7,7 +7,7 @@
     <title>CM Odontologia Estetica | Sistema Dental</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260524-2" />
+    <link rel="stylesheet" href="styles.css?v=20260525-1" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -44,6 +44,7 @@
         <button class="nav-item" data-view="pagos">Pagos y caja</button>
         <button class="nav-item" data-view="caja-general">Caja general</button>
         <button class="nav-item" data-view="cuentas-cobrar">Cuentas por cobrar</button>
+        <button class="nav-item" data-view="seguimiento-citas">Seguimiento citas</button>
         <button class="nav-item" data-view="panel">Panel recepcion</button>
         <button class="nav-item" data-view="recordatorios">Recordatorios</button>
         <button class="nav-item" data-view="reportes">Reportes</button>
@@ -487,6 +488,34 @@
         </section>
       </section>
 
+      <section id="seguimiento-citas" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Seguimiento de citas</h2>
+              <p class="muted">Canceladas, no asistidas y reprogramadas hasta que vuelvan a atenderse.</p>
+            </div>
+            <span class="status warn" id="followUpCount">0 pendientes</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha origen</th>
+                  <th>Paciente</th>
+                  <th>Celular</th>
+                  <th>Estado</th>
+                  <th>Proxima cita</th>
+                  <th>Comentario</th>
+                  <th>Accion</th>
+                </tr>
+              </thead>
+              <tbody id="appointmentFollowUpsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
       <section id="panel" class="view">
         <div class="kpi-grid compact">
           <article class="kpi">
@@ -761,6 +790,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260524-2"></script>
+    <script src="app.js?v=20260525-1"></script>
   </body>
 </html>

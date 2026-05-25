@@ -152,6 +152,9 @@ def migrate_db(conn):
     ensure_column(conn, "payments", "plin_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "payments", "card_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "payments", "transfer_amount", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "appointments", "follow_up_status", "TEXT")
+    ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
+    ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
 
 
 def init_db():
@@ -436,31 +439,56 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     conn.execute("DELETE FROM appointments WHERE id = ?", (item_id,))
                 return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("appt")
+            follow_up_status = data.get("followUpStatus") or data.get("follow_up_status") or ""
+            follow_up_comment = data.get("followUpComment") or data.get("follow_up_comment") or ""
+            new_appointment_id = data.get("newAppointmentId") or data.get("new_appointment_id") or ""
+            free_statuses = {"CANCELADA", "REPROGRAMADA", "NO_ASISTIO"}
             with db() as conn:
-                conflict_unit = conn.execute(
-                    "SELECT id FROM appointments WHERE date=? AND time=? AND unit=? AND id<>? AND status NOT IN ('CANCELADA', 'REPROGRAMADA')",
-                    (data["date"], data["time"], data["unit"], item_id),
-                ).fetchone()
-                conflict_doctor = conn.execute(
-                    "SELECT id FROM appointments WHERE date=? AND time=? AND doctor=? AND id<>? AND status NOT IN ('CANCELADA', 'REPROGRAMADA')",
-                    (data["date"], data["time"], data["doctor"], item_id),
-                ).fetchone()
-                if conflict_unit:
-                    return send_json(self, {"error": "La unidad ya esta ocupada en esa hora."}, 409)
-                if conflict_doctor:
-                    return send_json(self, {"error": "El doctor ya tiene una cita en esa hora."}, 409)
+                if data.get("status") not in free_statuses:
+                    conflict_unit = conn.execute(
+                        "SELECT id FROM appointments WHERE date=? AND time=? AND unit=? AND id<>? AND status NOT IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')",
+                        (data["date"], data["time"], data["unit"], item_id),
+                    ).fetchone()
+                    conflict_doctor = conn.execute(
+                        "SELECT id FROM appointments WHERE date=? AND time=? AND doctor=? AND id<>? AND status NOT IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')",
+                        (data["date"], data["time"], data["doctor"], item_id),
+                    ).fetchone()
+                    if conflict_unit:
+                        return send_json(self, {"error": "La unidad ya esta ocupada en esa hora."}, 409)
+                    if conflict_doctor:
+                        return send_json(self, {"error": "El doctor ya tiene una cita en esa hora."}, 409)
                 conn.execute(
                     """
-                    INSERT INTO appointments (id, date, time, unit, doctor, patient_id, service, duration, status, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO appointments (
+                      id, date, time, unit, doctor, patient_id, service, duration, status, notes,
+                      follow_up_status, follow_up_comment, new_appointment_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       date=excluded.date, time=excluded.time, unit=excluded.unit,
                       doctor=excluded.doctor, patient_id=excluded.patient_id,
                       service=excluded.service, duration=excluded.duration,
                       status=excluded.status, notes=excluded.notes,
+                      follow_up_status=excluded.follow_up_status,
+                      follow_up_comment=excluded.follow_up_comment,
+                      new_appointment_id=excluded.new_appointment_id,
                       updated_at=CURRENT_TIMESTAMP
                     """,
-                    (item_id, data["date"], data["time"], data["unit"], data["doctor"], data["patientId"], data["service"], data.get("duration"), data["status"], data.get("notes", "")),
+                    (
+                        item_id,
+                        data["date"],
+                        data["time"],
+                        data["unit"],
+                        data["doctor"],
+                        data["patientId"],
+                        data["service"],
+                        data.get("duration"),
+                        data["status"],
+                        data.get("notes", ""),
+                        follow_up_status,
+                        follow_up_comment,
+                        new_appointment_id,
+                    ),
                 )
             return send_json(self, {"ok": True, "id": item_id})
 
@@ -515,6 +543,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         UPDATE appointments
                         SET status = 'ATENDIDA', updated_at = CURRENT_TIMESTAMP
                         WHERE patient_id = ? AND date = ?
+                        """,
+                        (data["patientId"], data["date"]),
+                    )
+                    conn.execute(
+                        """
+                        UPDATE appointments
+                        SET follow_up_status = 'CERRADO', updated_at = CURRENT_TIMESTAMP
+                        WHERE new_appointment_id IN (
+                          SELECT id FROM appointments WHERE patient_id = ? AND date = ?
+                        )
                         """,
                         (data["patientId"], data["date"]),
                     )
