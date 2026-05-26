@@ -143,6 +143,7 @@ def ensure_column(conn, table, column, definition):
 
 def migrate_db(conn):
     ensure_column(conn, "patients", "birth_date", "TEXT")
+    ensure_column(conn, "patients", "status", "TEXT NOT NULL DEFAULT 'NUEVO'")
     ensure_column(conn, "clinical_history", "credit_pending", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_due_date", "TEXT")
@@ -415,15 +416,25 @@ class DentalHandler(SimpleHTTPRequestHandler):
             with db() as conn:
                 conn.execute(
                     """
-                    INSERT INTO patients (id, dni, name, phone, birth_date, doctor, main_treatment, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO patients (id, dni, name, phone, birth_date, doctor, main_treatment, status, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       dni=excluded.dni, name=excluded.name, phone=excluded.phone,
                       birth_date=excluded.birth_date,
                       doctor=excluded.doctor, main_treatment=excluded.main_treatment,
-                      notes=excluded.notes, updated_at=CURRENT_TIMESTAMP
+                      status=excluded.status, notes=excluded.notes, updated_at=CURRENT_TIMESTAMP
                     """,
-                    (item_id, data["dni"], data["name"].upper(), data.get("phone", ""), data.get("birthDate", ""), data.get("doctor", ""), data.get("mainTreatment", ""), data.get("notes", "")),
+                    (
+                        item_id,
+                        data["dni"],
+                        data["name"].upper(),
+                        data.get("phone", ""),
+                        data.get("birthDate", ""),
+                        data.get("doctor", ""),
+                        data.get("mainTreatment", ""),
+                        data.get("status", "NUEVO"),
+                        data.get("notes", ""),
+                    ),
                 )
             return send_json(self, {"ok": True, "id": item_id})
 
@@ -538,6 +549,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     ),
                 )
                 if data.get("attended", True):
+                    conn.execute(
+                        """
+                        UPDATE patients
+                        SET status = 'ACTIVO', updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        (data["patientId"],),
+                    )
                     conn.execute(
                         """
                         UPDATE appointments

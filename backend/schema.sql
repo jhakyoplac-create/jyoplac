@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS patients (
   birth_date TEXT,
   doctor TEXT,
   main_treatment TEXT,
+  status TEXT NOT NULL DEFAULT 'NUEVO',
   notes TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

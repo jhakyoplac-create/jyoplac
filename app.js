@@ -238,6 +238,7 @@ function mapApiPatient(row) {
     birthDate: row.birth_date || row.birthDate || "",
     doctor: row.doctor || "",
     mainTreatment: row.main_treatment || row.mainTreatment || "",
+    status: row.status || "NUEVO",
     notes: row.notes || "",
     createdAt: (row.created_at || "").slice(0, 10)
   };
@@ -492,6 +493,7 @@ async function savePatientApi(patient) {
     birthDate: patient.birthDate || "",
     doctor: patient.doctor,
     mainTreatment: patient.mainTreatment,
+    status: patient.status || "NUEVO",
     notes: patient.notes
   };
   const result = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify(payload) });
@@ -1057,8 +1059,9 @@ function lastAppointment(patientId) {
 }
 
 function patientStatus(patient) {
+  if (patient.status === "INACTIVO") return "INACTIVO";
   const last = lastAppointment(patient.id);
-  if (!last) return "NUEVO";
+  if (!last) return patient.status || "NUEVO";
   const diff = Math.floor((new Date() - new Date(`${last.date}T00:00:00`)) / 86400000);
   return diff > Number(state.config.inactiveDays) ? "INACTIVO" : "ACTIVO";
 }
@@ -2744,19 +2747,23 @@ function bindEvents() {
       if (close && canManageAppointments()) {
         const appointment = state.appointments.find((item) => item.id === close.dataset.followupClose);
         if (!appointment) return;
-        if (!confirm("Cerrar este seguimiento? La cita original quedara gestionada y no volvera a alertar.")) return;
+        const patient = patientById(appointment.patientId);
+        if (!confirm("Cerrar este seguimiento? El paciente quedara como INACTIVO para recuperarlo luego en campanas.")) return;
         const updated = {
           ...appointment,
           followUpStatus: "CERRADO",
           followUpComment: appointment.followUpComment || appointment.notes || "No continuara"
         };
+        const inactivePatient = patient ? { ...patient, status: "INACTIVO" } : null;
         try {
           await saveAppointmentApi(updated);
+          if (inactivePatient) await savePatientApi(inactivePatient);
         } catch (error) {
           alert(error.message);
           return;
         }
         upsert(state.appointments, updated);
+        if (inactivePatient) upsert(state.patients, inactivePatient);
         if (!API_ENABLED) saveState();
         render();
       }
@@ -2913,6 +2920,7 @@ function bindEvents() {
     }
     const data = formData(form);
     const editingId = form.elements.namedItem("id")?.value || "";
+    const existingPatient = editingId ? patientById(editingId) : null;
     const patient = {
       id: editingId || uid("p"),
       dni: data.dni,
@@ -2921,7 +2929,8 @@ function bindEvents() {
       birthDate: data.birthDate,
       doctor: data.doctor,
       mainTreatment: data.mainTreatment,
-      createdAt: todayISO(),
+      status: existingPatient?.status || "NUEVO",
+      createdAt: existingPatient?.createdAt || todayISO(),
       notes: data.notes
     };
     try {
@@ -3134,8 +3143,11 @@ function bindEvents() {
       creditDueDate: data.creditDueDate || "",
       creditNote: data.creditNote || ""
     };
+    const attendedPatient = patientById(data.patientId);
+    const activePatient = attendedPatient ? { ...attendedPatient, status: "ACTIVO" } : null;
     try {
       await saveClinicalHistoryApi(entry);
+      if (activePatient) await savePatientApi(activePatient);
     } catch (error) {
       alert(error.message);
       historySaving = false;
@@ -3146,6 +3158,7 @@ function bindEvents() {
       return;
     }
     upsert(state.clinicalHistory, entry);
+    if (activePatient) upsert(state.patients, activePatient);
     const appointment = state.appointments
       .filter((item) => item.patientId === data.patientId && item.date === data.date)
       .sort((a, b) => a.time.localeCompare(b.time))[0];
