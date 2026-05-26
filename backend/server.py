@@ -891,6 +891,17 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 ).fetchone()["total"]
                 expected = float(session["opening_cash"] or 0) + float(income or 0) - float(expenses or 0)
                 difference = closing_cash - expected
+                if abs(difference) > 0.009:
+                    return send_json(
+                        self,
+                        {
+                            "error": (
+                                f"No puedes cerrar caja con diferencia. Esperado S/ {expected:.2f}, "
+                                f"contado S/ {closing_cash:.2f}, diferencia S/ {difference:.2f}."
+                            )
+                        },
+                        400,
+                    )
                 date_params = [date] + included_dates
                 conn.execute(
                     """

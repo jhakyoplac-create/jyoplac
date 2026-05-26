@@ -3398,11 +3398,18 @@ function bindEvents() {
     }
     const expected = Number(session.openingCash || 0) + todayIncome() - dailyCashAffectingExpenseTotal(cashDate);
     const closing = Number($("#closingCash").value || 0);
+    const difference = closing - expected;
+    if (Math.abs(difference) > 0.009) {
+      alert(`No puedes cerrar caja con diferencia. Esperado: ${money(expected)}. Contado: ${money(closing)}. Diferencia: ${money(difference)}. Corrige el efectivo contado hasta que la diferencia sea S/ 0.00.`);
+      $("#closingCash").focus();
+      renderCashBox(cashDate);
+      return;
+    }
     const cashDates = cashOperationDates(cashDate);
     const closureRows = printableRowsForDailyClose(cashDate);
     const closureCsvRows = csvRowsForDailyClose(cashDate);
     session.closingCash = closing;
-    session.difference = closing - expected;
+    session.difference = difference;
     session.incomeTotal = todayIncome();
     session.expenseTotal = dailyCashAffectingExpenseTotal(cashDate);
     session.closedAt = new Date().toISOString();
