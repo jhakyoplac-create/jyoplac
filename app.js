@@ -2346,8 +2346,7 @@ function renderGeneralCash() {
     const income = incomeForDate(date);
     const opExpenses = dailyExpenseTotal(date);
     const generalExpenses = dailyGeneralExpenseTotal(date);
-    const closure = state.dailyClosures.find((item) => item.date === date);
-    const details = closure?.rows || printableRowsForDailyClose(date);
+    const details = printableRowsForDailyClose(date);
     const detailRows = details.map((row) => `<tr><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.detalle)}</td><td>${escapeHtml(row.metodo || "")}</td><td>${escapeHtml(row.origen || "")}</td><td>${moneyForPrint(row.monto)}</td></tr>`).join("");
     return `<tr>
       <td>${formatDate(date)}</td>
@@ -2450,17 +2449,16 @@ function csvCell(value) {
 }
 
 function csvRowsForDailyClose(date = todayISO()) {
-  const stored = state.dailyClosures.find((closure) => closure.date === date && Array.isArray(closure.csvRows));
-  if (stored) return stored.csvRows;
-  const dates = cashOperationDates(date);
   const session = state.cashSessions.find((item) => item.date === date) || {};
   const opening = Number(session.openingCash || 0);
-  const incomeCash = incomeByMethodsForDate(date, ["EFECTIVO"]);
-  const incomeWallet = incomeByMethodsForDate(date, ["YAPE", "PLIN"]);
-  const incomeBank = incomeByMethodsForDate(date, ["TARJETA", "TRANSFERENCIA"]);
-  const incomeTotal = openIncomeForDate(date);
-  const operatingExpenses = dailyCashAffectingExpenseTotal(date);
+  const incomeCash = incomeByMethodsForCashView(date, ["EFECTIVO"]);
+  const incomeWallet = incomeByMethodsForCashView(date, ["YAPE", "PLIN"]);
+  const incomeBank = incomeByMethodsForCashView(date, ["TARJETA", "TRANSFERENCIA"]);
+  const incomeTotal = incomeForCashView(date);
+  const operatingExpenses = cashAffectingExpenseTotalForView(date);
   const expected = opening + incomeTotal - operatingExpenses;
+  const closingCash = Number(session.closingCash || 0);
+  const difference = session.closedAt ? Number(session.difference || closingCash - expected) : Number(session.difference || 0);
   const rows = [
     { seccion: "RESUMEN", fecha: date, concepto: "Caja chica inicial", metodo: "", origen: "", ingreso: "", egreso: "", saldo: opening, comprobante: "" },
     { seccion: "RESUMEN", fecha: date, concepto: "Ingreso bruto efectivo", metodo: "EFECTIVO", origen: "INGRESOS DEL DIA", ingreso: incomeCash, egreso: "", saldo: "", comprobante: "" },
@@ -2469,13 +2467,13 @@ function csvRowsForDailyClose(date = todayISO()) {
     { seccion: "RESUMEN", fecha: date, concepto: "Total ingresos brutos", metodo: "", origen: "", ingreso: incomeTotal, egreso: "", saldo: "", comprobante: "" },
     { seccion: "RESUMEN", fecha: date, concepto: "Total egresos operativos", metodo: "", origen: "INGRESO_DEL_DIA / CAJA_CHICA", ingreso: "", egreso: operatingExpenses, saldo: "", comprobante: "" },
     { seccion: "RESUMEN", fecha: date, concepto: "Esperado al cierre", metodo: "", origen: "CAJA CHICA + INGRESOS - EGRESOS", ingreso: "", egreso: "", saldo: expected, comprobante: "" },
-    { seccion: "RESUMEN", fecha: date, concepto: "Contado al cierre", metodo: "", origen: "", ingreso: "", egreso: "", saldo: Number(session.closingCash || 0), comprobante: "" },
-    { seccion: "RESUMEN", fecha: date, concepto: "Diferencia", metodo: "", origen: "", ingreso: "", egreso: "", saldo: Number(session.difference || 0), comprobante: "" }
+    { seccion: "RESUMEN", fecha: date, concepto: "Contado al cierre", metodo: "", origen: "", ingreso: "", egreso: "", saldo: closingCash, comprobante: "" },
+    { seccion: "RESUMEN", fecha: date, concepto: "Diferencia", metodo: "", origen: "", ingreso: "", egreso: "", saldo: difference, comprobante: "" }
   ];
-  state.payments.filter((payment) => dates.includes(payment.date) && !payment.closed).forEach((payment) => {
+  paymentsForCashView(date).forEach((payment) => {
     rows.push({
       seccion: "PAGO",
-      fecha: date,
+      fecha: payment.date || date,
       concepto: patientById(payment.patientId)?.name || "",
       metodo: paymentMethodLabel(payment),
       origen: "INGRESO",
@@ -2485,10 +2483,10 @@ function csvRowsForDailyClose(date = todayISO()) {
       comprobante: payment.receipt || ""
     });
   });
-  state.expenses.filter((expense) => dates.includes(expense.date) && !expense.closed).forEach((expense) => {
+  expensesForCashView(date).forEach((expense) => {
     rows.push({
       seccion: "EGRESO",
-      fecha: date,
+      fecha: expense.date || date,
       concepto: expense.detail,
       metodo: expense.method,
       origen: expense.source,
@@ -2502,16 +2500,15 @@ function csvRowsForDailyClose(date = todayISO()) {
 }
 
 function printableRowsForDailyClose(date = todayISO()) {
-  const stored = state.dailyClosures.find((closure) => closure.date === date && Array.isArray(closure.rows));
-  if (stored) return stored.rows;
-  const dates = cashOperationDates(date);
   const session = state.cashSessions.find((item) => item.date === date) || {};
   const opening = Number(session.openingCash || 0);
-  const incomeCash = incomeByMethodsForDate(date, ["EFECTIVO"]);
-  const incomeWallet = incomeByMethodsForDate(date, ["YAPE", "PLIN"]);
-  const incomeBank = incomeByMethodsForDate(date, ["TARJETA", "TRANSFERENCIA"]);
-  const operatingExpenses = dailyCashAffectingExpenseTotal(date);
-  const expected = opening + openIncomeForDate(date) - operatingExpenses;
+  const incomeCash = incomeByMethodsForCashView(date, ["EFECTIVO"]);
+  const incomeWallet = incomeByMethodsForCashView(date, ["YAPE", "PLIN"]);
+  const incomeBank = incomeByMethodsForCashView(date, ["TARJETA", "TRANSFERENCIA"]);
+  const operatingExpenses = cashAffectingExpenseTotalForView(date);
+  const expected = opening + incomeForCashView(date) - operatingExpenses;
+  const closingCash = Number(session.closingCash || 0);
+  const difference = session.closedAt ? Number(session.difference || closingCash - expected) : Number(session.difference || 0);
   const rows = [
     { tipo: "RESUMEN", detalle: "Caja chica inicial", metodo: "", origen: "", monto: opening, comprobante: "" },
     { tipo: "RESUMEN", detalle: "Ingresos efectivo", metodo: "EFECTIVO", origen: "", monto: incomeCash, comprobante: "" },
@@ -2519,10 +2516,10 @@ function printableRowsForDailyClose(date = todayISO()) {
     { tipo: "RESUMEN", detalle: "Ingresos tarjeta + transferencia", metodo: "TARJETA/TRANSFERENCIA", origen: "", monto: incomeBank, comprobante: "" },
     { tipo: "RESUMEN", detalle: "Egresos operativos", metodo: "", origen: "INGRESO_DIA/CAJA_CHICA", monto: -operatingExpenses, comprobante: "" },
     { tipo: "RESUMEN", detalle: "Esperado", metodo: "", origen: "", monto: expected, comprobante: "" },
-    { tipo: "RESUMEN", detalle: "Contado cierre", metodo: "", origen: "", monto: Number(session.closingCash || 0), comprobante: "" },
-    { tipo: "RESUMEN", detalle: "Diferencia", metodo: "", origen: "", monto: Number(session.difference || 0), comprobante: "" }
+    { tipo: "RESUMEN", detalle: "Contado cierre", metodo: "", origen: "", monto: closingCash, comprobante: "" },
+    { tipo: "RESUMEN", detalle: "Diferencia", metodo: "", origen: "", monto: difference, comprobante: "" }
   ];
-  state.payments.filter((payment) => dates.includes(payment.date) && !payment.closed).forEach((payment) => {
+  paymentsForCashView(date).forEach((payment) => {
     rows.push({
       tipo: "PAGO",
       detalle: patientById(payment.patientId)?.name || "",
@@ -2532,7 +2529,7 @@ function printableRowsForDailyClose(date = todayISO()) {
       comprobante: payment.receipt || ""
     });
   });
-  state.expenses.filter((expense) => dates.includes(expense.date) && !expense.closed).forEach((expense) => {
+  expensesForCashView(date).forEach((expense) => {
     rows.push({
       tipo: "EGRESO",
       detalle: expense.detail,
