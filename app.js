@@ -119,6 +119,7 @@ let paymentSaving = false;
 let forcedPaymentHistoryId = "";
 let lastSavedPatientId = "";
 let patientEditingId = "";
+let expandedPatientInfoId = "";
 let selectedCashViewDate = "";
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -1112,6 +1113,45 @@ function renderPatientAppointmentSummary(patientId) {
   </div>`;
 }
 
+function appointmentDetailText(appointment) {
+  return `${formatDate(appointment.date)}${appointment.time ? ` | ${agendaTimeLabel(appointment.time)}` : ""}${appointment.unit ? ` | ${appointment.unit}` : ""}${appointment.doctor ? ` | Dr(a). ${appointment.doctor}` : ""}`;
+}
+
+function renderPatientAppointmentDetail(patientId) {
+  const patient = patientById(patientId);
+  const summary = patientAppointmentSummary(patientId);
+  const appointments = state.appointments
+    .filter((appointment) => String(appointment.patientId) === String(patientId))
+    .slice()
+    .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
+  const futureAppointments = appointments.filter((appointment) => appointment.date >= todayISO()).slice(0, 4);
+  const lastAppointmentItem = appointments.slice().reverse()[0];
+  const items = futureAppointments.length ? futureAppointments : (lastAppointmentItem ? [lastAppointmentItem] : []);
+  const list = items.map((appointment) => {
+    const status = appointmentStatusText(appointment.status);
+    const comment = appointment.notes || appointment.note || appointment.followUpComment || "";
+    return `<div class="patient-appointment-item">
+      <strong>${escapeHtml(status)}</strong>
+      <span>${escapeHtml(appointmentDetailText(appointment))}</span>
+      <span>${escapeHtml(appointment.service || patient?.mainTreatment || "Consulta")}</span>
+      ${comment ? `<span class="muted">${escapeHtml(comment)}</span>` : ""}
+    </div>`;
+  }).join("") || `<p class="muted">No tiene citas registradas.</p>`;
+  return `<div class="patient-appointment-panel patient-appointment-${summary.className}">
+    <div class="patient-appointment-status">
+      <strong>${escapeHtml(summary.title)}</strong>
+      <span>${escapeHtml(summary.detail)}</span>
+    </div>
+    <div class="patient-appointment-grid">
+      <span><strong>Paciente</strong>${escapeHtml(patient?.name || "-")}</span>
+      <span><strong>DNI</strong>${escapeHtml(patient?.dni || "-")}</span>
+      <span><strong>Celular</strong>${escapeHtml(patient?.phone || "-")}</span>
+      <span><strong>Doctor</strong>${escapeHtml(patient?.doctor || "-")}</span>
+    </div>
+    <div class="patient-appointment-list">${list}</div>
+  </div>`;
+}
+
 function patientStatus(patient) {
   if (patient.status === "INACTIVO") return "INACTIVO";
   const last = lastAppointment(patient.id);
@@ -1727,6 +1767,14 @@ function renderPatients() {
   const query = ($("#globalSearch")?.value || "").trim().toLowerCase();
   const filteredPatients = state.patients
     .filter((patient) => [patient.name, patient.dni, patient.phone, patient.birthDate].join(" ").toLowerCase().includes(query));
+  const showAppointmentDetails = Boolean(query);
+  if (!showAppointmentDetails) {
+    expandedPatientInfoId = "";
+  } else if (filteredPatients.length === 1) {
+    expandedPatientInfoId = filteredPatients[0].id;
+  } else if (!filteredPatients.some((patient) => patient.id === expandedPatientInfoId)) {
+    expandedPatientInfoId = "";
+  }
   const counter = $("#patientCount");
   if (counter) {
     counter.textContent = query ? `${filteredPatients.length} de ${state.patients.length} pacientes` : `${state.patients.length} pacientes`;
@@ -1736,17 +1784,20 @@ function renderPatients() {
       const status = patientStatus(patient);
       const ageText = patientAgeText(patient);
       const highlight = patient.id === lastSavedPatientId ? "row-highlight" : "";
-      return `<tr class="${highlight}" data-patient-row="${patient.id}">
+      const expanded = showAppointmentDetails && expandedPatientInfoId === patient.id;
+      const detailButton = showAppointmentDetails ? `<button class="small-btn" data-toggle-patient-info="${patient.id}">${expanded ? "Ocultar cita" : "Ver cita"}</button>` : "";
+      const mainRow = `<tr class="${highlight}" data-patient-row="${patient.id}">
         <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
         <td>${escapeHtml(patient.phone)}${patient.birthDate ? `<br><span class="muted">${formatDate(patient.birthDate)}${ageText ? ` | ${ageText}` : ""}</span>` : ""}</td>
-        <td>${renderPatientAppointmentSummary(patient.id)}</td>
         <td>${escapeHtml(patient.doctor)}</td>
         <td><span class="status ${status === "INACTIVO" ? "danger" : status === "NUEVO" ? "warn" : ""}">${status}</span></td>
         <td>${money(patientDebt(patient.id))}</td>
-        <td class="row-actions"><button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button><button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button></td>
+        <td class="row-actions">${detailButton}<button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button><button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button></td>
       </tr>`;
+      const detailRow = expanded ? `<tr class="patient-detail-row"><td colspan="6">${renderPatientAppointmentDetail(patient.id)}</td></tr>` : "";
+      return mainRow + detailRow;
     });
-  $("#patientsTable").innerHTML = rows.join("") || `<tr><td colspan="7">No hay pacientes para mostrar.</td></tr>`;
+  $("#patientsTable").innerHTML = rows.join("") || `<tr><td colspan="6">No hay pacientes para mostrar.</td></tr>`;
 }
 
 function renderTreatments() {
@@ -3024,9 +3075,15 @@ function bindEvents() {
   });
 
   $("#patientsTable").addEventListener("click", async (event) => {
+    const toggleInfo = event.target.closest("[data-toggle-patient-info]");
     const edit = event.target.closest("[data-edit-patient]");
     const pay = event.target.closest("[data-pay-patient]");
     const del = event.target.closest("[data-delete-patient]");
+    if (toggleInfo) {
+      expandedPatientInfoId = expandedPatientInfoId === toggleInfo.dataset.togglePatientInfo ? "" : toggleInfo.dataset.togglePatientInfo;
+      renderPatients();
+      return;
+    }
     if (edit) {
       const patient = patientById(edit.dataset.editPatient);
       const form = $("#patientForm");
