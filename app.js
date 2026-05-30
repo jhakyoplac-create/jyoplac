@@ -1058,6 +1058,60 @@ function lastAppointment(patientId) {
     .sort((a, b) => b.date.localeCompare(a.date))[0];
 }
 
+function appointmentSortKey(appointment) {
+  return `${appointment.date || ""} ${appointment.time || ""}`;
+}
+
+function appointmentStatusText(status) {
+  const labels = {
+    RESERVADA: "Reservada",
+    CONFIRMADA: "Confirmada",
+    EN_ATENCION: "En atencion",
+    ATENDIDA: "Atendida",
+    NO_ASISTIO: "No asistio",
+    CANCELADA: "Cancelada",
+    REPROGRAMADA: "Reprogramada"
+  };
+  const normalized = String(status || "").trim().toUpperCase();
+  return labels[normalized] || normalized.replace(/_/g, " ") || "Reservada";
+}
+
+function patientAppointmentSummary(patientId) {
+  const appointments = state.appointments
+    .filter((appointment) => String(appointment.patientId) === String(patientId))
+    .slice()
+    .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
+  const next = appointments.find((appointment) => {
+    const status = String(appointment.status || "").toUpperCase();
+    return appointment.date >= todayISO() && !["ATENDIDA", "CANCELADA", "NO_ASISTIO"].includes(status);
+  });
+  if (next) {
+    const status = String(next.status || "").toUpperCase();
+    return {
+      className: status === "REPROGRAMADA" ? "rescheduled" : "scheduled",
+      title: status === "REPROGRAMADA" ? "Reprogramada" : "Citado",
+      detail: `${formatDate(next.date)}${next.time ? ` | ${agendaTimeLabel(next.time)}` : ""}${next.unit ? ` | ${next.unit}` : ""} | ${appointmentStatusText(next.status)}`
+    };
+  }
+  const last = appointments.slice().reverse()[0];
+  if (last) {
+    const status = String(last.status || "").toUpperCase();
+    const detail = `Ultima: ${formatDate(last.date)}${last.time ? ` | ${agendaTimeLabel(last.time)}` : ""}`;
+    if (status === "CANCELADA") return { className: "cancelled", title: "Cita cancelada", detail };
+    if (status === "NO_ASISTIO") return { className: "missed", title: "No asistio", detail };
+    if (status === "REPROGRAMADA") return { className: "rescheduled", title: "Reprogramada", detail };
+  }
+  return { className: "none", title: "No citado", detail: "Sin cita futura registrada" };
+}
+
+function renderPatientAppointmentSummary(patientId) {
+  const summary = patientAppointmentSummary(patientId);
+  return `<div class="patient-appointment patient-appointment-${summary.className}">
+    <strong>${escapeHtml(summary.title)}</strong>
+    <span>${escapeHtml(summary.detail)}</span>
+  </div>`;
+}
+
 function patientStatus(patient) {
   if (patient.status === "INACTIVO") return "INACTIVO";
   const last = lastAppointment(patient.id);
@@ -1685,13 +1739,14 @@ function renderPatients() {
       return `<tr class="${highlight}" data-patient-row="${patient.id}">
         <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
         <td>${escapeHtml(patient.phone)}${patient.birthDate ? `<br><span class="muted">${formatDate(patient.birthDate)}${ageText ? ` | ${ageText}` : ""}</span>` : ""}</td>
+        <td>${renderPatientAppointmentSummary(patient.id)}</td>
         <td>${escapeHtml(patient.doctor)}</td>
         <td><span class="status ${status === "INACTIVO" ? "danger" : status === "NUEVO" ? "warn" : ""}">${status}</span></td>
         <td>${money(patientDebt(patient.id))}</td>
         <td class="row-actions"><button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button><button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button></td>
       </tr>`;
     });
-  $("#patientsTable").innerHTML = rows.join("") || `<tr><td colspan="6">No hay pacientes para mostrar.</td></tr>`;
+  $("#patientsTable").innerHTML = rows.join("") || `<tr><td colspan="7">No hay pacientes para mostrar.</td></tr>`;
 }
 
 function renderTreatments() {

@@ -781,6 +781,41 @@ tr.followup-pending td:first-child {
   background: var(--surface);
 }
 
+.patient-appointment {
+  display: grid;
+  gap: 3px;
+  min-width: 145px;
+  max-width: 210px;
+}
+
+.patient-appointment strong {
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.patient-appointment span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.patient-appointment-scheduled strong {
+  color: #007f91;
+}
+
+.patient-appointment-rescheduled strong {
+  color: var(--amber);
+}
+
+.patient-appointment-cancelled strong,
+.patient-appointment-missed strong {
+  color: var(--coral);
+}
+
+.patient-appointment-none strong {
+  color: var(--muted);
+}
+
 tr.row-highlight td {
   background: #eafff3;
   box-shadow: inset 4px 0 0 var(--green);
