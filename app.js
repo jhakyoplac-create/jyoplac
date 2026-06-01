@@ -937,6 +937,12 @@ function paymentMethodLabel(payment) {
   return parts.length ? `MIXTO (${parts.join(" + ")})` : "MIXTO";
 }
 
+function paymentCashPortion(payment) {
+  const method = String(payment?.method || "").toUpperCase();
+  if (method === "MIXTO") return Number(payment?.cashAmount || 0);
+  return method === "EFECTIVO" ? Number(payment?.amount || 0) : 0;
+}
+
 function incomeForDate(date, method = null) {
   return state.payments
     .filter((payment) => payment.date === date)
@@ -1453,6 +1459,14 @@ function updatePaymentChange() {
   const amount = Number(form.amount.value || 0);
   const method = String(form.method?.value || "").toUpperCase();
   const cashPortion = method === "MIXTO" ? Number(form.cashAmount?.value || 0) : method === "EFECTIVO" ? amount : 0;
+  if (cashPortion <= 0) {
+    form.cashReceived.value = "";
+    form.cashReceived.disabled = true;
+    form.change.value = "";
+    updateMixedPaymentSummary();
+    return;
+  }
+  form.cashReceived.disabled = false;
   const received = Number(form.cashReceived.value || cashPortion || 0);
   form.change.value = Math.max(0, received - cashPortion).toFixed(2);
   updateMixedPaymentSummary();
@@ -2034,11 +2048,12 @@ function renderPayments() {
     .map((payment) => {
       const patient = patientById(payment.patientId);
       const history = historyById(payment.historyId);
+      const showChange = paymentCashPortion(payment) > 0;
       return `<tr>
         <td>${formatDate(cashDate)}</td>
         <td>${escapeHtml(patient?.name || "")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
         <td>${escapeHtml(paymentMethodLabel(payment))}</td>
-        <td><strong>${money(payment.amount)}</strong><br><span class="muted">Vuelto: ${money(payment.change || 0)}</span></td>
+        <td><strong>${money(payment.amount)}</strong>${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}</td>
         ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
       </tr>`;
@@ -3471,7 +3486,8 @@ function bindEvents() {
       return;
     }
     const split = splitResult.split;
-    const cashReceived = Number(data.cashReceived || split.cashAmount || 0);
+    const cashPortion = Number(split.cashAmount || 0);
+    const cashReceived = cashPortion > 0 ? Number(data.cashReceived || cashPortion || 0) : 0;
     const payment = {
       id: data.id || uid("pay"),
       patientId: data.patientId,
@@ -3479,7 +3495,7 @@ function bindEvents() {
       date: cashDate,
       amount,
       cashReceived,
-      change: Math.max(0, cashReceived - Number(split.cashAmount || 0)),
+      change: Math.max(0, cashReceived - cashPortion),
       method: String(data.method || "").toUpperCase(),
       ...split,
       receipt: data.receipt

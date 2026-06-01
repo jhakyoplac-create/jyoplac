@@ -692,7 +692,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 }
                 if method in method_map:
                     split[method_map[method]] = amount
-            cash_received = float(data.get("cashReceived") or split["cash_amount"] or 0)
+            cash_portion = float(split["cash_amount"] or 0)
+            cash_received = float(data.get("cashReceived") or cash_portion or 0) if cash_portion > 0 else 0.0
             with db() as conn:
                 payment_date = open_cash_date(conn) or data["date"]
                 patient = conn.execute(
@@ -754,7 +755,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         payment_date,
                         amount,
                         cash_received,
-                        max(0, cash_received - split["cash_amount"]),
+                        max(0, cash_received - cash_portion),
                         split["cash_amount"],
                         split["yape_amount"],
                         split["plin_amount"],
