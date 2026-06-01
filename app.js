@@ -1276,6 +1276,10 @@ function canCreatePatients() {
   return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
+function canDeletePatients() {
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+}
+
 function applyAuthState() {
   const user = currentUser();
   document.body.classList.toggle("locked", !user);
@@ -1604,6 +1608,19 @@ function syncAppointmentDoctor() {
   if (patient?.doctor) form.doctor.value = patient.doctor;
 }
 
+function normalizedPatientName(patient) {
+  return String(patient?.name || "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+function patientPaymentMissingFields(patient) {
+  const missing = [];
+  if (!String(patient?.name || "").trim()) missing.push("nombre completo");
+  if (!String(patient?.dni || "").trim()) missing.push("DNI");
+  if (!String(patient?.phone || "").trim()) missing.push("numero de celular");
+  if (!String(patient?.birthDate || "").trim()) missing.push("fecha de nacimiento");
+  return missing;
+}
+
 const SLOT_FREE_STATUSES = ["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"];
 
 function isSlotBlockingAppointment(appointment) {
@@ -1654,6 +1671,19 @@ function whatsappPhone(phone) {
 }
 
 function findAppointmentConflict(candidate) {
+  const candidatePatient = patientById(candidate.patientId);
+  const candidateName = normalizedPatientName(candidatePatient);
+  const duplicatePatientAppointment = state.appointments.find((appointment) => {
+    if (appointment.id === candidate.id || appointment.date !== candidate.date || !isSlotBlockingAppointment(appointment)) return false;
+    if (String(appointment.patientId) === String(candidate.patientId)) return true;
+    return Boolean(candidateName && normalizedPatientName(patientById(appointment.patientId)) === candidateName);
+  });
+  if (duplicatePatientAppointment) {
+    return {
+      type: "patient",
+      message: `${candidatePatient?.name || "Este paciente"} ya tiene una cita activa el ${formatDate(duplicatePatientAppointment.date)} a las ${agendaTimeLabel(duplicatePatientAppointment.time)}. Revisa la agenda antes de duplicar el nombre.`
+    };
+  }
   const sameDateTime = state.appointments.filter((appointment) =>
     appointment.id !== candidate.id &&
     appointment.date === candidate.date &&
@@ -1792,7 +1822,7 @@ function renderPatients() {
         <td>${escapeHtml(patient.doctor)}</td>
         <td><span class="status ${status === "INACTIVO" ? "danger" : status === "NUEVO" ? "warn" : ""}">${status}</span></td>
         <td>${money(patientDebt(patient.id))}</td>
-        <td class="row-actions">${detailButton}<button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button><button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button></td>
+        <td class="row-actions">${detailButton}<button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button>${canDeletePatients() ? `<button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button>` : ""}</td>
       </tr>`;
       const detailRow = expanded ? `<tr class="patient-detail-row"><td colspan="6">${renderPatientAppointmentDetail(patient.id)}</td></tr>` : "";
       return mainRow + detailRow;
@@ -3101,6 +3131,10 @@ function bindEvents() {
       renderTreatmentPaymentOptions();
     }
     if (del) {
+      if (!canDeletePatients()) {
+        alert("Tu usuario no tiene permiso para eliminar pacientes.");
+        return;
+      }
       const patient = patientById(del.dataset.deletePatient);
       if (!patient || !confirm(`Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`)) return;
       const id = patient.id;
@@ -3405,6 +3439,24 @@ function bindEvents() {
     if (!data.historyId) {
       alert("Selecciona una atencion pendiente para registrar el pago.");
       restorePaymentButton();
+      return;
+    }
+    const paymentPatient = patientById(data.patientId);
+    const missingPatientFields = patientPaymentMissingFields(paymentPatient);
+    if (missingPatientFields.length) {
+      alert(`Antes de registrar el pago, completa los datos del paciente: ${missingPatientFields.join(", ")}.`);
+      restorePaymentButton();
+      setView("pacientes");
+      const patientForm = $("#patientForm");
+      if (paymentPatient && patientForm) {
+        patientEditingId = paymentPatient.id;
+        Object.entries(paymentPatient).forEach(([key, value]) => {
+          const field = patientForm.elements.namedItem(key);
+          if (field) field.value = value;
+        });
+        const submitButton = patientForm.querySelector('button[type="submit"]');
+        if (submitButton) submitButton.textContent = "Actualizar paciente";
+      }
       return;
     }
     if (amount <= 0 || amount > due) {

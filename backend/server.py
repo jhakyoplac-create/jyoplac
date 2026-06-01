@@ -401,7 +401,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return
             data = read_json(self)
             if data.get("delete"):
-                if not require_role(self, {"ADMIN", "RECEPCION"}):
+                if not require_role(self, {"ADMIN", "DOCTOR"}):
                     return
                 item_id = data.get("id")
                 if not item_id:
@@ -456,6 +456,25 @@ class DentalHandler(SimpleHTTPRequestHandler):
             free_statuses = {"CANCELADA", "REPROGRAMADA", "NO_ASISTIO"}
             with db() as conn:
                 if data.get("status") not in free_statuses:
+                    duplicate_patient = conn.execute(
+                        """
+                        SELECT appointments.time
+                        FROM appointments
+                        LEFT JOIN patients existing_patient ON existing_patient.id = appointments.patient_id
+                        LEFT JOIN patients candidate_patient ON candidate_patient.id = ?
+                        WHERE appointments.date = ?
+                          AND appointments.id <> ?
+                          AND appointments.status NOT IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')
+                          AND (
+                            appointments.patient_id = ?
+                            OR UPPER(TRIM(COALESCE(existing_patient.name, ''))) = UPPER(TRIM(COALESCE(candidate_patient.name, '')))
+                          )
+                        LIMIT 1
+                        """,
+                        (data["patientId"], data["date"], item_id, data["patientId"]),
+                    ).fetchone()
+                    if duplicate_patient:
+                        return send_json(self, {"error": f"Este paciente ya tiene una cita activa ese dia a las {duplicate_patient['time']}."}, 409)
                     conflict_unit = conn.execute(
                         "SELECT id FROM appointments WHERE date=? AND time=? AND unit=? AND id<>? AND status NOT IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')",
                         (data["date"], data["time"], data["unit"], item_id),
@@ -676,6 +695,27 @@ class DentalHandler(SimpleHTTPRequestHandler):
             cash_received = float(data.get("cashReceived") or split["cash_amount"] or 0)
             with db() as conn:
                 payment_date = open_cash_date(conn) or data["date"]
+                patient = conn.execute(
+                    "SELECT name, dni, phone, birth_date FROM patients WHERE id = ?",
+                    (data.get("patientId"),),
+                ).fetchone()
+                if not patient:
+                    return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                missing_patient_fields = []
+                if not str(patient["name"] or "").strip():
+                    missing_patient_fields.append("nombre completo")
+                if not str(patient["dni"] or "").strip():
+                    missing_patient_fields.append("DNI")
+                if not str(patient["phone"] or "").strip():
+                    missing_patient_fields.append("numero de celular")
+                if not str(patient["birth_date"] or "").strip():
+                    missing_patient_fields.append("fecha de nacimiento")
+                if missing_patient_fields:
+                    return send_json(
+                        self,
+                        {"error": "Antes de registrar el pago, completa los datos del paciente: " + ", ".join(missing_patient_fields) + "."},
+                        400,
+                    )
                 history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (data.get("historyId"),)).fetchone()
                 if not history:
                     return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
