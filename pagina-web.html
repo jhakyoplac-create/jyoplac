@@ -94,7 +94,7 @@
               <li>Pagos, caja y reportes.</li>
             </ul>
             <div class="product-actions">
-              <a href="#demos">Ver demo</a>
+              <a href="#demos" data-demo-link="dental">Ver demo</a>
               <a
                 href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20la%20App%20Dental%20de%20EmpresaFacil."
                 target="_blank"
@@ -113,7 +113,7 @@
               <li>Alertas de productos bajos.</li>
             </ul>
             <div class="product-actions">
-              <a href="#demos">Ver demo</a>
+              <a href="#demos" data-demo-link="abarrotes">Ver demo</a>
               <a
                 href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20la%20App%20Abarrotes%20de%20EmpresaFacil."
                 target="_blank"
@@ -132,7 +132,7 @@
               <li>Reportes por fecha.</li>
             </ul>
             <div class="product-actions">
-              <a href="#demos">Ver demo</a>
+              <a href="#demos" data-demo-link="ventas">Ver demo</a>
               <a
                 href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20la%20App%20Ventas%20y%20Caja%20de%20EmpresaFacil."
                 target="_blank"
@@ -151,7 +151,7 @@
               <li>Cierre de caja y resumen del dia.</li>
             </ul>
             <div class="product-actions">
-              <a href="#demos">Ver demo</a>
+              <a href="#demos" data-demo-link="billar">Ver demo</a>
               <a
                 href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20la%20App%20Billar%20de%20EmpresaFacil."
                 target="_blank"
@@ -170,7 +170,7 @@
               <li>Publicacion web o local.</li>
             </ul>
             <div class="product-actions">
-              <a href="#demos">Ver ideas</a>
+              <a href="#demos" data-demo-link="dental">Ver ideas</a>
               <a
                 href="https://wa.me/51930914176?text=Hola%2C%20quiero%20cotizar%20un%20sistema%20a%20medida%20con%20EmpresaFacil."
                 target="_blank"
@@ -184,67 +184,163 @@
 
       <section class="section demos-section" id="demos">
         <div class="section-heading">
-          <p class="eyebrow">Demos y capturas</p>
-          <h2>Muestra visual para explicar cada sistema en segundos</h2>
+          <p class="eyebrow">Demo interactiva</p>
+          <h2>Prueba una vista corta de como funciona cada sistema</h2>
           <p>
-            Usa estas vistas como punto de partida para conversar con clientes. Luego se pueden reemplazar por capturas
-            reales de cada sistema cuando tengas una demo final publicada.
+            El cliente puede revisar una demostracion pequena dentro de la pagina. Si quiere probar el sistema completo,
+            tambien puede pedir una demo guiada por WhatsApp.
           </p>
         </div>
-        <div class="demo-grid">
-          <article class="demo-card">
-            <div class="demo-window demo-dental" aria-hidden="true">
-              <div class="demo-sidebar"></div>
-              <div class="demo-content">
-                <span></span>
-                <div class="demo-bars"></div>
-                <div class="demo-row"></div>
-                <div class="demo-row short"></div>
+        <div class="live-demo" data-active-demo="dental">
+          <div class="demo-tabs" role="tablist" aria-label="Demos disponibles">
+            <button class="active" type="button" data-demo-tab="dental">Dental</button>
+            <button type="button" data-demo-tab="abarrotes">Abarrotes</button>
+            <button type="button" data-demo-tab="ventas">Ventas y caja</button>
+            <button type="button" data-demo-tab="billar">Billar</button>
+          </div>
+
+          <article class="demo-panel active" data-demo-panel="dental">
+            <div class="demo-screen">
+              <div class="demo-appbar">
+                <strong>CM Dental</strong>
+                <span>Agenda de hoy</span>
+              </div>
+              <div class="demo-layout">
+                <aside>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </aside>
+                <div class="demo-main">
+                  <div class="demo-stats">
+                    <div><strong>8</strong><span>Citas</span></div>
+                    <div><strong>3</strong><span>Pagos</span></div>
+                    <div><strong>S/ 420</strong><span>Caja</span></div>
+                  </div>
+                  <div class="demo-table">
+                    <div><strong>09:00</strong><span>Paciente nuevo</span><em>Confirmada</em></div>
+                    <div><strong>10:30</strong><span>Control ortodoncia</span><em>En espera</em></div>
+                    <div><strong>12:00</strong><span>Limpieza dental</span><em>Atendida</em></div>
+                  </div>
+                </div>
               </div>
             </div>
-            <h3>Demo App Dental</h3>
-            <p>Agenda, pacientes, tratamientos, pagos y reportes para consultorios odontologicos.</p>
-            <a
-              class="demo-link"
-              href="https://wa.me/51930914176?text=Hola%2C%20quiero%20ver%20la%20demo%20de%20la%20App%20Dental."
-              target="_blank"
-              rel="noreferrer"
-              >Solicitar demo dental</a
-            >
-          </article>
-          <article class="demo-card">
-            <div class="demo-window demo-store" aria-hidden="true">
-              <div class="demo-tile wide"></div>
-              <div class="demo-tile"></div>
-              <div class="demo-tile"></div>
-              <div class="demo-list"></div>
+            <div class="demo-copy">
+              <h3>Asi funciona la App Dental</h3>
+              <ol>
+                <li>Registras al paciente y su tratamiento.</li>
+                <li>Agendas la cita con doctor, hora y estado.</li>
+                <li>Controlas pagos, historial y caja del dia.</li>
+              </ol>
+              <a
+                class="demo-link"
+                href="https://wa.me/51930914176?text=Hola%2C%20quiero%20ver%20la%20demo%20completa%20de%20la%20App%20Dental."
+                target="_blank"
+                rel="noreferrer"
+                >Pedir demo completa</a
+              >
             </div>
-            <h3>Demo App Abarrotes</h3>
-            <p>Ventas, stock, caja, productos bajos y resumen diario para tiendas y minimarkets.</p>
-            <a
-              class="demo-link"
-              href="https://wa.me/51930914176?text=Hola%2C%20quiero%20ver%20la%20demo%20de%20la%20App%20Abarrotes."
-              target="_blank"
-              rel="noreferrer"
-              >Solicitar demo abarrotes</a
-            >
           </article>
-          <article class="demo-card">
-            <div class="demo-window demo-billar" aria-hidden="true">
-              <div class="pool-table active"></div>
-              <div class="pool-table"></div>
-              <div class="pool-table active"></div>
-              <div class="pool-summary"></div>
+
+          <article class="demo-panel" data-demo-panel="abarrotes">
+            <div class="demo-screen">
+              <div class="demo-appbar store">
+                <strong>MiniMarket</strong>
+                <span>Venta rapida</span>
+              </div>
+              <div class="pos-layout">
+                <div class="pos-products">
+                  <button>Arroz</button>
+                  <button>Azucar</button>
+                  <button>Aceite</button>
+                  <button>Leche</button>
+                  <button>Fideos</button>
+                  <button>Galletas</button>
+                </div>
+                <div class="pos-ticket">
+                  <strong>Ticket</strong>
+                  <span>Arroz x2 - S/ 9.00</span>
+                  <span>Aceite x1 - S/ 8.50</span>
+                  <span>Leche x3 - S/ 12.00</span>
+                  <b>Total S/ 29.50</b>
+                </div>
+              </div>
             </div>
-            <h3>Demo App Billar</h3>
-            <p>Control de mesas, tiempo de juego, consumo, pagos y cierre de caja para salas de billar.</p>
-            <a
-              class="demo-link"
-              href="https://wa.me/51930914176?text=Hola%2C%20quiero%20ver%20la%20demo%20de%20la%20App%20Billar."
-              target="_blank"
-              rel="noreferrer"
-              >Solicitar demo billar</a
-            >
+            <div class="demo-copy">
+              <h3>Asi funciona la App Abarrotes</h3>
+              <ol>
+                <li>Seleccionas productos o los buscas por nombre.</li>
+                <li>El sistema descuenta stock automaticamente.</li>
+                <li>Cierras caja y ves productos bajos.</li>
+              </ol>
+              <a
+                class="demo-link"
+                href="https://wa.me/51930914176?text=Hola%2C%20quiero%20ver%20la%20demo%20completa%20de%20la%20App%20Abarrotes."
+                target="_blank"
+                rel="noreferrer"
+                >Pedir demo completa</a
+              >
+            </div>
+          </article>
+
+          <article class="demo-panel" data-demo-panel="ventas">
+            <div class="demo-screen">
+              <div class="demo-appbar sales">
+                <strong>Ventas y Caja</strong>
+                <span>Resumen diario</span>
+              </div>
+              <div class="cash-layout">
+                <div class="cash-card"><strong>S/ 850</strong><span>Ingresos</span></div>
+                <div class="cash-card"><strong>S/ 120</strong><span>Egresos</span></div>
+                <div class="cash-card"><strong>S/ 730</strong><span>Saldo</span></div>
+                <div class="cash-chart"><span></span><span></span><span></span><span></span></div>
+              </div>
+            </div>
+            <div class="demo-copy">
+              <h3>Asi funciona Ventas y Caja</h3>
+              <ol>
+                <li>Registras ventas, gastos y cuentas por cobrar.</li>
+                <li>Revisas el movimiento por fecha o usuario.</li>
+                <li>Obtienes un cierre claro para decidir mejor.</li>
+              </ol>
+              <a
+                class="demo-link"
+                href="https://wa.me/51930914176?text=Hola%2C%20quiero%20ver%20la%20demo%20completa%20de%20Ventas%20y%20Caja."
+                target="_blank"
+                rel="noreferrer"
+                >Pedir demo completa</a
+              >
+            </div>
+          </article>
+
+          <article class="demo-panel" data-demo-panel="billar">
+            <div class="demo-screen">
+              <div class="demo-appbar billar">
+                <strong>Sala Billar</strong>
+                <span>Mesas activas</span>
+              </div>
+              <div class="billar-layout">
+                <div class="table-card active"><strong>Mesa 1</strong><span>01:20 h</span><em>S/ 16.00</em></div>
+                <div class="table-card"><strong>Mesa 2</strong><span>Libre</span><em>S/ 0.00</em></div>
+                <div class="table-card active"><strong>Mesa 3</strong><span>00:45 h</span><em>S/ 9.00</em></div>
+                <div class="table-card"><strong>Mesa 4</strong><span>Libre</span><em>S/ 0.00</em></div>
+              </div>
+            </div>
+            <div class="demo-copy">
+              <h3>Asi funciona la App Billar</h3>
+              <ol>
+                <li>Abres una mesa y empieza el control de tiempo.</li>
+                <li>Agregas consumo del cliente durante el juego.</li>
+                <li>Cobras, liberas la mesa y cierras caja.</li>
+              </ol>
+              <a
+                class="demo-link"
+                href="https://wa.me/51930914176?text=Hola%2C%20quiero%20ver%20la%20demo%20completa%20de%20la%20App%20Billar."
+                target="_blank"
+                rel="noreferrer"
+                >Pedir demo completa</a
+              >
+            </div>
           </article>
         </div>
       </section>
@@ -336,5 +432,6 @@
       <span>EmpresaFacil</span>
       <span>Apps para dental, abarrotes, ventas y mas negocios</span>
     </footer>
+    <script src="pagina-web.js"></script>
   </body>
 </html>
