@@ -330,6 +330,143 @@ h3 {
   background: var(--teal);
 }
 
+.card-demo {
+  margin-top: 20px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dcebed;
+  border-radius: 8px;
+  background: #f8fcfd;
+}
+
+.mini-head,
+.mini-kpis,
+.mini-products,
+.mini-tables,
+.mini-flow {
+  display: grid;
+  gap: 8px;
+}
+
+.mini-head {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.mini-head strong {
+  color: var(--navy);
+}
+
+.mini-head span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eaf0ff;
+  color: var(--teal);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.mini-kpis,
+.mini-products,
+.mini-tables,
+.mini-flow {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.mini-kpis span,
+.mini-products span,
+.mini-tables span,
+.mini-flow span,
+.mini-row,
+.mini-total {
+  min-height: 34px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  color: #314f58;
+  font-size: 0.86rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.mini-row {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.mini-row b {
+  color: var(--teal);
+}
+
+.mini-total {
+  display: grid;
+  place-items: center;
+  color: var(--teal);
+}
+
+.mini-bars {
+  height: 58px;
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.mini-bars span {
+  width: 100%;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, #165dff, #19a7ce);
+}
+
+.mini-bars span:nth-child(1) {
+  height: 48%;
+}
+
+.mini-bars span:nth-child(2) {
+  height: 82%;
+}
+
+.mini-bars span:nth-child(3) {
+  height: 64%;
+}
+
+.store-mini .mini-head span {
+  background: #e7fbf2;
+  color: #10845f;
+}
+
+.cash-mini .mini-head span {
+  background: #fff2e8;
+  color: #b84f2c;
+}
+
+.billar-mini .mini-tables {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.billar-mini .mini-tables span {
+  min-height: 54px;
+  display: grid;
+  place-items: center;
+  background: #207a4d;
+  color: #fff;
+  border: 5px solid #6b4a2d;
+}
+
+.custom-mini .mini-flow {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.custom-mini .mini-head span {
+  background: #f1eaff;
+  color: var(--purple);
+}
+
 .product-actions {
   margin-top: auto;
   padding-top: 20px;
