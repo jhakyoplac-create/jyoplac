@@ -476,6 +476,7 @@ h3 {
 }
 
 .product-actions a,
+.product-actions button,
 .demo-link {
   min-height: 40px;
   display: inline-flex;
@@ -486,7 +487,14 @@ h3 {
   font-weight: 900;
 }
 
-.product-actions a:first-child {
+.product-actions button {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.product-actions a:first-child,
+.product-actions button:first-child {
   background: #edf7ff;
   color: #155a8a;
 }
@@ -496,6 +504,145 @@ h3 {
   background: var(--teal);
   color: #fff;
   box-shadow: 0 10px 22px rgba(22, 93, 255, 0.16);
+}
+
+.product-visual {
+  min-height: 128px;
+  margin: 20px 0 22px;
+  border: 1px solid #dcebed;
+  border-radius: 8px;
+  background: #f8fcfd;
+  position: relative;
+  overflow: hidden;
+}
+
+.product-visual::before,
+.product-visual::after {
+  content: "";
+  position: absolute;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(17, 47, 54, 0.07);
+}
+
+.dental-visual {
+  background: linear-gradient(135deg, #edf5ff, #e9fbf4);
+}
+
+.dental-visual::before {
+  width: 64px;
+  height: 82px;
+  left: 18px;
+  top: 18px;
+  background: linear-gradient(180deg, #165dff, #19a7ce);
+}
+
+.dental-visual::after {
+  width: 130px;
+  height: 34px;
+  right: 18px;
+  top: 24px;
+  box-shadow: 0 48px 0 #fff, 0 88px 0 #fff;
+}
+
+.store-visual {
+  background: linear-gradient(135deg, #f0fff7, #fff8eb);
+}
+
+.store-visual::before {
+  width: 78%;
+  height: 34px;
+  left: 18px;
+  top: 18px;
+  background: #35c79b;
+}
+
+.store-visual::after {
+  width: 42%;
+  height: 34px;
+  left: 18px;
+  bottom: 18px;
+  box-shadow: 92px 0 0 #fff, 184px 0 0 #fff;
+}
+
+.sales-visual {
+  background: linear-gradient(135deg, #fff6ee, #eef4ff);
+}
+
+.sales-visual::before {
+  width: 54px;
+  height: 42px;
+  left: 18px;
+  bottom: 18px;
+  background: linear-gradient(180deg, #165dff, #19a7ce);
+  box-shadow: 70px -24px 0 #165dff, 140px -6px 0 #19a7ce;
+}
+
+.sales-visual::after {
+  width: 160px;
+  height: 30px;
+  right: 18px;
+  top: 18px;
+}
+
+.billar-visual {
+  background: linear-gradient(135deg, #eef8f0, #f4ede6);
+}
+
+.billar-visual::before {
+  width: 76%;
+  height: 76px;
+  left: 12%;
+  top: 24px;
+  border: 8px solid #6b4a2d;
+  background: #207a4d;
+}
+
+.billar-visual::after {
+  width: 13px;
+  height: 13px;
+  left: 42%;
+  top: 54px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 28px 18px 0 #f4b942, 56px 2px 0 #e76f51;
+}
+
+.custom-visual {
+  background: linear-gradient(135deg, #f4eeff, #eef9ff);
+}
+
+.custom-visual::before {
+  width: 62px;
+  height: 62px;
+  left: 18px;
+  top: 28px;
+  background: #7c3aed;
+  box-shadow: 88px 0 0 #165dff, 176px 0 0 #35c79b;
+}
+
+.custom-visual::after {
+  width: 72%;
+  height: 28px;
+  left: 18px;
+  bottom: 18px;
+}
+
+.feature-pills {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feature-pills span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f1f8fa;
+  color: #31515b;
+  font-size: 0.82rem;
+  font-weight: 900;
 }
 
 .featured-product {
@@ -958,6 +1105,165 @@ h3 {
   font-weight: 700;
 }
 
+.demo-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: none;
+}
+
+.demo-modal.open {
+  display: block;
+}
+
+.demo-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 18, 32, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.demo-dialog {
+  width: min(1080px, calc(100% - 28px));
+  max-height: calc(100svh - 32px);
+  overflow: auto;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 24px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 30px 80px rgba(10, 18, 32, 0.32);
+}
+
+.demo-close {
+  min-height: 38px;
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #eef6f8;
+  color: var(--navy);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+
+.demo-dialog-head {
+  max-width: 720px;
+  padding-right: 98px;
+}
+
+.demo-dialog-head h2 {
+  margin-bottom: 10px;
+}
+
+.demo-preview {
+  min-height: 430px;
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid #dcebed;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f6fbff, #edf7fa);
+}
+
+.demo-ui-bar {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #165dff, #19a7ce);
+  color: #fff;
+}
+
+.demo-ui-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 0.82fr 1.18fr;
+  gap: 16px;
+}
+
+.demo-ui-panel,
+.demo-ui-list,
+.demo-ui-ticket {
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(17, 47, 54, 0.07);
+}
+
+.demo-ui-panel {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.demo-ui-panel div,
+.demo-ui-list div,
+.demo-ui-ticket div {
+  padding: 12px;
+  border-radius: 8px;
+  background: #f7fbfc;
+}
+
+.demo-ui-panel strong,
+.demo-ui-panel span,
+.demo-ui-list strong,
+.demo-ui-list span,
+.demo-ui-ticket strong,
+.demo-ui-ticket span,
+.demo-dialog-foot strong,
+.demo-dialog-foot span {
+  display: block;
+}
+
+.demo-ui-panel span,
+.demo-ui-list span,
+.demo-ui-ticket span,
+.demo-dialog-foot span {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.demo-ui-list {
+  display: grid;
+  gap: 10px;
+}
+
+.demo-ui-list div {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.demo-ui-list em {
+  color: #10845f;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.demo-dialog-foot {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border-radius: 8px;
+  background: #f8fcfd;
+}
+
+body.demo-open {
+  overflow: hidden;
+}
+
 @media (max-width: 900px) {
   .site-header {
     position: absolute;
@@ -1004,6 +1310,17 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .demo-ui-grid,
+  .demo-ui-panel,
+  .demo-ui-list div {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-dialog-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .split-section {
     gap: 24px;
   }
@@ -1047,5 +1364,22 @@ h3 {
   .package-card,
   .contact-band {
     padding: 24px;
+  }
+
+  .demo-dialog {
+    padding: 18px;
+  }
+
+  .demo-dialog-head {
+    padding-right: 0;
+  }
+
+  .demo-close {
+    position: static;
+    margin-left: auto;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 }
