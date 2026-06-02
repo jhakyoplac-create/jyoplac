@@ -164,3 +164,23 @@ document.querySelectorAll("[data-demo-close]").forEach((trigger) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeDemo();
 });
+
+const leadForm = document.getElementById("leadForm");
+
+if (leadForm) {
+  leadForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(leadForm);
+    const message = [
+      "Hola, quiero informacion de EmpresaFacil.",
+      `Nombre: ${data.get("name") || ""}`,
+      `Email: ${data.get("email") || ""}`,
+      `Empresa: ${data.get("company") || ""}`,
+      `Telefono: ${data.get("phone") || ""}`,
+      `Sistema: ${data.get("product") || ""}`,
+      `Objetivo: ${data.get("goal") || ""}`,
+      `Web/redes: ${data.get("website") || ""}`
+    ].join("\n");
+    window.open(`https://wa.me/51930914176?text=${encodeURIComponent(message)}`, "_blank", "noopener");
+  });
+}

@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#078f88" />
     <meta
       name="description"
-      content="EmpresaFacil crea sistemas web para negocios: app dental, abarrotes, billar, ventas, caja e inventario."
+      content="EmpresaFacil desarrolla sistemas web para dental, abarrotes, billar, ventas, caja e inventario."
     />
     <title>EmpresaFacil | Sistemas web para negocios</title>
     <link rel="icon" href="assets/empresa-facil-icon.svg" type="image/svg+xml" />
@@ -18,185 +18,162 @@
         <span class="brand-mark">EF</span>
         <span>
           <strong>EmpresaFacil</strong>
-          <small>Sistemas para negocios</small>
+          <small>Sistemas para vender mas</small>
         </span>
       </a>
       <nav class="site-nav" aria-label="Secciones">
+        <a href="#vision">Vision 360</a>
         <a href="#productos">Productos</a>
-        <a href="#proceso">Proceso</a>
-        <a href="#incluye">Incluye</a>
+        <a href="#soluciones">Soluciones</a>
         <a href="#contacto">Contacto</a>
       </nav>
-      <button class="nav-demo" type="button" data-demo-link="dental">Ver demo</button>
+      <a class="nav-action" href="#contacto">Cotizar</a>
     </header>
 
-    <main>
-      <section class="hero" id="inicio">
-        <div class="hero-bg" aria-hidden="true"></div>
-        <div class="hero-inner">
+    <main id="inicio">
+      <section class="hero">
+        <div class="hero-visual">
+          <img src="assets/empresa-facil-suite.png" alt="Sistemas EmpresaFacil en laptop, tablet y celular" />
           <div class="hero-copy">
-            <p class="eyebrow">Software simple, presentable y listo para vender</p>
-            <h1>Sistemas web para negocios que quieren orden y crecimiento</h1>
+            <p class="eyebrow">Digitaliza tu operacion comercial</p>
+            <h1>Optimiza tu gestion y potencia tus ventas</h1>
             <p>
-              EmpresaFacil convierte procesos diarios como citas, ventas, inventario, mesas, caja y reportes en una
-              plataforma clara para trabajar mejor desde el primer dia.
+              Sistemas web para controlar citas, inventario, caja, mesas, clientes y reportes desde una plataforma
+              clara, moderna y adaptable a cada negocio.
             </p>
             <div class="hero-actions">
-              <button class="primary" type="button" data-demo-link="dental">Explorar demo</button>
-              <a
-                class="secondary"
-                href="https://wa.me/51930914176?text=Hola%2C%20quiero%20cotizar%20un%20sistema%20con%20EmpresaFacil."
-                target="_blank"
-                rel="noreferrer"
-                >Cotizar por WhatsApp</a
-              >
-            </div>
-            <div class="trust-row" aria-label="Beneficios principales">
-              <span>Instalacion</span>
-              <span>Personalizacion</span>
-              <span>Soporte inicial</span>
-            </div>
-          </div>
-
-          <div class="hero-stage" aria-label="Vista de sistema EmpresaFacil">
-            <div class="screen-shell">
-              <div class="screen-top">
-                <span></span>
-                <span></span>
-                <span></span>
-                <strong>Dashboard EmpresaFacil</strong>
-              </div>
-              <div class="screen-grid">
-                <aside class="screen-side">
-                  <b>EF</b>
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </aside>
-                <div class="screen-main">
-                  <div class="metric-row">
-                    <div><strong>24</strong><span>Operaciones</span></div>
-                    <div><strong>S/ 1,280</strong><span>Caja</span></div>
-                    <div><strong>8</strong><span>Alertas</span></div>
-                  </div>
-                  <div class="chart-card">
-                    <span></span><span></span><span></span><span></span><span></span>
-                  </div>
-                  <div class="activity-list">
-                    <div><b>09:00</b><span>Nueva cita registrada</span><em>Dental</em></div>
-                    <div><b>11:25</b><span>Venta descontada de stock</span><em>Abarrotes</em></div>
-                    <div><b>18:10</b><span>Mesa cobrada y liberada</span><em>Billar</em></div>
-                  </div>
-                </div>
-              </div>
+              <button class="primary" type="button" data-demo-link="dental">Ver demo rapida</button>
+              <a class="secondary" href="#productos">Explorar productos</a>
             </div>
           </div>
         </div>
+
+        <aside class="lead-form-card" id="contacto">
+          <div class="form-title">
+            <h2>Completa el formulario y te contactamos</h2>
+          </div>
+          <form id="leadForm" class="lead-form">
+            <input name="name" placeholder="Nombre" required />
+            <input name="email" type="email" placeholder="Email" />
+            <input name="company" placeholder="Empresa o negocio" />
+            <div class="phone-field">
+              <span>PE +51</span>
+              <input name="phone" inputmode="tel" placeholder="Telefono" />
+            </div>
+            <select name="product">
+              <option value="">Que sistema te interesa?</option>
+              <option>App Dental</option>
+              <option>App Abarrotes</option>
+              <option>App Billar</option>
+              <option>Ventas y Caja</option>
+              <option>Sistema a medida</option>
+            </select>
+            <select name="goal">
+              <option value="">Cual es tu principal objetivo?</option>
+              <option>Ordenar mis ventas y caja</option>
+              <option>Controlar inventario</option>
+              <option>Gestionar citas o reservas</option>
+              <option>Crear un sistema para vender</option>
+            </select>
+            <input name="website" placeholder="Pagina web o redes de tu negocio" />
+            <button class="form-submit" type="submit">Enviar solicitud</button>
+          </form>
+        </aside>
       </section>
 
-      <section class="logos-band" aria-label="Rubros atendidos">
-        <span>Clinicas</span>
-        <span>Abarrotes</span>
-        <span>Billar</span>
-        <span>Ventas</span>
-        <span>Inventario</span>
-        <span>Servicios</span>
-      </section>
-
-      <section class="section products-section" id="productos">
-        <div class="section-head">
-          <p class="eyebrow">Productos</p>
-          <h2>Sistemas listos para mostrar, vender e implementar</h2>
+      <section class="vision-section" id="vision">
+        <div class="section-heading centered">
+          <p class="eyebrow">Vision comercial 360</p>
+          <h2>De la idea al sistema funcionando</h2>
         </div>
+        <div class="timeline">
+          <article>
+            <div class="timeline-art prospectos"></div>
+            <span>1</span>
+            <h3>Entendemos el negocio</h3>
+            <p>Identificamos procesos, clientes, caja, ventas e informacion clave.</p>
+          </article>
+          <article>
+            <div class="timeline-art demo"></div>
+            <span>2</span>
+            <h3>Mostramos una demo</h3>
+            <p>El cliente ve el flujo visual antes de decidir la implementacion.</p>
+          </article>
+          <article>
+            <div class="timeline-art venta"></div>
+            <span>3</span>
+            <h3>Personalizamos</h3>
+            <p>Ajustamos rubro, colores, usuarios, reportes y forma de trabajo.</p>
+          </article>
+          <article>
+            <div class="timeline-art indicadores"></div>
+            <span>4</span>
+            <h3>Entregamos control</h3>
+            <p>El negocio queda con datos claros para decidir y crecer.</p>
+          </article>
+        </div>
+      </section>
 
-        <div class="products-grid">
-          <article class="product-card">
-            <div class="product-visual dental-visual" aria-hidden="true"></div>
-            <span class="product-kicker">Consultorios</span>
-            <h3>App Dental</h3>
-            <p>Agenda, pacientes, tratamientos, historial, pagos y caja.</p>
-            <div class="product-actions">
+      <section class="products-section" id="productos">
+        <div class="section-heading">
+          <p class="eyebrow">Productos actuales</p>
+          <h2>Sistemas listos para presentar y vender</h2>
+        </div>
+        <div class="product-showcase">
+          <article class="product-panel dental">
+            <div class="panel-visual"></div>
+            <div>
+              <span>Clinicas y consultorios</span>
+              <h3>App Dental</h3>
+              <p>Pacientes, agenda, historial clinico, tratamientos, pagos y caja.</p>
               <button type="button" data-demo-link="dental">Ver demo</button>
-              <a href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20la%20App%20Dental%20de%20EmpresaFacil." target="_blank" rel="noreferrer">Consultar</a>
             </div>
           </article>
-
-          <article class="product-card">
-            <div class="product-visual store-visual" aria-hidden="true"></div>
-            <span class="product-kicker">Comercios</span>
-            <h3>App Abarrotes</h3>
-            <p>Ventas rapidas, stock, productos, proveedores y cierre diario.</p>
-            <div class="product-actions">
+          <article class="product-panel store">
+            <div class="panel-visual"></div>
+            <div>
+              <span>Bodegas y minimarkets</span>
+              <h3>App Abarrotes</h3>
+              <p>Ventas rapidas, stock, proveedores, productos bajos y cierre diario.</p>
               <button type="button" data-demo-link="abarrotes">Ver demo</button>
-              <a href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20la%20App%20Abarrotes%20de%20EmpresaFacil." target="_blank" rel="noreferrer">Consultar</a>
             </div>
           </article>
-
-          <article class="product-card">
-            <div class="product-visual billar-visual" aria-hidden="true"></div>
-            <span class="product-kicker">Entretenimiento</span>
-            <h3>App Billar</h3>
-            <p>Mesas activas, tiempo de juego, consumo, pagos y caja.</p>
-            <div class="product-actions">
+          <article class="product-panel billar">
+            <div class="panel-visual"></div>
+            <div>
+              <span>Salas de juego</span>
+              <h3>App Billar</h3>
+              <p>Mesas activas, tiempo de juego, consumo, cobro y caja.</p>
               <button type="button" data-demo-link="billar">Ver demo</button>
-              <a href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20la%20App%20Billar%20de%20EmpresaFacil." target="_blank" rel="noreferrer">Consultar</a>
-            </div>
-          </article>
-
-          <article class="product-card">
-            <div class="product-visual sales-visual" aria-hidden="true"></div>
-            <span class="product-kicker">Gestion</span>
-            <h3>Ventas y Caja</h3>
-            <p>Ingresos, egresos, cuentas por cobrar, saldos y reportes.</p>
-            <div class="product-actions">
-              <button type="button" data-demo-link="ventas">Ver demo</button>
-              <a href="https://wa.me/51930914176?text=Hola%2C%20quiero%20informacion%20sobre%20Ventas%20y%20Caja%20de%20EmpresaFacil." target="_blank" rel="noreferrer">Consultar</a>
             </div>
           </article>
         </div>
       </section>
 
-      <section class="section process-section" id="proceso">
-        <div class="section-head compact">
-          <p class="eyebrow">Proceso</p>
-          <h2>Del primer mensaje a un sistema funcionando</h2>
+      <section class="solutions-section" id="soluciones">
+        <div class="section-heading centered">
+          <p class="eyebrow">Soluciones para vender mas</p>
+          <h2>Herramientas que hacen que el sistema se sienta completo</h2>
         </div>
-        <div class="process-grid">
-          <article><span>01</span><h3>Demo</h3><p>Se muestra el sistema segun el rubro del cliente.</p></article>
-          <article><span>02</span><h3>Ajuste</h3><p>Se personaliza nombre, datos, usuarios y modulos.</p></article>
-          <article><span>03</span><h3>Entrega</h3><p>Se publica o instala, con soporte inicial para empezar.</p></article>
-        </div>
-      </section>
-
-      <section class="section included-section" id="incluye">
-        <div class="included-copy">
-          <p class="eyebrow">Incluye</p>
-          <h2>Lo que el cliente espera de un sistema serio</h2>
-          <p>
-            Una experiencia clara para usar, presentar y vender: interfaz moderna, datos organizados y opciones para
-            crecer con nuevas funciones.
-          </p>
-        </div>
-        <div class="included-list">
-          <div><strong>Marca del negocio</strong><span>Nombre, colores y datos principales.</span></div>
-          <div><strong>Panel administrativo</strong><span>Usuarios, operaciones, reportes y control.</span></div>
-          <div><strong>Publicacion flexible</strong><span>Uso local, red interna o nube.</span></div>
-          <div><strong>Soporte inicial</strong><span>Acompanamiento para la primera puesta en marcha.</span></div>
+        <div class="solution-grid">
+          <article><div class="solution-icon seguimiento"></div><h3>Seguimiento de clientes</h3><p>Registra contactos, citas, ventas y oportunidades en un solo lugar.</p></article>
+          <article><div class="solution-icon inventario"></div><h3>Cotizador e inventario</h3><p>Consulta stock, precios y genera operaciones sin perder informacion.</p></article>
+          <article><div class="solution-icon tickets"></div><h3>Ventas, caja y tickets</h3><p>Cierra el dia con ingresos, egresos, saldos y reportes claros.</p></article>
+          <article><div class="solution-icon reportes"></div><h3>Personalizacion y reportes</h3><p>Adapta el sistema al negocio y mide lo que realmente importa.</p></article>
         </div>
       </section>
 
-      <section class="cta-section" id="contacto">
+      <section class="final-cta">
         <div>
-          <p class="eyebrow">Siguiente paso</p>
-          <h2>Elige un rubro y preparamos una demo comercial</h2>
+          <p class="eyebrow">EmpresaFacil</p>
+          <h2>Preparamos una demo para el rubro que quieres vender</h2>
         </div>
         <a
           class="primary"
           href="https://wa.me/51930914176?text=Hola%2C%20quiero%20una%20demo%20de%20EmpresaFacil."
           target="_blank"
           rel="noreferrer"
-          >Escribir por WhatsApp</a
+          >Hablar por WhatsApp</a
         >
       </section>
     </main>
@@ -206,7 +183,7 @@
       <section class="demo-dialog" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
         <button class="demo-close" type="button" data-demo-close aria-label="Cerrar demo">Cerrar</button>
         <div class="demo-dialog-head">
-          <span class="product-kicker" id="demoTag">Demo</span>
+          <span class="eyebrow" id="demoTag">Demo</span>
           <h2 id="demoTitle">Demo EmpresaFacil</h2>
           <p id="demoIntro">Vista rapida del sistema.</p>
         </div>
@@ -223,7 +200,7 @@
 
     <footer class="footer">
       <span>EmpresaFacil</span>
-      <span>Sistemas web para negocios reales</span>
+      <span>Sistemas para dental, abarrotes, billar, ventas e inventario</span>
     </footer>
     <script src="pagina-web.js"></script>
   </body>
