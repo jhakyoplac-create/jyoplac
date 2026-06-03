@@ -54,28 +54,12 @@ select {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
-.brand-mark {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--teal);
-  color: #fff;
-  font-weight: 900;
-}
-
-.brand strong,
-.brand small {
+.brand-logo {
+  width: 220px;
+  height: auto;
   display: block;
-}
-
-.brand small {
-  color: var(--muted);
-  margin-top: 2px;
 }
 
 .site-nav {
