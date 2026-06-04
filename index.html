@@ -801,6 +801,29 @@
       </form>
     </dialog>
 
+    <dialog id="receptionPatientsDialog">
+      <div class="form modal-form wide-modal">
+        <div class="panel-head">
+          <h2 id="receptionPatientsTitle">Pacientes nuevos de recepcion</h2>
+          <button class="icon" data-close-dialog="receptionPatientsDialog" type="button" aria-label="Cerrar">x</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Paciente</th>
+                <th>DNI</th>
+                <th>Celular</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody id="receptionPatientsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
     <script src="app.js?v=20260530-2"></script>
   </body>
 </html>

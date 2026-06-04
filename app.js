@@ -2503,6 +2503,50 @@ function renderMiniLineChart(container, data) {
   `;
 }
 
+function receptionNewPatientsForMonth(month) {
+  return state.patients
+    .filter((patient) => patient.createdAt?.startsWith(month) && patient.createdByRole === "RECEPCION")
+    .sort((a, b) => `${b.createdAt || ""} ${b.name || ""}`.localeCompare(`${a.createdAt || ""} ${a.name || ""}`));
+}
+
+function renderReceptionNewPatientsWidget(month) {
+  const container = $("#monthlyCareChart");
+  if (!container) return;
+  const patients = receptionNewPatientsForMonth(month);
+  container.insertAdjacentHTML("beforeend", `
+    <div class="reception-new-card">
+      <div>
+        <span>Nuevos por recepcion</span>
+        <strong>${patients.length}</strong>
+        <small>${monthLabel(month)}</small>
+      </div>
+      <button class="open-mini-modal" id="openReceptionPatientsBtn" type="button" aria-label="Abrir registro de pacientes nuevos">↗</button>
+    </div>
+  `);
+}
+
+function renderReceptionPatientsModal(month = $("#reportMonth")?.value || todayISO().slice(0, 7)) {
+  const title = $("#receptionPatientsTitle");
+  const body = $("#receptionPatientsBody");
+  if (!title || !body) return;
+  const patients = receptionNewPatientsForMonth(month);
+  title.textContent = `Pacientes nuevos de recepcion | ${monthLabel(month)}`;
+  body.innerHTML = patients.map((patient) => `
+    <tr>
+      <td>${formatDate(patient.createdAt)}</td>
+      <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.createdByName || "Recepcion")}</span></td>
+      <td>${escapeHtml(patient.dni)}</td>
+      <td>${escapeHtml(patient.phone)}</td>
+      <td class="row-actions">${isAdmin() ? `<button class="small-btn danger-btn" data-delete-reception-patient="${patient.id}">Eliminar</button>` : ""}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="5">No hay pacientes nuevos registrados por recepcion este mes.</td></tr>`;
+}
+
+function openReceptionPatientsModal() {
+  renderReceptionPatientsModal();
+  $("#receptionPatientsDialog")?.showModal();
+}
+
 function renderDailyAuditReport() {
   const events = state.auditEvents.filter((event) => event.eventDate === todayISO()).slice(0, 12);
   const rows = events.map((event) => {
@@ -2570,6 +2614,7 @@ function renderReports() {
   $("#ageReport").innerHTML = `<table><thead><tr><th>Grupo de edad</th><th>Pacientes con cita</th></tr></thead><tbody>${ageRows}</tbody></table>`;
   renderDailyAuditReport();
   renderMiniLineChart($("#monthlyCareChart"), monthlyCareData(month));
+  renderReceptionNewPatientsWidget(month);
 }
 
 function renderConfig() {
@@ -2721,6 +2766,24 @@ function resetPatientFormMode() {
   if (idInput) idInput.value = "";
   const submitButton = form.querySelector('button[type="submit"]');
   if (submitButton) submitButton.textContent = "Guardar paciente";
+}
+
+async function deletePatientRecord(id) {
+  try {
+    await deletePatientApi(id);
+  } catch (error) {
+    alert(error.message);
+    return false;
+  }
+  state.patients = state.patients.filter((item) => item.id !== id);
+  state.appointments = state.appointments.filter((item) => item.patientId !== id);
+  state.treatments = state.treatments.filter((item) => item.patientId !== id);
+  state.payments = state.payments.filter((item) => item.patientId !== id);
+  state.clinicalHistory = state.clinicalHistory.filter((item) => item.patientId !== id);
+  state.odontogram = state.odontogram.filter((item) => item.patientId !== id);
+  if (!API_ENABLED) saveState();
+  render();
+  return true;
 }
 
 function upsert(collection, item) {
@@ -2879,7 +2942,24 @@ function bindEvents() {
     if (element) element.addEventListener(eventName, handler);
   };
 
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
+    const openReceptionRegistry = event.target.closest("#openReceptionPatientsBtn");
+    if (openReceptionRegistry) {
+      openReceptionPatientsModal();
+      return;
+    }
+    const deleteReceptionPatient = event.target.closest("[data-delete-reception-patient]");
+    if (deleteReceptionPatient) {
+      if (!isAdmin()) {
+        alert("Solo el administrador puede eliminar desde este registro.");
+        return;
+      }
+      const patient = patientById(deleteReceptionPatient.dataset.deleteReceptionPatient);
+      if (!patient || !confirm(`Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`)) return;
+      const deleted = await deletePatientRecord(patient.id);
+      if (deleted && $("#receptionPatientsDialog")?.open) renderReceptionPatientsModal();
+      return;
+    }
     const closeButton = event.target.closest("[data-close-dialog]");
     if (!closeButton) return;
     const dialog = document.getElementById(closeButton.dataset.closeDialog);
@@ -3336,21 +3416,7 @@ function bindEvents() {
       }
       const patient = patientById(del.dataset.deletePatient);
       if (!patient || !confirm(`Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`)) return;
-      const id = patient.id;
-      try {
-        await deletePatientApi(id);
-      } catch (error) {
-        alert(error.message);
-        return;
-      }
-      state.patients = state.patients.filter((item) => item.id !== id);
-      state.appointments = state.appointments.filter((item) => item.patientId !== id);
-      state.treatments = state.treatments.filter((item) => item.patientId !== id);
-      state.payments = state.payments.filter((item) => item.patientId !== id);
-      state.clinicalHistory = state.clinicalHistory.filter((item) => item.patientId !== id);
-      state.odontogram = state.odontogram.filter((item) => item.patientId !== id);
-      if (!API_ENABLED) saveState();
-      render();
+      await deletePatientRecord(patient.id);
     }
   });
 
