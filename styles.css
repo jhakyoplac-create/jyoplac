@@ -1578,26 +1578,61 @@ menu {
 }
 
 .mini-chart {
-  color: var(--blue);
-  min-height: 132px;
+  min-height: 188px;
+  display: grid;
+  gap: 8px;
 }
 
 .report-line-chart {
   width: 100%;
-  max-width: 360px;
-  height: 132px;
+  max-width: 520px;
+  height: 178px;
   display: block;
 }
 
+.chart-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.chart-summary strong {
+  color: var(--ink);
+  font-size: 28px;
+}
+
+.chart-summary small {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.report-line-chart .chart-grid {
+  stroke: rgba(88, 111, 124, 0.16);
+  stroke-width: 1;
+}
+
+.report-line-chart .chart-area {
+  fill: url(#careAreaGradient);
+}
+
+.report-line-chart .chart-line {
+  stroke: #1479f6;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 5px 8px rgba(20, 121, 246, 0.16));
+}
+
 .report-line-chart circle {
-  fill: var(--green);
+  fill: #18b89f;
   stroke: #fff;
-  stroke-width: 2;
+  stroke-width: 3;
 }
 
 .report-line-chart text {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .report-line-chart .chart-value {

@@ -2459,22 +2459,46 @@ function monthlyCareData(referenceMonth) {
 
 function renderMiniLineChart(container, data) {
   if (!container) return;
-  const width = 320;
-  const height = 120;
-  const pad = 24;
+  const width = 420;
+  const height = 170;
+  const padX = 34;
+  const padTop = 28;
+  const padBottom = 38;
   const max = Math.max(1, ...data.map((item) => item.count));
   const points = data.map((item, index) => {
-    const x = pad + (index * (width - pad * 2)) / Math.max(1, data.length - 1);
-    const y = height - pad - (item.count / max) * (height - pad * 2);
+    const x = padX + (index * (width - padX * 2)) / Math.max(1, data.length - 1);
+    const y = height - padBottom - (item.count / max) * (height - padTop - padBottom);
     return { ...item, x, y };
   });
   const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const area = `${padX},${height - padBottom} ${polyline} ${width - padX},${height - padBottom}`;
+  const total = data.reduce((sum, item) => sum + item.count, 0);
+  const current = data[data.length - 1]?.count || 0;
+  const previous = data[data.length - 2]?.count || 0;
+  const variation = current - previous;
+  const gridLines = [0, 0.5, 1].map((ratio) => {
+    const y = padTop + ratio * (height - padTop - padBottom);
+    return `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" class="chart-grid"></line>`;
+  }).join("");
   container.innerHTML = `
+    <div class="chart-summary">
+      <span>Ultimos 6 meses</span>
+      <strong>${total}</strong>
+      <small>${variation >= 0 ? "+" : ""}${variation} vs mes anterior</small>
+    </div>
     <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales">
-      <polyline points="${polyline}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
-      ${points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="4"></circle>`).join("")}
-      ${points.map((point) => `<text x="${point.x}" y="${height - 6}" text-anchor="middle">${escapeHtml(point.label.split(" ")[0])}</text>`).join("")}
-      ${points.map((point) => `<text x="${point.x}" y="${Math.max(12, point.y - 8)}" text-anchor="middle" class="chart-value">${point.count}</text>`).join("")}
+      <defs>
+        <linearGradient id="careAreaGradient" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#18b89f" stop-opacity="0.22"></stop>
+          <stop offset="100%" stop-color="#18b89f" stop-opacity="0.02"></stop>
+        </linearGradient>
+      </defs>
+      ${gridLines}
+      <polygon points="${area}" class="chart-area"></polygon>
+      <polyline points="${polyline}" class="chart-line" fill="none"></polyline>
+      ${points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="5"></circle>`).join("")}
+      ${points.map((point) => `<text x="${point.x}" y="${height - 12}" text-anchor="middle">${escapeHtml(point.label.split(" ")[0])}</text>`).join("")}
+      ${points.map((point) => `<text x="${point.x}" y="${Math.max(18, point.y - 11)}" text-anchor="middle" class="chart-value">${point.count}</text>`).join("")}
     </svg>
   `;
 }
