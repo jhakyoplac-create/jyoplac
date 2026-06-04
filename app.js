@@ -2493,7 +2493,7 @@ function renderDailyAuditReport() {
       <td>${escapeHtml(event.detail || "")}</td>
     </tr>`;
   }).join("");
-  $("#dailyAuditReport").innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Sin movimientos de auditoria hoy.</td></tr>`}</tbody></table>`;
+  $("#dailyAuditReport").innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Sin actividad registrada hoy.</td></tr>`}</tbody></table>`;
 }
 
 function renderReports() {
