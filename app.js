@@ -92,6 +92,7 @@ const seedData = {
   dailyClosures: [],
   expenses: [],
   pettyCashAllocations: [],
+  auditEvents: [],
   users: [
     { id: "u-admin", name: "Administrador principal", username: "admin", password: "admin123", role: "ADMIN", active: true }
   ]
@@ -156,7 +157,7 @@ function loadState() {
     const base = structuredClone(seedData);
     const parsed = JSON.parse(saved);
     const merged = { ...base, ...parsed, config: { ...base.config, ...(parsed.config || {}) } };
-    for (const key of ["services", "patients", "appointments", "treatments", "payments", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "pettyCashAllocations", "users"]) {
+    for (const key of ["services", "patients", "appointments", "treatments", "payments", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "pettyCashAllocations", "auditEvents", "users"]) {
       if (!Array.isArray(merged[key])) merged[key] = base[key];
     }
     return normalizeState(merged);
@@ -192,6 +193,8 @@ function normalizeState(data) {
   data.config.generalBankOpening = Number(data.config.generalBankOpening ?? defaults.generalBankOpening);
   if (!Array.isArray(data.users) || !data.users.length) data.users = structuredClone(seedData.users);
   if (!Array.isArray(data.pettyCashAllocations)) data.pettyCashAllocations = [];
+  if (!Array.isArray(data.auditEvents)) data.auditEvents = [];
+  data.auditEvents = data.auditEvents.filter((event) => event.eventDate === todayISO());
   data.users = data.users.map((user, index) => ({
     id: user.id || uid("user"),
     name: String(user.name || user.username || `Usuario ${index + 1}`).trim(),
@@ -241,7 +244,24 @@ function mapApiPatient(row) {
     mainTreatment: row.main_treatment || row.mainTreatment || "",
     status: row.status || "NUEVO",
     notes: row.notes || "",
+    createdById: row.created_by_id || row.createdById || "",
+    createdByName: row.created_by_name || row.createdByName || "",
+    createdByRole: row.created_by_role || row.createdByRole || "",
     createdAt: (row.created_at || "").slice(0, 10)
+  };
+}
+
+function mapApiAuditEvent(row) {
+  return {
+    id: row.id,
+    eventDate: row.event_date || row.eventDate || "",
+    action: row.action || "",
+    detail: row.detail || "",
+    patientId: row.patient_id || row.patientId || "",
+    userId: row.user_id || row.userId || "",
+    userName: row.user_name || row.userName || "",
+    userRole: row.user_role || row.userRole || "",
+    createdAt: row.created_at || row.createdAt || ""
   };
 }
 
@@ -421,6 +441,7 @@ function applyApiBootstrap(payload) {
   state.expenses = (payload.expenses || []).map(mapApiExpense);
   state.cashSessions = (payload.cashSessions || []).map(mapApiCashSession);
   state.pettyCashAllocations = (payload.pettyCashAllocations || []).map(mapApiPettyCash);
+  state.auditEvents = (payload.auditEvents || []).map(mapApiAuditEvent);
   if (Array.isArray(payload.users) && payload.users.length) {
     state.users = payload.users.map(mapApiUser);
   }
@@ -1283,6 +1304,23 @@ function hasRoleView(view) {
 
 function isAdmin() {
   return currentUser()?.role === "ADMIN";
+}
+
+function addLocalAuditEvent(action, detail, patientId = "") {
+  if (API_ENABLED) return;
+  const user = currentUser();
+  state.auditEvents = state.auditEvents.filter((event) => event.eventDate === todayISO());
+  state.auditEvents.unshift({
+    id: uid("audit"),
+    eventDate: todayISO(),
+    action,
+    detail,
+    patientId,
+    userId: user?.id || "",
+    userName: user?.name || "Usuario",
+    userRole: user?.role || "",
+    createdAt: new Date().toISOString()
+  });
 }
 
 function canManageAppointments() {
@@ -2365,6 +2403,7 @@ function reportMetrics(month) {
   const payments = state.payments.filter((payment) => payment.date.startsWith(month));
   const expenses = state.expenses.filter((expense) => expense.date.startsWith(month));
   const newPatients = state.patients.filter((patient) => patient.createdAt?.startsWith(month));
+  const receptionNewPatients = newPatients.filter((patient) => patient.createdByRole === "RECEPCION");
   const seenPatients = [...new Set(appointments.map((appointment) => appointment.patientId).filter(Boolean))]
     .map((patientId) => patientById(patientId))
     .filter(Boolean);
@@ -2394,12 +2433,67 @@ function reportMetrics(month) {
     purchaseExpenses,
     totalExpenses: staffExpenses + purchaseExpenses,
     newPatients,
+    receptionNewPatients,
     ageGroups,
     oldPatients: oldPatientIds.size,
     inactivePatients: state.patients.filter((patient) => patientStatus(patient) === "INACTIVO").length,
     attended: appointments.filter((appointment) => appointment.status === "ATENDIDA").length,
     patientsSeen: uniquePatientCount(appointments)
   };
+}
+
+function monthRangeForReports(referenceMonth) {
+  const [year, month] = referenceMonth.split("-").map(Number);
+  const months = [];
+  for (let offset = 5; offset >= 0; offset -= 1) {
+    const date = new Date(year, month - 1 - offset, 1);
+    months.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return months;
+}
+
+function monthlyCareData(referenceMonth) {
+  return monthRangeForReports(referenceMonth).map((month) => ({
+    month,
+    label: monthLabel(month).replace(".", ""),
+    count: state.appointments.filter((appointment) => appointment.date.startsWith(month) && appointment.status === "ATENDIDA").length
+  }));
+}
+
+function renderMiniLineChart(container, data) {
+  if (!container) return;
+  const width = 320;
+  const height = 120;
+  const pad = 24;
+  const max = Math.max(1, ...data.map((item) => item.count));
+  const points = data.map((item, index) => {
+    const x = pad + (index * (width - pad * 2)) / Math.max(1, data.length - 1);
+    const y = height - pad - (item.count / max) * (height - pad * 2);
+    return { ...item, x, y };
+  });
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+  container.innerHTML = `
+    <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales">
+      <polyline points="${polyline}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
+      ${points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="4"></circle>`).join("")}
+      ${points.map((point) => `<text x="${point.x}" y="${height - 6}" text-anchor="middle">${escapeHtml(point.label.split(" ")[0])}</text>`).join("")}
+      ${points.map((point) => `<text x="${point.x}" y="${Math.max(12, point.y - 8)}" text-anchor="middle" class="chart-value">${point.count}</text>`).join("")}
+    </svg>
+  `;
+}
+
+function renderDailyAuditReport() {
+  const events = state.auditEvents.filter((event) => event.eventDate === todayISO()).slice(0, 12);
+  const rows = events.map((event) => {
+    const time = event.createdAt ? new Date(event.createdAt).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" }) : "";
+    return `<tr>
+      <td>${escapeHtml(time)}</td>
+      <td>${escapeHtml(event.userName || "Usuario")}</td>
+      <td>${escapeHtml(roleLabels[event.userRole] || event.userRole || "")}</td>
+      <td>${escapeHtml(event.detail || "")}</td>
+    </tr>`;
+  }).join("");
+  $("#dailyAuditReport").innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Sin movimientos de auditoria hoy.</td></tr>`}</tbody></table>`;
 }
 
 function renderReports() {
@@ -2414,6 +2508,7 @@ function renderReports() {
   $("#reportIncome").textContent = money(metrics.income);
   $("#reportTreatments").textContent = state.treatments.filter((treatment) => treatment.status === "EN_PROCESO").length;
   $("#reportNewPatients").textContent = metrics.newPatients.length;
+  $("#reportReceptionNewPatients").textContent = metrics.receptionNewPatients.length;
   $("#reportOldPatients").textContent = metrics.oldPatients;
   $("#reportInactivePatients").textContent = metrics.inactivePatients;
   $("#reportStaffExpenses").textContent = money(metrics.staffExpenses);
@@ -2452,6 +2547,8 @@ function renderReports() {
     .map((item) => `<tr><td>${escapeHtml(item.group)}</td><td>${item.count}</td></tr>`)
     .join("");
   $("#ageReport").innerHTML = `<table><thead><tr><th>Grupo de edad</th><th>Pacientes con cita</th></tr></thead><tbody>${ageRows}</tbody></table>`;
+  renderDailyAuditReport();
+  renderMiniLineChart($("#monthlyCareChart"), monthlyCareData(month));
 }
 
 function renderConfig() {
@@ -3001,6 +3098,15 @@ function bindEvents() {
       return;
     }
     upsert(state.appointments, appointment);
+    if (["NO_ASISTIO", "REPROGRAMADA"].includes(appointment.status) && existingAppointment?.status !== appointment.status) {
+      const patient = patientById(appointment.patientId);
+      const label = appointment.status === "NO_ASISTIO" ? "Marco no asistio" : "Reprogramo cita";
+      addLocalAuditEvent(
+        appointment.status === "NO_ASISTIO" ? "APPOINTMENT_NO_SHOW" : "APPOINTMENT_RESCHEDULED",
+        `${label}: ${patient?.name || "Paciente"} ${appointment.date} ${appointment.time}`,
+        appointment.patientId
+      );
+    }
     if (!API_ENABLED) saveState();
     $("#appointmentDialog").close();
     render();
@@ -3076,6 +3182,11 @@ function bindEvents() {
       return;
     }
     state.appointments.push(newAppointment);
+    addLocalAuditEvent(
+      "APPOINTMENT_RESCHEDULED",
+      `Reprogramo cita: ${patientById(original.patientId)?.name || "Paciente"} ${original.date} ${original.time}`,
+      original.patientId
+    );
     if (!API_ENABLED) saveState();
     $("#rescheduleDialog").close();
     render();
@@ -3116,6 +3227,7 @@ function bindEvents() {
       return;
     }
     const existingPatient = editingId ? patientById(editingId) : null;
+    const user = currentUser();
     const patient = {
       id: editingId || uid("p"),
       dni: validation.values.dni,
@@ -3126,6 +3238,9 @@ function bindEvents() {
       mainTreatment: data.mainTreatment,
       status: existingPatient?.status || "NUEVO",
       createdAt: existingPatient?.createdAt || todayISO(),
+      createdById: existingPatient?.createdById || user?.id || "",
+      createdByName: existingPatient?.createdByName || user?.name || "",
+      createdByRole: existingPatient?.createdByRole || user?.role || "",
       notes: data.notes
     };
     try {
@@ -3141,6 +3256,7 @@ function bindEvents() {
       return;
     }
     if (!API_ENABLED || !apiToken) upsert(state.patients, patient);
+    addLocalAuditEvent(existingPatient ? "PATIENT_UPDATED" : "PATIENT_CREATED", `${existingPatient ? "Edito paciente" : "Ingreso paciente"}: ${patient.name} (${patient.dni})`, patient.id);
     lastSavedPatientId = patient.id;
     form.reset();
     resetPatientFormMode();
@@ -3981,8 +4097,10 @@ function bindEvents() {
       { seccion: "RESUMEN", indicador: "Gastos personal", mes: month, monto: -metrics.staffExpenses },
       { seccion: "RESUMEN", indicador: "Gastos compras", mes: month, monto: -metrics.purchaseExpenses },
       { seccion: "RESUMEN", indicador: "Pacientes nuevos", mes: month, cantidad: metrics.newPatients.length },
+      { seccion: "RESUMEN", indicador: "Pacientes nuevos recepcion", mes: month, cantidad: metrics.receptionNewPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes antiguos", mes: month, cantidad: metrics.oldPatients },
       { seccion: "RESUMEN", indicador: "Pacientes inactivos", mes: month, cantidad: metrics.inactivePatients },
+      ...monthlyCareData(month).map((item) => ({ seccion: "ATENCIONES_MENSUALES", mes: item.month, cantidad: item.count })),
       ...metrics.ageGroups.map((item) => ({ seccion: "EDAD", grupo: item.group, mes: month, cantidad: item.count })),
       ...state.config.doctors.map((doctor) => ({
         seccion: "DOCTOR",

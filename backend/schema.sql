@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS patients (
   main_treatment TEXT,
   status TEXT NOT NULL DEFAULT 'NUEVO',
   notes TEXT,
+  created_by_id TEXT,
+  created_by_name TEXT,
+  created_by_role TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -151,4 +154,16 @@ CREATE TABLE IF NOT EXISTS petty_cash_allocations (
 CREATE TABLE IF NOT EXISTS app_config (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+  id TEXT PRIMARY KEY,
+  event_date TEXT NOT NULL,
+  action TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  patient_id TEXT,
+  user_id TEXT,
+  user_name TEXT,
+  user_role TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

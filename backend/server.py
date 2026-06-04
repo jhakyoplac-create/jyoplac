@@ -15,6 +15,11 @@ import time
 import uuid
 
 try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
+
+try:
     import psycopg
     from psycopg.rows import dict_row
 except ImportError:
@@ -36,6 +41,12 @@ sessions = {}
 
 def now_id(prefix):
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def today_lima():
+    if ZoneInfo:
+        return datetime.now(ZoneInfo("America/Lima")).date().isoformat()
+    return date.today().isoformat()
 
 
 def normalize_role(role):
@@ -176,6 +187,9 @@ def ensure_column(conn, table, column, definition):
 def migrate_db(conn):
     ensure_column(conn, "patients", "birth_date", "TEXT")
     ensure_column(conn, "patients", "status", "TEXT NOT NULL DEFAULT 'NUEVO'")
+    ensure_column(conn, "patients", "created_by_id", "TEXT")
+    ensure_column(conn, "patients", "created_by_name", "TEXT")
+    ensure_column(conn, "patients", "created_by_role", "TEXT")
     ensure_column(conn, "clinical_history", "credit_pending", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_due_date", "TEXT")
@@ -188,6 +202,30 @@ def migrate_db(conn):
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
     ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
+
+
+def purge_old_audit_events(conn):
+    conn.execute("DELETE FROM audit_events WHERE event_date <> ?", (today_lima(),))
+
+
+def add_audit_event(conn, user, action, detail, patient_id=""):
+    purge_old_audit_events(conn)
+    conn.execute(
+        """
+        INSERT INTO audit_events (id, event_date, action, detail, patient_id, user_id, user_name, user_role)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            now_id("audit"),
+            today_lima(),
+            action,
+            detail,
+            patient_id or "",
+            user.get("id", ""),
+            user.get("name", ""),
+            normalize_role(user.get("role", "")),
+        ),
+    )
 
 
 def init_db():
@@ -280,6 +318,18 @@ def list_users():
         ]
 
 
+def list_audit_events():
+    with db() as conn:
+        purge_old_audit_events(conn)
+        return [
+            row_to_dict(row)
+            for row in conn.execute(
+                "SELECT * FROM audit_events WHERE event_date = ? ORDER BY created_at DESC",
+                (today_lima(),),
+            ).fetchall()
+        ]
+
+
 def open_cash_date(conn):
     row = conn.execute(
         "SELECT date FROM cash_sessions WHERE closed_at IS NULL ORDER BY opened_at ASC LIMIT 1"
@@ -337,6 +387,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "expenses": list_table("expenses", "date DESC, created_at DESC"),
                 "cashSessions": list_table("cash_sessions", "date DESC"),
                 "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
+                "auditEvents": list_audit_events(),
                 "users": list_users() if user["role"] == "ADMIN" else [],
                 "config": app_config(),
             })
@@ -360,6 +411,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not require_role(self, {"ADMIN"}):
                 return
             return send_json(self, {"users": list_users()})
+        if parsed.path == "/api/audit-events":
+            if not require_role(self, {"ADMIN"}):
+                return
+            return send_json(self, {"auditEvents": list_audit_events()})
 
         send_json(self, {"error": "Ruta no encontrada"}, 404)
 
@@ -449,6 +504,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if validation_errors:
                 return send_json(self, {"error": "\n".join(validation_errors)}, 400)
             with db() as conn:
+                existing_patient = conn.execute("SELECT id, name FROM patients WHERE id = ?", (item_id,)).fetchone()
                 duplicate_dni = conn.execute(
                     "SELECT id FROM patients WHERE dni = ? AND id <> ?",
                     (patient_values["dni"], item_id),
@@ -457,8 +513,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     return send_json(self, {"error": "Ya existe otro paciente registrado con ese DNI."}, 409)
                 conn.execute(
                     """
-                    INSERT INTO patients (id, dni, name, phone, birth_date, doctor, main_treatment, status, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO patients (
+                      id, dni, name, phone, birth_date, doctor, main_treatment, status, notes,
+                      created_by_id, created_by_name, created_by_role
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       dni=excluded.dni, name=excluded.name, phone=excluded.phone,
                       birth_date=excluded.birth_date,
@@ -475,8 +534,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("mainTreatment", ""),
                         data.get("status", "NUEVO"),
                         data.get("notes", ""),
+                        user["id"],
+                        user["name"],
+                        normalize_role(user["role"]),
                     ),
                 )
+                action = "PATIENT_CREATED" if not existing_patient else "PATIENT_UPDATED"
+                label = "Ingreso paciente" if not existing_patient else "Edito paciente"
+                add_audit_event(conn, user, action, f"{label}: {patient_values['name']} ({patient_values['dni']})", item_id)
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/appointments":
@@ -496,6 +561,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
             new_appointment_id = data.get("newAppointmentId") or data.get("new_appointment_id") or ""
             free_statuses = {"CANCELADA", "REPROGRAMADA", "NO_ASISTIO"}
             with db() as conn:
+                existing_appointment = conn.execute(
+                    "SELECT id, status, patient_id FROM appointments WHERE id = ?",
+                    (item_id,),
+                ).fetchone()
                 if data.get("status") not in free_statuses:
                     duplicate_patient = conn.execute(
                         """
@@ -561,6 +630,19 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         new_appointment_id,
                     ),
                 )
+                if data.get("status") in {"NO_ASISTIO", "REPROGRAMADA"} and (
+                    not existing_appointment or existing_appointment["status"] != data.get("status")
+                ):
+                    patient = conn.execute("SELECT name FROM patients WHERE id = ?", (data["patientId"],)).fetchone()
+                    action = "APPOINTMENT_NO_SHOW" if data.get("status") == "NO_ASISTIO" else "APPOINTMENT_RESCHEDULED"
+                    label = "Marco no asistio" if data.get("status") == "NO_ASISTIO" else "Reprogramo cita"
+                    add_audit_event(
+                        conn,
+                        user,
+                        action,
+                        f"{label}: {patient['name'] if patient else 'Paciente'} {data['date']} {data['time']}",
+                        data["patientId"],
+                    )
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/clinical-history":
