@@ -1731,7 +1731,7 @@ function appointmentFollowUps() {
 }
 
 function followUpLabel(appointment) {
-  return appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "REPROGRAMADO" : "PENDIENTE";
+  return appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "REPROG." : "PENDIENTE";
 }
 
 function followUpClass(appointment) {
@@ -1740,7 +1740,7 @@ function followUpClass(appointment) {
 
 function followUpNextText(appointment) {
   const next = appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null;
-  return next ? `${formatDate(next.date)} ${agendaTimeLabel(next.time)} | ${next.status}` : "Pendiente de reprogramar";
+  return next ? `${formatDate(next.date)} ${agendaTimeLabel(next.time)} | ${appointmentStatusText(next.status)}` : "Pendiente";
 }
 
 function whatsappPhone(phone) {

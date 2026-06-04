@@ -699,6 +699,41 @@ tr.followup-pending td:first-child {
   border-left: 4px solid #ff6b6b;
 }
 
+#appointmentFollowUpsTable {
+  font-size: 13px;
+}
+
+#appointmentFollowUpsTable th,
+#appointmentFollowUpsTable td {
+  padding: 8px 10px;
+  line-height: 1.25;
+  vertical-align: top;
+}
+
+#appointmentFollowUpsTable td strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+#appointmentFollowUpsTable .muted {
+  font-size: 12px;
+}
+
+#appointmentFollowUpsTable .status {
+  font-size: 10px;
+  padding: 4px 8px;
+}
+
+#appointmentFollowUpsTable .row-actions {
+  gap: 6px;
+}
+
+#appointmentFollowUpsTable .small-btn {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
 .slot.lunch {
   background: linear-gradient(135deg, #fff7df, #fffaf0);
 }
