@@ -1617,9 +1617,9 @@ menu {
 }
 
 .mini-chart {
-  min-height: 300px;
+  min-height: 270px;
   display: grid;
-  gap: 16px;
+  gap: 12px;
   align-content: start;
 }
 
@@ -1689,8 +1689,8 @@ menu {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: linear-gradient(135deg, #ffffff, #f3fbfd);
-  padding: 22px 24px;
-  min-height: 145px;
+  padding: 16px 20px;
+  min-height: 118px;
   box-shadow: 0 16px 34px rgba(13, 80, 102, 0.08);
 }
 
@@ -1704,16 +1704,16 @@ menu {
 .reception-new-card strong {
   color: var(--ink);
   display: block;
-  font-size: 42px;
+  font-size: 34px;
   line-height: 1;
-  margin: 10px 0 4px;
+  margin: 8px 0 3px;
 }
 
 .open-mini-modal {
   position: relative;
   flex: 0 0 auto;
-  width: 52px;
-  height: 52px;
+  width: 46px;
+  height: 46px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -1730,20 +1730,20 @@ menu {
 }
 
 .open-mini-modal::before {
-  width: 22px;
-  height: 22px;
-  left: 14px;
-  top: 17px;
+  width: 19px;
+  height: 19px;
+  left: 13px;
+  top: 16px;
   border: 3px solid currentColor;
   border-radius: 5px;
   border-top: 0;
 }
 
 .open-mini-modal::after {
-  width: 17px;
-  height: 17px;
-  right: 13px;
-  top: 12px;
+  width: 14px;
+  height: 14px;
+  right: 12px;
+  top: 11px;
   border-top: 4px solid currentColor;
   border-right: 4px solid currentColor;
   transform: rotate(0deg);
