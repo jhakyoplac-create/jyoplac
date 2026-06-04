@@ -700,28 +700,28 @@ tr.followup-pending td:first-child {
 }
 
 #appointmentFollowUpsTable {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 #appointmentFollowUpsTable th,
 #appointmentFollowUpsTable td {
-  padding: 8px 10px;
-  line-height: 1.25;
+  padding: 6px 8px;
+  line-height: 1.2;
   vertical-align: top;
 }
 
 #appointmentFollowUpsTable td strong {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
 }
 
 #appointmentFollowUpsTable .muted {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 #appointmentFollowUpsTable .status {
-  font-size: 10px;
-  padding: 4px 8px;
+  font-size: 9px;
+  padding: 3px 7px;
 }
 
 #appointmentFollowUpsTable .row-actions {
@@ -729,9 +729,9 @@ tr.followup-pending td:first-child {
 }
 
 #appointmentFollowUpsTable .small-btn {
-  min-height: 34px;
-  padding: 6px 10px;
-  font-size: 13px;
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
 }
 
 .slot.lunch {
