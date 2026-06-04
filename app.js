@@ -2089,9 +2089,6 @@ function renderPayments() {
   const cashDate = cashViewDate();
   const cashDateInput = $("#cashViewDate");
   if (cashDateInput && document.activeElement !== cashDateInput) cashDateInput.value = cashDate;
-  const month = cashDate.slice(0, 7);
-  const monthIncome = state.payments.filter((payment) => payment.date.startsWith(month)).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  $("#monthIncome").textContent = money(monthIncome);
   $("#totalDebt").textContent = money(state.patients.reduce((sum, patient) => sum + patientDebt(patient.id), 0));
   renderCashBox(cashDate);
   renderExpenses(cashDate);
