@@ -1,4 +1,5 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 import base64
@@ -6,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import socket
 import sqlite3
@@ -46,6 +48,36 @@ def normalize_role(role):
         "DOCTORA": "DOCTOR",
     }
     return aliases.get(value, value)
+
+
+def validate_patient_payload(data):
+    errors = []
+    dni = str(data.get("dni") or "").strip()
+    phone = str(data.get("phone") or "").strip()
+    name = re.sub(r"\s+", " ", str(data.get("name") or "").strip())
+    birth_date = str(data.get("birthDate") or data.get("birth_date") or "").strip()
+    if not re.fullmatch(r"\d{8}", dni):
+        errors.append("El DNI debe tener exactamente 8 digitos.")
+    if not re.fullmatch(r"9\d{8}", phone):
+        errors.append("El celular debe tener 9 digitos y empezar con 9.")
+    if len([part for part in name.split(" ") if part]) < 2:
+        errors.append("Ingresa nombres y apellidos completos del paciente.")
+    if not re.fullmatch(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+", name):
+        errors.append("El nombre solo debe contener letras y espacios.")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", birth_date):
+        errors.append("Ingresa una fecha de nacimiento valida.")
+    else:
+        try:
+            parsed_birth = datetime.strptime(birth_date, "%Y-%m-%d").date()
+            today = date.today()
+            age = today.year - parsed_birth.year - ((today.month, today.day) < (parsed_birth.month, parsed_birth.day))
+            if parsed_birth > today:
+                errors.append("La fecha de nacimiento no puede ser futura.")
+            elif age > 120:
+                errors.append("La fecha de nacimiento no parece correcta. Verifica el anio.")
+        except ValueError:
+            errors.append("Ingresa una fecha de nacimiento valida.")
+    return errors, {"dni": dni, "phone": phone, "name": name.upper(), "birthDate": birth_date}
 
 
 def make_token(user_id, expires=None):
@@ -413,7 +445,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     conn.execute("DELETE FROM patients WHERE id = ?", (item_id,))
                 return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("p")
+            validation_errors, patient_values = validate_patient_payload(data)
+            if validation_errors:
+                return send_json(self, {"error": "\n".join(validation_errors)}, 400)
             with db() as conn:
+                duplicate_dni = conn.execute(
+                    "SELECT id FROM patients WHERE dni = ? AND id <> ?",
+                    (patient_values["dni"], item_id),
+                ).fetchone()
+                if duplicate_dni:
+                    return send_json(self, {"error": "Ya existe otro paciente registrado con ese DNI."}, 409)
                 conn.execute(
                     """
                     INSERT INTO patients (id, dni, name, phone, birth_date, doctor, main_treatment, status, notes)
@@ -426,10 +467,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """,
                     (
                         item_id,
-                        data["dni"],
-                        data["name"].upper(),
-                        data.get("phone", ""),
-                        data.get("birthDate", ""),
+                        patient_values["dni"],
+                        patient_values["name"],
+                        patient_values["phone"],
+                        patient_values["birthDate"],
                         data.get("doctor", ""),
                         data.get("mainTreatment", ""),
                         data.get("status", "NUEVO"),

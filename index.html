@@ -135,11 +135,11 @@
               <button type="reset" class="ghost">Limpiar</button>
             </div>
             <input type="hidden" name="id" />
-            <label>DNI o identificador<input name="dni" required /></label>
-            <label>Nombre completo<input name="name" required /></label>
+            <label>DNI<input name="dni" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" required /></label>
+            <label>Nombre completo<input name="name" minlength="5" required /></label>
             <div class="inline-fields patient-contact-row">
-              <label class="compact-label">Telefono<input name="phone" inputmode="tel" /></label>
-              <label class="compact-label">Fecha de nacimiento<input name="birthDate" type="date" /></label>
+              <label class="compact-label">Celular<input name="phone" inputmode="numeric" pattern="9[0-9]{8}" minlength="9" maxlength="9" required /></label>
+              <label class="compact-label">Fecha de nacimiento<input name="birthDate" type="date" required /></label>
             </div>
             <label>Doctor principal<select name="doctor"></select></label>
             <label>Tratamiento principal<select name="mainTreatment"></select></label>

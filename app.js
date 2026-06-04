@@ -675,7 +675,9 @@ function cashOperationDates(date = operatingDate()) {
 
 function formatDate(date) {
   if (!date) return "";
-  return new Date(`${date}T00:00:00`).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function ageFromBirthDate(birthDate, referenceDate = todayISO()) {
@@ -692,6 +694,31 @@ function ageFromBirthDate(birthDate, referenceDate = todayISO()) {
 function patientAgeText(patient, referenceDate = todayISO()) {
   const age = ageFromBirthDate(patient?.birthDate, referenceDate);
   return age === null ? "" : `${age} anos`;
+}
+
+function validISODate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return false;
+  const parsed = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validatePatientData(data) {
+  const errors = [];
+  const dni = String(data.dni || "").trim();
+  const phone = String(data.phone || "").trim();
+  const name = String(data.name || "").trim().replace(/\s+/g, " ");
+  const birthDate = String(data.birthDate || "").trim();
+  if (!/^\d{8}$/.test(dni)) errors.push("El DNI debe tener exactamente 8 digitos.");
+  if (!/^9\d{8}$/.test(phone)) errors.push("El celular debe tener 9 digitos y empezar con 9.");
+  if (!name || name.split(" ").filter(Boolean).length < 2) errors.push("Ingresa nombres y apellidos completos del paciente.");
+  if (!/^[A-ZÁÉÍÓÚÜÑ ]+$/i.test(name)) errors.push("El nombre solo debe contener letras y espacios.");
+  if (!validISODate(birthDate)) errors.push("Ingresa una fecha de nacimiento valida.");
+  else {
+    const age = ageFromBirthDate(birthDate);
+    if (age === null) errors.push("La fecha de nacimiento no puede ser futura.");
+    else if (age > 120) errors.push("La fecha de nacimiento no parece correcta. Verifica el anio.");
+  }
+  return { errors, values: { dni, phone, name, birthDate } };
 }
 
 function patientAgeGroup(patient, referenceDate = todayISO()) {
@@ -3068,13 +3095,33 @@ function bindEvents() {
     }
     const data = formData(form);
     const editingId = form.elements.namedItem("id")?.value || "";
+    const validation = validatePatientData(data);
+    if (validation.errors.length) {
+      alert(validation.errors.join("\n"));
+      patientSaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = editingId ? "Actualizar paciente" : "Guardar paciente";
+      }
+      return;
+    }
+    const duplicateDni = state.patients.find((patient) => patient.id !== editingId && String(patient.dni || "") === validation.values.dni);
+    if (duplicateDni) {
+      alert(`Ya existe otro paciente registrado con ese DNI: ${duplicateDni.name}.`);
+      patientSaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = editingId ? "Actualizar paciente" : "Guardar paciente";
+      }
+      return;
+    }
     const existingPatient = editingId ? patientById(editingId) : null;
     const patient = {
       id: editingId || uid("p"),
-      dni: data.dni,
-      name: data.name.trim().toUpperCase(),
-      phone: data.phone,
-      birthDate: data.birthDate,
+      dni: validation.values.dni,
+      name: validation.values.name.toUpperCase(),
+      phone: validation.values.phone,
+      birthDate: validation.values.birthDate,
       doctor: data.doctor,
       mainTreatment: data.mainTreatment,
       status: existingPatient?.status || "NUEVO",
