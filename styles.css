@@ -793,6 +793,26 @@ tr.followup-pending td:first-child {
   background: var(--surface);
 }
 
+.daily-audit-panel table {
+  font-size: 13px;
+  line-height: 1.28;
+}
+
+.daily-audit-panel th {
+  font-size: 11px;
+  padding: 9px 12px;
+}
+
+.daily-audit-panel td {
+  padding: 10px 12px;
+  vertical-align: top;
+}
+
+.daily-audit-panel td:first-child {
+  width: 72px;
+  white-space: nowrap;
+}
+
 .patient-appointment {
   display: grid;
   gap: 3px;
