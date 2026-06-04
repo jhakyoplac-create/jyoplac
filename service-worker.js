@@ -1,11 +1,13 @@
-const CACHE_NAME = "cm-dental-shell-v13";
+const CACHE_NAME = "cm-dental-shell-v14";
 const SHELL_FILES = [
   "/",
   "/index.html",
   "/styles.css?v=20260530-2",
   "/app.js?v=20260530-2",
   "/manifest.webmanifest",
-  "/icons/icon.svg"
+  "/assets/logo.svg",
+  "/assets/logo-cm.png",
+  "/assets/favicon.ico"
 ];
 
 self.addEventListener("install", (event) => {

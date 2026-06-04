@@ -10,10 +10,16 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/icons/icon.svg",
+      "src": "/assets/logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/logo-cm.png",
+      "sizes": "1600x577",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
