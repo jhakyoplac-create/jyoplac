@@ -1727,7 +1727,7 @@ function isFollowUpOpen(appointment) {
 function appointmentFollowUps() {
   return state.appointments
     .filter(isFollowUpOpen)
-    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+    .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
 }
 
 function followUpLabel(appointment) {
