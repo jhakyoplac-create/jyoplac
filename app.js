@@ -2516,7 +2516,7 @@ function renderReceptionNewPatientsWidget(month) {
   container.insertAdjacentHTML("beforeend", `
     <div class="reception-new-card">
       <div>
-        <span>Nuevos por recepcion</span>
+        <span>Pacientes nuevos por recepcion</span>
         <strong>${patients.length}</strong>
         <small>${monthLabel(month)}</small>
       </div>
