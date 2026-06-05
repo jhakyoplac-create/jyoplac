@@ -2790,6 +2790,7 @@ function openGeneralBalanceDetail(type) {
   const isCash = type === "cash";
   const month = operatingDate().slice(0, 7);
   const rows = dailyIncomeBreakdownRows(month);
+  const balances = generalCashBalances();
   const titlePrefix = isCash ? "Ingresos efectivo" : "Ingresos billeteras y bancos";
   const startLabel = formatDate(`${month}-01`);
   title.textContent = `${titlePrefix} | ${monthLabel(month)}`;
@@ -2802,7 +2803,7 @@ function openGeneralBalanceDetail(type) {
       cashExpense: totalExpenseByMethodsForDate(row.date, ["EFECTIVO"])
     })).filter((row) => row.cash > 0 || row.cashExpense > 0);
     const totalExpense = cashRows.reduce((sum, row) => sum + row.cashExpense, 0);
-    summary.innerHTML = `<span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos efectivo: <strong>${money(totalExpense)}</strong></span><span>Neto: <strong>${money(total - totalExpense)}</strong></span>`;
+    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.cashOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos efectivo: <strong>${money(totalExpense)}</strong></span><span>Neto mes: <strong>${money(total - totalExpense)}</strong></span><span>Saldo actual: <strong>${money(balances.cash)}</strong></span>`;
     head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Egreso efectivo</th><th>Neto</th></tr>`;
     body.innerHTML = cashRows.map((row) => `<tr>
       <td>${formatDate(row.date)}</td>
@@ -2816,7 +2817,7 @@ function openGeneralBalanceDetail(type) {
       bankExpense: totalExpenseByMethodsForDate(row.date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"])
     })).filter((row) => row.yape + row.plin + row.transfer + row.card > 0 || row.bankExpense > 0);
     const totalExpense = bankRows.reduce((sum, row) => sum + row.bankExpense, 0);
-    summary.innerHTML = `<span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos billeteras/bancos: <strong>${money(totalExpense)}</strong></span><span>Neto: <strong>${money(total - totalExpense)}</strong></span>`;
+    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.bankOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos billeteras/bancos: <strong>${money(totalExpense)}</strong></span><span>Neto mes: <strong>${money(total - totalExpense)}</strong></span><span>Saldo actual: <strong>${money(balances.bank)}</strong></span>`;
     head.innerHTML = `<tr><th>Fecha</th><th>Yape</th><th>Plin</th><th>Transferencia</th><th>Tarjeta</th><th>Egresos</th><th>Neto</th></tr>`;
     body.innerHTML = bankRows.map((row) => {
       const dayTotal = row.yape + row.plin + row.transfer + row.card;

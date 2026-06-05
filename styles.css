@@ -1093,7 +1093,8 @@ dialog::backdrop {
 }
 
 #generalBalanceDetailDialog {
-  width: min(900px, calc(100vw - 40px));
+  width: min(1180px, calc(100vw - 24px));
+  max-height: min(84vh, 760px);
 }
 
 .balance-detail-summary {
@@ -1102,7 +1103,8 @@ dialog::backdrop {
   gap: 10px;
   color: var(--muted);
   font-size: 13px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding-right: 8px;
 }
 
 .balance-detail-summary strong {
@@ -1111,11 +1113,13 @@ dialog::backdrop {
 
 .balance-detail-modal table {
   font-size: 13px;
+  min-width: 780px;
 }
 
 .balance-detail-modal th,
 .balance-detail-modal td {
-  padding: 10px 12px;
+  padding: 11px 14px;
+  white-space: nowrap;
 }
 
 .compact-filters {
