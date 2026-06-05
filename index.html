@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260605-ingresos-mes-detalle" />
+    <link rel="stylesheet" href="styles.css?v=20260605-resumen-rango-egresos" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -409,7 +409,11 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Resumen diario</h2>
-              <button class="ghost" id="exportGeneralBtn">Excel</button>
+              <button class="ghost" id="exportGeneralBtn">CSV</button>
+            </div>
+            <div class="inline-filters compact-filters">
+              <label>Desde<input id="generalSummaryFrom" type="date" /></label>
+              <label>Hasta<input id="generalSummaryTo" type="date" /></label>
             </div>
             <div class="table-wrap">
               <table>
@@ -854,6 +858,6 @@
       </div>
     </dialog>
 
-    <script src="app.js?v=20260605-ingresos-mes-detalle"></script>
+    <script src="app.js?v=20260605-resumen-rango-egresos"></script>
   </body>
 </html>

@@ -1029,6 +1029,13 @@ function expenseByMethodsForDate(date, methods) {
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 }
 
+function totalExpenseByMethodsForDate(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return expensesForDate(date)
+    .filter((expense) => normalized.includes(String(expense.method || "").toUpperCase()))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
 function todayExpenseByMethods(methods) {
   return expenseByMethodsForDate(operatingDate(), methods);
 }
@@ -2785,18 +2792,28 @@ function openGeneralBalanceDetail(type) {
   const total = rows.reduce((sum, row) => {
     return sum + (isCash ? row.cash : row.yape + row.plin + row.transfer + row.card);
   }, 0);
-  summary.innerHTML = `<span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Solo ingresos registrados por pagos del mes.</span>`;
   if (isCash) {
-    const cashRows = rows.filter((row) => row.cash > 0);
-    head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Total</th></tr>`;
+    const cashRows = rows.map((row) => ({
+      ...row,
+      cashExpense: totalExpenseByMethodsForDate(row.date, ["EFECTIVO"])
+    })).filter((row) => row.cash > 0 || row.cashExpense > 0);
+    const totalExpense = cashRows.reduce((sum, row) => sum + row.cashExpense, 0);
+    summary.innerHTML = `<span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos efectivo: <strong>${money(totalExpense)}</strong></span><span>Neto: <strong>${money(total - totalExpense)}</strong></span>`;
+    head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Egreso efectivo</th><th>Neto</th></tr>`;
     body.innerHTML = cashRows.map((row) => `<tr>
       <td>${formatDate(row.date)}</td>
       <td>${money(row.cash)}</td>
-      <td><strong>${money(row.cash)}</strong></td>
-    </tr>`).join("") || `<tr><td colspan="3">Sin ingresos en efectivo desde ${startLabel}.</td></tr>`;
+      <td>${money(row.cashExpense)}</td>
+      <td><strong>${money(row.cash - row.cashExpense)}</strong></td>
+    </tr>`).join("") || `<tr><td colspan="4">Sin movimientos en efectivo desde ${startLabel}.</td></tr>`;
   } else {
-    const bankRows = rows.filter((row) => row.yape + row.plin + row.transfer + row.card > 0);
-    head.innerHTML = `<tr><th>Fecha</th><th>Yape</th><th>Plin</th><th>Transferencia</th><th>Tarjeta</th><th>Total</th></tr>`;
+    const bankRows = rows.map((row) => ({
+      ...row,
+      bankExpense: totalExpenseByMethodsForDate(row.date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"])
+    })).filter((row) => row.yape + row.plin + row.transfer + row.card > 0 || row.bankExpense > 0);
+    const totalExpense = bankRows.reduce((sum, row) => sum + row.bankExpense, 0);
+    summary.innerHTML = `<span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos billeteras/bancos: <strong>${money(totalExpense)}</strong></span><span>Neto: <strong>${money(total - totalExpense)}</strong></span>`;
+    head.innerHTML = `<tr><th>Fecha</th><th>Yape</th><th>Plin</th><th>Transferencia</th><th>Tarjeta</th><th>Egresos</th><th>Neto</th></tr>`;
     body.innerHTML = bankRows.map((row) => {
       const dayTotal = row.yape + row.plin + row.transfer + row.card;
       return `<tr>
@@ -2805,11 +2822,28 @@ function openGeneralBalanceDetail(type) {
         <td>${money(row.plin)}</td>
         <td>${money(row.transfer)}</td>
         <td>${money(row.card)}</td>
-        <td><strong>${money(dayTotal)}</strong></td>
+        <td>${money(row.bankExpense)}</td>
+        <td><strong>${money(dayTotal - row.bankExpense)}</strong></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="6">Sin ingresos por billeteras o bancos desde ${startLabel}.</td></tr>`;
+    }).join("") || `<tr><td colspan="7">Sin movimientos por billeteras o bancos desde ${startLabel}.</td></tr>`;
   }
   $("#generalBalanceDetailDialog")?.showModal();
+}
+
+function generalSummaryDates() {
+  const month = operatingDate().slice(0, 7);
+  const fromInput = $("#generalSummaryFrom");
+  const toInput = $("#generalSummaryTo");
+  const defaultFrom = `${month}-01`;
+  const defaultTo = operatingDate();
+  if (fromInput && !fromInput.value) fromInput.value = defaultFrom;
+  if (toInput && !toInput.value) toInput.value = defaultTo;
+  const from = fromInput?.value || defaultFrom;
+  const to = toInput?.value || defaultTo;
+  return allDatesWithCashActivity()
+    .filter((date) => date >= from && date <= to)
+    .sort()
+    .reverse();
 }
 
 function renderGeneralCash() {
@@ -2833,7 +2867,7 @@ function renderGeneralCash() {
     form.cash.title = isAdmin() ? "" : "Solo el administrador puede cambiar el saldo inicial.";
     form.bank.title = isAdmin() ? "" : "Solo el administrador puede cambiar el saldo inicial.";
   }
-  $("#generalDailyTable").innerHTML = allDatesWithCashActivity().reverse().map((date) => {
+  $("#generalDailyTable").innerHTML = generalSummaryDates().map((date) => {
     const income = incomeForDate(date);
     const opExpenses = dailyExpenseTotal(date);
     const generalExpenses = dailyGeneralExpenseTotal(date);
@@ -2850,7 +2884,7 @@ function renderGeneralCash() {
         </details>
       </td>
     </tr>`;
-  }).join("") || `<tr><td colspan="5">Aun no hay movimientos.</td></tr>`;
+  }).join("") || `<tr><td colspan="5">No hay movimientos en el rango seleccionado.</td></tr>`;
   renderStaffPayments();
 }
 
@@ -4310,7 +4344,7 @@ function bindEvents() {
     render();
   });
   $("#exportGeneralBtn").addEventListener("click", () => {
-    const rows = allDatesWithCashActivity().map((date) => ({
+    const rows = generalSummaryDates().slice().reverse().map((date) => ({
       fecha: date,
       ingresos: incomeForDate(date),
       egresos_operativos: dailyExpenseTotal(date),
@@ -4319,6 +4353,8 @@ function bindEvents() {
     }));
     exportCsv("caja-general.csv", rows);
   });
+  $("#generalSummaryFrom")?.addEventListener("change", renderGeneralCash);
+  $("#generalSummaryTo")?.addEventListener("change", renderGeneralCash);
   $("#exportStaffPaymentsBtn").addEventListener("click", () => {
     exportCsv("pagos-personal-terceros.csv", staffPayments().map((payment) => ({
       fecha: payment.date,

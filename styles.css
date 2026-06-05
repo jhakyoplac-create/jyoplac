@@ -1118,6 +1118,27 @@ dialog::backdrop {
   padding: 10px 12px;
 }
 
+.compact-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.compact-filters label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  max-width: 180px;
+}
+
+.compact-filters input {
+  margin-top: 5px;
+  padding: 9px 10px;
+  min-height: 40px;
+  font-size: 14px;
+}
+
 .modal-form {
   padding: 18px;
 }
