@@ -2771,34 +2771,44 @@ function generalCashBalances() {
 }
 
 function openGeneralBalanceDetail(type) {
-  const balances = generalCashBalances();
   const title = $("#generalBalanceDetailTitle");
   const summary = $("#generalBalanceDetailSummary");
+  const head = $("#generalBalanceDetailHead");
   const body = $("#generalBalanceDetailBody");
-  if (!title || !summary || !body) return;
+  if (!title || !summary || !head || !body) return;
   const isCash = type === "cash";
-  title.textContent = isCash ? "Detalle de caja general efectivo" : "Detalle de billeteras y bancos";
-  const rows = isCash
-    ? [
-      ["Saldo inicial efectivo", balances.cashOpening, 0, balances.cashOpening],
-      ["Ingresos efectivo", balances.cashIncome, 0, balances.cashOpening + balances.cashIncome],
-      ["Egresos efectivo", 0, balances.cashExpenses, balances.cashOpening + balances.cashIncome - balances.cashExpenses],
-      ["Salida a caja chica", 0, balances.pettyCash, balances.cash]
-    ]
-    : [
-      ["Saldo inicial billeteras/bancos", balances.bankOpening, 0, balances.bankOpening],
-      ["Ingresos Yape/Plin/Tarjeta", balances.walletIncome, 0, balances.bankOpening + balances.walletIncome],
-      ["Egresos Yape/Plin/Tarjeta", 0, balances.walletExpenses, balances.wallet],
-      ["Ingresos transferencia", balances.transferIncome, 0, balances.wallet + balances.transferIncome],
-      ["Egresos transferencia", 0, balances.transferExpenses, balances.bank]
-    ];
-  summary.innerHTML = `<span>Total actual: <strong>${money(isCash ? balances.cash : balances.bank)}</strong></span><span>Actualizado con todos los pagos y egresos registrados.</span>`;
-  body.innerHTML = rows.map(([concept, income, expense, balance]) => `<tr>
-    <td>${escapeHtml(concept)}</td>
-    <td>${income ? money(income) : ""}</td>
-    <td>${expense ? money(expense) : ""}</td>
-    <td><strong>${money(balance)}</strong></td>
-  </tr>`).join("");
+  const month = operatingDate().slice(0, 7);
+  const rows = dailyIncomeBreakdownRows(month);
+  const titlePrefix = isCash ? "Ingresos efectivo" : "Ingresos billeteras y bancos";
+  const startLabel = formatDate(`${month}-01`);
+  title.textContent = `${titlePrefix} | ${monthLabel(month)}`;
+  const total = rows.reduce((sum, row) => {
+    return sum + (isCash ? row.cash : row.yape + row.plin + row.transfer + row.card);
+  }, 0);
+  summary.innerHTML = `<span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Solo ingresos registrados por pagos del mes.</span>`;
+  if (isCash) {
+    const cashRows = rows.filter((row) => row.cash > 0);
+    head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Total</th></tr>`;
+    body.innerHTML = cashRows.map((row) => `<tr>
+      <td>${formatDate(row.date)}</td>
+      <td>${money(row.cash)}</td>
+      <td><strong>${money(row.cash)}</strong></td>
+    </tr>`).join("") || `<tr><td colspan="3">Sin ingresos en efectivo desde ${startLabel}.</td></tr>`;
+  } else {
+    const bankRows = rows.filter((row) => row.yape + row.plin + row.transfer + row.card > 0);
+    head.innerHTML = `<tr><th>Fecha</th><th>Yape</th><th>Plin</th><th>Transferencia</th><th>Tarjeta</th><th>Total</th></tr>`;
+    body.innerHTML = bankRows.map((row) => {
+      const dayTotal = row.yape + row.plin + row.transfer + row.card;
+      return `<tr>
+        <td>${formatDate(row.date)}</td>
+        <td>${money(row.yape)}</td>
+        <td>${money(row.plin)}</td>
+        <td>${money(row.transfer)}</td>
+        <td>${money(row.card)}</td>
+        <td><strong>${money(dayTotal)}</strong></td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="6">Sin ingresos por billeteras o bancos desde ${startLabel}.</td></tr>`;
+  }
   $("#generalBalanceDetailDialog")?.showModal();
 }
 
