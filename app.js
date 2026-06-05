@@ -1131,6 +1131,45 @@ function appointmentStatusText(status) {
   return labels[normalized] || normalized.replace(/_/g, " ") || "Reservada";
 }
 
+function appointmentAuditEvent(existingAppointment, appointment) {
+  const status = String(appointment.status || "").trim().toUpperCase();
+  const patient = patientById(appointment.patientId);
+  const patientLabel = patient?.name || "Paciente";
+  const dateText = `${appointment.date || ""} ${appointment.time || ""}`.trim();
+  const notes = String(appointment.notes || "").trim().toLowerCase();
+  if (!existingAppointment) {
+    if (!["CANCELADA", "REPROGRAMADA", "NO_ASISTIO"].includes(status) && !notes.startsWith("reprogramada desde")) {
+      return {
+        action: "APPOINTMENT_CREATED",
+        detail: `Agendo cita: ${patientLabel} ${dateText}`
+      };
+    }
+    return null;
+  }
+  const previousStatus = String(existingAppointment.status || "").trim().toUpperCase();
+  if (status !== previousStatus) {
+    const statusEvents = {
+      NO_ASISTIO: ["APPOINTMENT_NO_SHOW", "Marco no asistio"],
+      CANCELADA: ["APPOINTMENT_CANCELLED", "Cancelo cita"],
+      REPROGRAMADA: ["APPOINTMENT_RESCHEDULED", "Reprogramo cita"]
+    };
+    if (statusEvents[status]) {
+      const [action, label] = statusEvents[status];
+      return { action, detail: `${label}: ${patientLabel} ${dateText}` };
+    }
+  }
+  if (
+    !["CANCELADA", "REPROGRAMADA", "NO_ASISTIO"].includes(status) &&
+    (existingAppointment.date !== appointment.date || existingAppointment.time !== appointment.time)
+  ) {
+    return {
+      action: "APPOINTMENT_RESCHEDULED",
+      detail: `Reprogramo cita: ${patientLabel} ${dateText}`
+    };
+  }
+  return null;
+}
+
 function patientAppointmentSummary(patientId) {
   const appointments = state.appointments
     .filter((appointment) => String(appointment.patientId) === String(patientId))
@@ -3199,15 +3238,8 @@ function bindEvents() {
       return;
     }
     upsert(state.appointments, appointment);
-    if (["NO_ASISTIO", "REPROGRAMADA"].includes(appointment.status) && existingAppointment?.status !== appointment.status) {
-      const patient = patientById(appointment.patientId);
-      const label = appointment.status === "NO_ASISTIO" ? "Marco no asistio" : "Reprogramo cita";
-      addLocalAuditEvent(
-        appointment.status === "NO_ASISTIO" ? "APPOINTMENT_NO_SHOW" : "APPOINTMENT_RESCHEDULED",
-        `${label}: ${patient?.name || "Paciente"} ${appointment.date} ${appointment.time}`,
-        appointment.patientId
-      );
-    }
+    const auditEvent = appointmentAuditEvent(existingAppointment, appointment);
+    if (auditEvent) addLocalAuditEvent(auditEvent.action, auditEvent.detail, appointment.patientId);
     if (!API_ENABLED) saveState();
     $("#appointmentDialog").close();
     render();

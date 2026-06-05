@@ -228,6 +228,34 @@ def add_audit_event(conn, user, action, detail, patient_id=""):
     )
 
 
+def appointment_audit_event(data, existing_appointment, patient_name):
+    status = str(data.get("status") or "").strip().upper()
+    date_value = data.get("date", "")
+    time_value = data.get("time", "")
+    notes = str(data.get("notes") or "").strip().lower()
+    patient_label = patient_name or "Paciente"
+    if not existing_appointment:
+        if status not in {"CANCELADA", "REPROGRAMADA", "NO_ASISTIO"} and not notes.startswith("reprogramada desde"):
+            return ("APPOINTMENT_CREATED", f"Agendo cita: {patient_label} {date_value} {time_value}")
+        return None
+    previous_status = str(existing_appointment["status"] or "").strip().upper()
+    if status != previous_status:
+        status_events = {
+            "NO_ASISTIO": ("APPOINTMENT_NO_SHOW", "Marco no asistio"),
+            "CANCELADA": ("APPOINTMENT_CANCELLED", "Cancelo cita"),
+            "REPROGRAMADA": ("APPOINTMENT_RESCHEDULED", "Reprogramo cita"),
+        }
+        if status in status_events:
+            action, label = status_events[status]
+            return (action, f"{label}: {patient_label} {date_value} {time_value}")
+    if (
+        status not in {"CANCELADA", "REPROGRAMADA", "NO_ASISTIO"}
+        and (existing_appointment["date"] != date_value or existing_appointment["time"] != time_value)
+    ):
+        return ("APPOINTMENT_RESCHEDULED", f"Reprogramo cita: {patient_label} {date_value} {time_value}")
+    return None
+
+
 def init_db():
     with db() as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -562,7 +590,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             free_statuses = {"CANCELADA", "REPROGRAMADA", "NO_ASISTIO"}
             with db() as conn:
                 existing_appointment = conn.execute(
-                    "SELECT id, status, patient_id FROM appointments WHERE id = ?",
+                    "SELECT id, status, patient_id, date, time FROM appointments WHERE id = ?",
                     (item_id,),
                 ).fetchone()
                 if data.get("status") not in free_statuses:
@@ -630,19 +658,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         new_appointment_id,
                     ),
                 )
-                if data.get("status") in {"NO_ASISTIO", "REPROGRAMADA"} and (
-                    not existing_appointment or existing_appointment["status"] != data.get("status")
-                ):
-                    patient = conn.execute("SELECT name FROM patients WHERE id = ?", (data["patientId"],)).fetchone()
-                    action = "APPOINTMENT_NO_SHOW" if data.get("status") == "NO_ASISTIO" else "APPOINTMENT_RESCHEDULED"
-                    label = "Marco no asistio" if data.get("status") == "NO_ASISTIO" else "Reprogramo cita"
-                    add_audit_event(
-                        conn,
-                        user,
-                        action,
-                        f"{label}: {patient['name'] if patient else 'Paciente'} {data['date']} {data['time']}",
-                        data["patientId"],
-                    )
+                patient = conn.execute("SELECT name FROM patients WHERE id = ?", (data["patientId"],)).fetchone()
+                audit_event = appointment_audit_event(data, existing_appointment, patient["name"] if patient else "")
+                if audit_event:
+                    action, detail = audit_event
+                    add_audit_event(conn, user, action, detail, data["patientId"])
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/clinical-history":
