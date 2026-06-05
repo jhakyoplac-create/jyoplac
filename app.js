@@ -2697,17 +2697,24 @@ function renderUsers() {
 function generalCashBalances() {
   const cashIncome = state.payments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["EFECTIVO"]), 0);
-  const bankIncome = state.payments
-    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"]), 0);
+  const walletIncome = state.payments
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["YAPE", "PLIN", "TARJETA"]), 0);
+  const transferIncome = state.payments
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["TRANSFERENCIA"]), 0);
   const cashExpenses = state.expenses
     .filter((expense) => String(expense.method || "").toUpperCase() === "EFECTIVO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const bankExpenses = state.expenses
-    .filter((expense) => ["YAPE", "PLIN", "TARJETA", "TRANSFERENCIA"].includes(String(expense.method || "").toUpperCase()))
+  const walletExpenses = state.expenses
+    .filter((expense) => ["YAPE", "PLIN", "TARJETA"].includes(String(expense.method || "").toUpperCase()))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const transferExpenses = state.expenses
+    .filter((expense) => String(expense.method || "").toUpperCase() === "TRANSFERENCIA")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const cash = Number(state.config.generalCashOpening || 0) + cashIncome - cashExpenses - pettyCashDeliveredTotal();
-  const bank = Number(state.config.generalBankOpening || 0) + bankIncome - bankExpenses;
-  return { cash, bank, total: cash + bank };
+  const wallet = Number(state.config.generalBankOpening || 0) + walletIncome - walletExpenses;
+  const transfer = transferIncome - transferExpenses;
+  const bank = wallet + transfer;
+  return { cash, bank, wallet, transfer, total: cash + bank };
 }
 
 function renderGeneralCash() {
@@ -2715,6 +2722,8 @@ function renderGeneralCash() {
   const balances = generalCashBalances();
   $("#generalCashBalance").textContent = money(balances.cash);
   $("#generalBankBalance").textContent = money(balances.bank);
+  $("#generalWalletBalance").textContent = money(balances.wallet);
+  $("#generalTransferBalance").textContent = money(balances.transfer);
   $("#generalTotalBalance").textContent = money(balances.total);
   $("#generalTodayIncome").textContent = money(todayIncome());
   const form = $("#generalCashForm");

@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260530-2" />
+    <link rel="stylesheet" href="styles.css?v=20260605-caja-bancos" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -380,6 +380,10 @@
           <article class="kpi">
             <span>Billeteras y bancos</span>
             <strong id="generalBankBalance">S/ 0</strong>
+            <div class="kpi-breakdown">
+              <small>Yape/Plin/Tarjeta <b id="generalWalletBalance">S/ 0</b></small>
+              <small>Transferencia <b id="generalTransferBalance">S/ 0</b></small>
+            </div>
           </article>
           <article class="kpi">
             <span>Total general</span>
@@ -396,7 +400,7 @@
               <h2>Saldos iniciales</h2>
             </div>
             <label>Efectivo general S/<input name="cash" type="number" min="0" step="0.01" /></label>
-            <label>Yape/Plin/Transferencia/Tarjeta S/<input name="bank" type="number" min="0" step="0.01" /></label>
+            <label>Yape/Plin/Tarjeta/Transferencia S/<input name="bank" type="number" min="0" step="0.01" /></label>
             <label>Salida caja chica del dia S/<input name="pettyCash" type="number" min="0" step="0.01" /></label>
             <button class="primary" type="submit">Guardar saldos</button>
           </form>
@@ -825,6 +829,6 @@
       </div>
     </dialog>
 
-    <script src="app.js?v=20260604-ocultar-recepcion"></script>
+    <script src="app.js?v=20260605-caja-bancos"></script>
   </body>
 </html>

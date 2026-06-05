@@ -431,6 +431,26 @@ label {
   font-size: 28px;
 }
 
+.kpi-breakdown {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kpi-breakdown small {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kpi-breakdown b {
+  color: var(--ink);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .content-grid {
   display: grid;
   gap: 18px;

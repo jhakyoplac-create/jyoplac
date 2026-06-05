@@ -280,6 +280,15 @@ def init_db():
                 "INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
                 (key, value),
             )
+        bank_opening = conn.execute("SELECT value FROM app_config WHERE key = ?", ("generalBankOpening",)).fetchone()
+        try:
+            if bank_opening and abs(float(bank_opening["value"]) - 175.5) < 0.01:
+                conn.execute(
+                    "UPDATE app_config SET value = ? WHERE key = ?",
+                    ("453.5", "generalBankOpening"),
+                )
+        except (TypeError, ValueError):
+            pass
 
 
 def read_json(handler):
