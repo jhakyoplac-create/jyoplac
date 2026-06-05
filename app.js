@@ -940,11 +940,13 @@ function pettyCashDeliveredTotal(month = null) {
     ...state.pettyCashAllocations.map((item) => item.date),
     ...state.cashSessions.map((session) => session.date)
   ])].filter((date) => !month || String(date || "").startsWith(month));
-  return dates.reduce((sum, date) => {
-    const session = state.cashSessions.filter((item) => item.date === date).slice(-1)[0];
-    if (session?.closedAt) return sum;
-    return sum + Number(session?.openingCash ?? pettyCashAmount(date) ?? 0);
-  }, 0);
+  return dates.reduce((sum, date) => sum + pettyCashDeliveredForDate(date), 0);
+}
+
+function pettyCashDeliveredForDate(date) {
+  const session = state.cashSessions.filter((item) => item.date === date).slice(-1)[0];
+  if (session?.closedAt) return 0;
+  return Number(session?.openingCash ?? pettyCashAmount(date) ?? 0);
 }
 
 const paymentSplitFields = [
@@ -2800,17 +2802,20 @@ function openGeneralBalanceDetail(type) {
   if (isCash) {
     const cashRows = rows.map((row) => ({
       ...row,
-      cashExpense: totalExpenseByMethodsForDate(row.date, ["EFECTIVO"])
-    })).filter((row) => row.cash > 0 || row.cashExpense > 0);
+      cashExpense: totalExpenseByMethodsForDate(row.date, ["EFECTIVO"]),
+      pettyCash: pettyCashDeliveredForDate(row.date)
+    })).filter((row) => row.cash > 0 || row.cashExpense > 0 || row.pettyCash > 0);
     const totalExpense = cashRows.reduce((sum, row) => sum + row.cashExpense, 0);
-    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.cashOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos efectivo: <strong>${money(totalExpense)}</strong></span><span>Neto mes: <strong>${money(total - totalExpense)}</strong></span><span>Saldo actual: <strong>${money(balances.cash)}</strong></span>`;
-    head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Egreso efectivo</th><th>Neto</th></tr>`;
+    const totalPettyCash = cashRows.reduce((sum, row) => sum + row.pettyCash, 0);
+    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.cashOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos efectivo: <strong>${money(totalExpense)}</strong></span><span>Salida caja chica: <strong>${money(totalPettyCash)}</strong></span><span>Neto mes: <strong>${money(total - totalExpense - totalPettyCash)}</strong></span><span>Saldo actual: <strong>${money(balances.cash)}</strong></span>`;
+    head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Egreso efectivo</th><th>Caja chica</th><th>Neto</th></tr>`;
     body.innerHTML = cashRows.map((row) => `<tr>
       <td>${formatDate(row.date)}</td>
       <td>${money(row.cash)}</td>
       <td>${money(row.cashExpense)}</td>
-      <td><strong>${money(row.cash - row.cashExpense)}</strong></td>
-    </tr>`).join("") || `<tr><td colspan="4">Sin movimientos en efectivo desde ${startLabel}.</td></tr>`;
+      <td>${money(row.pettyCash)}</td>
+      <td><strong>${money(row.cash - row.cashExpense - row.pettyCash)}</strong></td>
+    </tr>`).join("") || `<tr><td colspan="5">Sin movimientos en efectivo desde ${startLabel}.</td></tr>`;
   } else {
     const bankRows = rows.map((row) => ({
       ...row,
