@@ -935,11 +935,11 @@ function setPettyCashAllocation(date, amount) {
   else state.pettyCashAllocations.push({ id: uid("petty"), date, amount: Number(amount || 0) });
 }
 
-function pettyCashDeliveredTotal() {
+function pettyCashDeliveredTotal(month = null) {
   const dates = [...new Set([
     ...state.pettyCashAllocations.map((item) => item.date),
     ...state.cashSessions.map((session) => session.date)
-  ])];
+  ])].filter((date) => !month || String(date || "").startsWith(month));
   return dates.reduce((sum, date) => {
     const session = state.cashSessions.filter((item) => item.date === date).slice(-1)[0];
     if (session?.closedAt) return sum;
@@ -2740,22 +2740,26 @@ function renderUsers() {
 }
 
 function generalCashBalances() {
-  const cashIncome = state.payments
+  const month = operatingDate().slice(0, 7);
+  const monthPayments = state.payments.filter((payment) => String(payment.date || "").startsWith(month));
+  const monthExpenses = state.expenses.filter((expense) => String(expense.date || "").startsWith(month));
+  const pettyCash = pettyCashDeliveredTotal(month);
+  const cashIncome = monthPayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["EFECTIVO"]), 0);
-  const walletIncome = state.payments
+  const walletIncome = monthPayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["YAPE", "PLIN", "TARJETA"]), 0);
-  const transferIncome = state.payments
+  const transferIncome = monthPayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["TRANSFERENCIA"]), 0);
-  const cashExpenses = state.expenses
+  const cashExpenses = monthExpenses
     .filter((expense) => String(expense.method || "").toUpperCase() === "EFECTIVO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const walletExpenses = state.expenses
+  const walletExpenses = monthExpenses
     .filter((expense) => ["YAPE", "PLIN", "TARJETA"].includes(String(expense.method || "").toUpperCase()))
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const transferExpenses = state.expenses
+  const transferExpenses = monthExpenses
     .filter((expense) => String(expense.method || "").toUpperCase() === "TRANSFERENCIA")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const cash = Number(state.config.generalCashOpening || 0) + cashIncome - cashExpenses - pettyCashDeliveredTotal();
+  const cash = Number(state.config.generalCashOpening || 0) + cashIncome - cashExpenses - pettyCash;
   const wallet = Number(state.config.generalBankOpening || 0) + walletIncome - walletExpenses;
   const transfer = transferIncome - transferExpenses;
   const bank = wallet + transfer;
@@ -2773,7 +2777,7 @@ function generalCashBalances() {
     cashExpenses,
     walletExpenses,
     transferExpenses,
-    pettyCash: pettyCashDeliveredTotal()
+    pettyCash
   };
 }
 
