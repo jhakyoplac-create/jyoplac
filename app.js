@@ -2627,8 +2627,8 @@ function renderReports() {
 
   const compareRows = [
     ["Ingresos", money(metrics.income), money(compare.income), money(metrics.income - compare.income)],
-    ["Gastos personal", money(metrics.staffExpenses), money(compare.staffExpenses), money(metrics.staffExpenses - compare.staffExpenses)],
     ["Gastos compras", money(metrics.purchaseExpenses), money(compare.purchaseExpenses), money(metrics.purchaseExpenses - compare.purchaseExpenses)],
+    ["Pagos a terceros", money(metrics.staffExpenses), money(compare.staffExpenses), money(metrics.staffExpenses - compare.staffExpenses)],
     ["Pacientes nuevos", metrics.newPatients.length, compare.newPatients.length, metrics.newPatients.length - compare.newPatients.length],
     ["Pacientes atendidos", metrics.attended, compare.attended, metrics.attended - compare.attended],
     ["Pacientes con cita", metrics.patientsSeen, compare.patientsSeen, metrics.patientsSeen - compare.patientsSeen]
@@ -4239,8 +4239,8 @@ function bindEvents() {
     const metrics = reportMetrics(month);
     const rows = [
       { seccion: "RESUMEN", indicador: "Ingresos", mes: month, monto: metrics.income },
-      { seccion: "RESUMEN", indicador: "Gastos personal", mes: month, monto: -metrics.staffExpenses },
       { seccion: "RESUMEN", indicador: "Gastos compras", mes: month, monto: -metrics.purchaseExpenses },
+      { seccion: "RESUMEN", indicador: "Pagos a terceros", mes: month, monto: -metrics.staffExpenses },
       { seccion: "RESUMEN", indicador: "Pacientes nuevos", mes: month, cantidad: metrics.newPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes nuevos recepcion", mes: month, cantidad: metrics.receptionNewPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes antiguos", mes: month, cantidad: metrics.oldPatients },
