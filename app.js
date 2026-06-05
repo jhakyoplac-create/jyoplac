@@ -2752,7 +2752,54 @@ function generalCashBalances() {
   const wallet = Number(state.config.generalBankOpening || 0) + walletIncome - walletExpenses;
   const transfer = transferIncome - transferExpenses;
   const bank = wallet + transfer;
-  return { cash, bank, wallet, transfer, total: cash + bank };
+  return {
+    cash,
+    bank,
+    wallet,
+    transfer,
+    total: cash + bank,
+    cashOpening: Number(state.config.generalCashOpening || 0),
+    bankOpening: Number(state.config.generalBankOpening || 0),
+    cashIncome,
+    walletIncome,
+    transferIncome,
+    cashExpenses,
+    walletExpenses,
+    transferExpenses,
+    pettyCash: pettyCashDeliveredTotal()
+  };
+}
+
+function openGeneralBalanceDetail(type) {
+  const balances = generalCashBalances();
+  const title = $("#generalBalanceDetailTitle");
+  const summary = $("#generalBalanceDetailSummary");
+  const body = $("#generalBalanceDetailBody");
+  if (!title || !summary || !body) return;
+  const isCash = type === "cash";
+  title.textContent = isCash ? "Detalle de caja general efectivo" : "Detalle de billeteras y bancos";
+  const rows = isCash
+    ? [
+      ["Saldo inicial efectivo", balances.cashOpening, 0, balances.cashOpening],
+      ["Ingresos efectivo", balances.cashIncome, 0, balances.cashOpening + balances.cashIncome],
+      ["Egresos efectivo", 0, balances.cashExpenses, balances.cashOpening + balances.cashIncome - balances.cashExpenses],
+      ["Salida a caja chica", 0, balances.pettyCash, balances.cash]
+    ]
+    : [
+      ["Saldo inicial billeteras/bancos", balances.bankOpening, 0, balances.bankOpening],
+      ["Ingresos Yape/Plin/Tarjeta", balances.walletIncome, 0, balances.bankOpening + balances.walletIncome],
+      ["Egresos Yape/Plin/Tarjeta", 0, balances.walletExpenses, balances.wallet],
+      ["Ingresos transferencia", balances.transferIncome, 0, balances.wallet + balances.transferIncome],
+      ["Egresos transferencia", 0, balances.transferExpenses, balances.bank]
+    ];
+  summary.innerHTML = `<span>Total actual: <strong>${money(isCash ? balances.cash : balances.bank)}</strong></span><span>Actualizado con todos los pagos y egresos registrados.</span>`;
+  body.innerHTML = rows.map(([concept, income, expense, balance]) => `<tr>
+    <td>${escapeHtml(concept)}</td>
+    <td>${income ? money(income) : ""}</td>
+    <td>${expense ? money(expense) : ""}</td>
+    <td><strong>${money(balance)}</strong></td>
+  </tr>`).join("");
+  $("#generalBalanceDetailDialog")?.showModal();
 }
 
 function renderGeneralCash() {
@@ -3036,6 +3083,11 @@ function bindEvents() {
   };
 
   document.addEventListener("click", async (event) => {
+    const generalDetail = event.target.closest("[data-open-general-detail]");
+    if (generalDetail) {
+      openGeneralBalanceDetail(generalDetail.dataset.openGeneralDetail);
+      return;
+    }
     const openReceptionRegistry = event.target.closest("#openReceptionPatientsBtn");
     if (openReceptionRegistry) {
       openReceptionPatientsModal();

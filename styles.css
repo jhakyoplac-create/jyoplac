@@ -420,6 +420,53 @@ label {
   padding: 18px;
 }
 
+.kpi-detail-card {
+  position: relative;
+}
+
+.kpi-detail-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+}
+
+.kpi-detail-btn::before,
+.kpi-detail-btn::after {
+  content: "";
+  position: absolute;
+  border-color: var(--blue);
+}
+
+.kpi-detail-btn::before {
+  width: 10px;
+  height: 10px;
+  top: 7px;
+  right: 7px;
+  border-top: 2px solid var(--blue);
+  border-right: 2px solid var(--blue);
+}
+
+.kpi-detail-btn::after {
+  width: 12px;
+  height: 2px;
+  top: 15px;
+  left: 7px;
+  background: var(--blue);
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+.kpi-detail-btn:hover {
+  background: #eefbff;
+  box-shadow: 0 8px 18px rgba(0, 166, 214, 0.14);
+}
+
 .kpi span {
   color: var(--muted);
   font-weight: 700;
@@ -1043,6 +1090,32 @@ dialog::backdrop {
 
 #receptionPatientsDialog {
   width: min(1120px, calc(100vw - 40px));
+}
+
+#generalBalanceDetailDialog {
+  width: min(900px, calc(100vw - 40px));
+}
+
+.balance-detail-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.balance-detail-summary strong {
+  color: var(--ink);
+}
+
+.balance-detail-modal table {
+  font-size: 13px;
+}
+
+.balance-detail-modal th,
+.balance-detail-modal td {
+  padding: 10px 12px;
 }
 
 .modal-form {

@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260605-tabla-ingresos-csv" />
+    <link rel="stylesheet" href="styles.css?v=20260605-detalle-caja" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -373,11 +373,13 @@
 
       <section id="caja-general" class="view">
         <div class="kpi-grid compact">
-          <article class="kpi">
+          <article class="kpi kpi-detail-card">
+            <button class="kpi-detail-btn" data-open-general-detail="cash" type="button" aria-label="Ver detalle de caja general efectivo"></button>
             <span>Caja general efectivo</span>
             <strong id="generalCashBalance">S/ 0</strong>
           </article>
-          <article class="kpi">
+          <article class="kpi kpi-detail-card">
+            <button class="kpi-detail-btn" data-open-general-detail="bank" type="button" aria-label="Ver detalle de billeteras y bancos"></button>
             <span>Billeteras y bancos</span>
             <strong id="generalBankBalance">S/ 0</strong>
             <div class="kpi-breakdown">
@@ -836,6 +838,29 @@
       </div>
     </dialog>
 
-    <script src="app.js?v=20260605-tabla-ingresos-csv"></script>
+    <dialog id="generalBalanceDetailDialog">
+      <div class="form modal-form wide-modal balance-detail-modal">
+        <div class="panel-head">
+          <h2 id="generalBalanceDetailTitle">Detalle de saldo</h2>
+          <button class="icon" data-close-dialog="generalBalanceDetailDialog" type="button" aria-label="Cerrar">x</button>
+        </div>
+        <div id="generalBalanceDetailSummary" class="balance-detail-summary"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Concepto</th>
+                <th>Ingreso</th>
+                <th>Egreso</th>
+                <th>Saldo</th>
+              </tr>
+            </thead>
+            <tbody id="generalBalanceDetailBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <script src="app.js?v=20260605-detalle-caja"></script>
   </body>
 </html>
