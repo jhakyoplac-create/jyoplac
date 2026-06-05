@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260605-caja-bancos" />
+    <link rel="stylesheet" href="styles.css?v=20260605-tabla-ingresos-csv" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -624,8 +624,11 @@
             <div class="panel-head"><h2>Mes a mes</h2></div>
             <div id="monthCompareReport" class="table-wrap"></div>
           </section>
-          <section class="panel">
-            <div class="panel-head"><h2>Ingresos por dia y metodo</h2></div>
+          <section class="panel income-breakdown-panel">
+            <div class="panel-head">
+              <h2>Ingresos por dia y metodo</h2>
+              <button class="ghost" id="exportDailyIncomeBreakdownBtn">CSV</button>
+            </div>
             <div id="dailyIncomeBreakdownReport" class="table-wrap"></div>
           </section>
           <section class="panel">
@@ -833,6 +836,6 @@
       </div>
     </dialog>
 
-    <script src="app.js?v=20260605-revision-ingresos"></script>
+    <script src="app.js?v=20260605-tabla-ingresos-csv"></script>
   </body>
 </html>

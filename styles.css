@@ -833,6 +833,26 @@ tr.followup-pending td:first-child {
   white-space: nowrap;
 }
 
+.income-breakdown-panel table {
+  min-width: 780px;
+  font-size: 12px;
+  line-height: 1.22;
+}
+
+.income-breakdown-panel th {
+  font-size: 10px;
+  padding: 8px 8px;
+}
+
+.income-breakdown-panel td {
+  padding: 9px 8px;
+  vertical-align: top;
+}
+
+.income-breakdown-panel td strong {
+  font-size: 12px;
+}
+
 .patient-appointment {
   display: grid;
   gap: 3px;

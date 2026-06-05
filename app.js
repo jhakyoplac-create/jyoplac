@@ -2607,12 +2607,12 @@ function renderDailyAuditReport() {
   $("#dailyAuditReport").innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Sin actividad registrada hoy.</td></tr>`}</tbody></table>`;
 }
 
-function renderDailyIncomeBreakdown(month) {
+function dailyIncomeBreakdownRows(month) {
   const dates = [...new Set([
     ...state.payments.filter((payment) => payment.date.startsWith(month)).map((payment) => payment.date),
     ...state.expenses.filter((expense) => expense.date.startsWith(month)).map((expense) => expense.date)
   ])].sort();
-  const rows = dates.map((date) => {
+  return dates.map((date) => {
     const gross = incomeForDate(date);
     const cash = incomeForDate(date, "EFECTIVO");
     const yape = incomeForDate(date, "YAPE");
@@ -2622,17 +2622,23 @@ function renderDailyIncomeBreakdown(month) {
     const operationalExpenses = dailyExpenseTotal(date);
     const generalExpenses = dailyGeneralExpenseTotal(date);
     const net = gross - operationalExpenses - generalExpenses;
+    return { date, gross, cash, yape, plin, transfer, card, operationalExpenses, generalExpenses, net };
+  });
+}
+
+function renderDailyIncomeBreakdown(month) {
+  const rows = dailyIncomeBreakdownRows(month).map((row) => {
     return `<tr>
-      <td>${formatDate(date)}</td>
-      <td><strong>${money(gross)}</strong></td>
-      <td>${money(cash)}</td>
-      <td>${money(yape)}</td>
-      <td>${money(plin)}</td>
-      <td>${money(transfer)}</td>
-      <td>${money(card)}</td>
-      <td>${money(operationalExpenses)}</td>
-      <td>${money(generalExpenses)}</td>
-      <td><strong>${money(net)}</strong></td>
+      <td>${formatDate(row.date)}</td>
+      <td><strong>${money(row.gross)}</strong></td>
+      <td>${money(row.cash)}</td>
+      <td>${money(row.yape)}</td>
+      <td>${money(row.plin)}</td>
+      <td>${money(row.transfer)}</td>
+      <td>${money(row.card)}</td>
+      <td>${money(row.operationalExpenses)}</td>
+      <td>${money(row.generalExpenses)}</td>
+      <td><strong>${money(row.net)}</strong></td>
     </tr>`;
   }).join("");
   $("#dailyIncomeBreakdownReport").innerHTML = `<table><thead><tr><th>Fecha</th><th>Bruto</th><th>Efectivo</th><th>Yape</th><th>Plin</th><th>Transfer.</th><th>Tarjeta</th><th>Egresos oper.</th><th>Egresos caja gral.</th><th>Neto</th></tr></thead><tbody>${rows || `<tr><td colspan="10">Sin ingresos registrados este mes.</td></tr>`}</tbody></table>`;
@@ -4277,18 +4283,18 @@ function bindEvents() {
       { seccion: "RESUMEN", indicador: "Pacientes nuevos recepcion", mes: month, cantidad: metrics.receptionNewPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes antiguos", mes: month, cantidad: metrics.oldPatients },
       { seccion: "RESUMEN", indicador: "Pacientes inactivos", mes: month, cantidad: metrics.inactivePatients },
-      ...[...new Set(metrics.payments.map((payment) => payment.date))].sort().map((date) => ({
+      ...dailyIncomeBreakdownRows(month).map((row) => ({
         seccion: "INGRESOS POR DIA",
-        fecha: date,
-        bruto: incomeForDate(date),
-        efectivo: incomeForDate(date, "EFECTIVO"),
-        yape: incomeForDate(date, "YAPE"),
-        plin: incomeForDate(date, "PLIN"),
-        transferencia: incomeForDate(date, "TRANSFERENCIA"),
-        tarjeta: incomeForDate(date, "TARJETA"),
-        egresos_operativos: dailyExpenseTotal(date),
-        egresos_caja_general: dailyGeneralExpenseTotal(date),
-        neto: incomeForDate(date) - dailyExpenseTotal(date) - dailyGeneralExpenseTotal(date)
+        fecha: row.date,
+        bruto: row.gross,
+        efectivo: row.cash,
+        yape: row.yape,
+        plin: row.plin,
+        transferencia: row.transfer,
+        tarjeta: row.card,
+        egresos_operativos: row.operationalExpenses,
+        egresos_caja_general: row.generalExpenses,
+        neto: row.net
       })),
       ...monthlyCareData(month).map((item) => ({ seccion: "ATENCIONES_MENSUALES", mes: item.month, cantidad: item.count })),
       ...metrics.ageGroups.map((item) => ({ seccion: "EDAD", grupo: item.group, mes: month, cantidad: item.count })),
@@ -4311,6 +4317,22 @@ function bindEvents() {
       }))
     ];
     exportCsv("reporte-mensual.csv", rows);
+  });
+  $("#exportDailyIncomeBreakdownBtn")?.addEventListener("click", () => {
+    const month = $("#reportMonth").value || todayISO().slice(0, 7);
+    const rows = dailyIncomeBreakdownRows(month).map((row) => ({
+      fecha: row.date,
+      bruto: row.gross,
+      efectivo: row.cash,
+      yape: row.yape,
+      plin: row.plin,
+      transferencia: row.transfer,
+      tarjeta: row.card,
+      egresos_operativos: row.operationalExpenses,
+      egresos_caja_general: row.generalExpenses,
+      neto: row.net
+    }));
+    exportCsv(`ingresos-por-dia-${month}.csv`, rows);
   });
 }
 
