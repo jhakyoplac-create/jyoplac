@@ -190,6 +190,7 @@ def migrate_db(conn):
     ensure_column(conn, "patients", "created_by_id", "TEXT")
     ensure_column(conn, "patients", "created_by_name", "TEXT")
     ensure_column(conn, "patients", "created_by_role", "TEXT")
+    ensure_column(conn, "patients", "hide_from_reception_new", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_pending", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_due_date", "TEXT")
@@ -515,6 +516,28 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
                 return
             data = read_json(self)
+            if data.get("hideReceptionNew"):
+                if not require_role(self, {"ADMIN"}):
+                    return
+                item_id = data.get("id")
+                if not item_id:
+                    return send_json(self, {"error": "Paciente no indicado."}, 400)
+                with db() as conn:
+                    patient = conn.execute("SELECT id, name, dni FROM patients WHERE id = ?", (item_id,)).fetchone()
+                    if not patient:
+                        return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                    conn.execute(
+                        "UPDATE patients SET hide_from_reception_new = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (item_id,),
+                    )
+                    add_audit_event(
+                        conn,
+                        user,
+                        "PATIENT_RECEPTION_NEW_HIDDEN",
+                        f"Oculto de nuevos recepcion: {patient['name']} ({patient['dni']})",
+                        item_id,
+                    )
+                return send_json(self, {"ok": True, "id": item_id})
             if data.get("delete"):
                 if not require_role(self, {"ADMIN", "DOCTOR"}):
                     return
@@ -532,25 +555,32 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if validation_errors:
                 return send_json(self, {"error": "\n".join(validation_errors)}, 400)
             with db() as conn:
-                existing_patient = conn.execute("SELECT id, name FROM patients WHERE id = ?", (item_id,)).fetchone()
+                existing_patient = conn.execute("SELECT id, name, hide_from_reception_new FROM patients WHERE id = ?", (item_id,)).fetchone()
                 duplicate_dni = conn.execute(
                     "SELECT id FROM patients WHERE dni = ? AND id <> ?",
                     (patient_values["dni"], item_id),
                 ).fetchone()
                 if duplicate_dni:
                     return send_json(self, {"error": "Ya existe otro paciente registrado con ese DNI."}, 409)
+                hidden_from_reception_new = (
+                    1
+                    if data.get("hideFromReceptionNew") or data.get("hide_from_reception_new")
+                    else int(existing_patient["hide_from_reception_new"] or 0) if existing_patient else 0
+                )
                 conn.execute(
                     """
                     INSERT INTO patients (
                       id, dni, name, phone, birth_date, doctor, main_treatment, status, notes,
-                      created_by_id, created_by_name, created_by_role
+                      created_by_id, created_by_name, created_by_role, hide_from_reception_new
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       dni=excluded.dni, name=excluded.name, phone=excluded.phone,
                       birth_date=excluded.birth_date,
                       doctor=excluded.doctor, main_treatment=excluded.main_treatment,
-                      status=excluded.status, notes=excluded.notes, updated_at=CURRENT_TIMESTAMP
+                      status=excluded.status, notes=excluded.notes,
+                      hide_from_reception_new=excluded.hide_from_reception_new,
+                      updated_at=CURRENT_TIMESTAMP
                     """,
                     (
                         item_id,
@@ -565,6 +595,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         user["id"],
                         user["name"],
                         normalize_role(user["role"]),
+                        hidden_from_reception_new,
                     ),
                 )
                 action = "PATIENT_CREATED" if not existing_patient else "PATIENT_UPDATED"

@@ -247,6 +247,7 @@ function mapApiPatient(row) {
     createdById: row.created_by_id || row.createdById || "",
     createdByName: row.created_by_name || row.createdByName || "",
     createdByRole: row.created_by_role || row.createdByRole || "",
+    hideFromReceptionNew: Boolean(row.hide_from_reception_new ?? row.hideFromReceptionNew ?? false),
     createdAt: (row.created_at || "").slice(0, 10)
   };
 }
@@ -516,7 +517,8 @@ async function savePatientApi(patient) {
     doctor: patient.doctor,
     mainTreatment: patient.mainTreatment,
     status: patient.status || "NUEVO",
-    notes: patient.notes
+    notes: patient.notes,
+    hideFromReceptionNew: Boolean(patient.hideFromReceptionNew)
   };
   const result = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify(payload) });
   if (result.id) patient.id = result.id;
@@ -533,6 +535,11 @@ async function refreshPatientsApi() {
 async function deletePatientApi(id) {
   if (!API_ENABLED || !apiToken) return;
   await apiFetch("/api/patients", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+}
+
+async function hideReceptionNewPatientApi(id) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/patients", { method: "POST", body: JSON.stringify({ id, hideReceptionNew: true }) });
 }
 
 async function saveAppointmentApi(appointment) {
@@ -2439,7 +2446,7 @@ function reportMetrics(month) {
   const payments = state.payments.filter((payment) => payment.date.startsWith(month));
   const expenses = state.expenses.filter((expense) => expense.date.startsWith(month));
   const newPatients = state.patients.filter((patient) => patient.createdAt?.startsWith(month));
-  const receptionNewPatients = newPatients.filter((patient) => patient.createdByRole === "RECEPCION");
+  const receptionNewPatients = newPatients.filter((patient) => patient.createdByRole === "RECEPCION" && !patient.hideFromReceptionNew);
   const seenPatients = [...new Set(appointments.map((appointment) => appointment.patientId).filter(Boolean))]
     .map((patientId) => patientById(patientId))
     .filter(Boolean);
@@ -2544,7 +2551,7 @@ function renderMiniLineChart(container, data) {
 
 function receptionNewPatientsForMonth(month) {
   return state.patients
-    .filter((patient) => patient.createdAt?.startsWith(month) && patient.createdByRole === "RECEPCION")
+    .filter((patient) => patient.createdAt?.startsWith(month) && patient.createdByRole === "RECEPCION" && !patient.hideFromReceptionNew)
     .sort((a, b) => `${b.createdAt || ""} ${b.name || ""}`.localeCompare(`${a.createdAt || ""} ${a.name || ""}`));
 }
 
@@ -2576,7 +2583,7 @@ function renderReceptionPatientsModal(month = $("#reportMonth")?.value || todayI
       <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.createdByName || "Recepcion")}</span></td>
       <td>${escapeHtml(patient.dni)}</td>
       <td>${escapeHtml(patient.phone)}</td>
-      <td class="row-actions">${isAdmin() ? `<button class="small-btn danger-btn" data-delete-reception-patient="${patient.id}">Eliminar</button>` : ""}</td>
+      <td class="row-actions">${isAdmin() ? `<button class="small-btn danger-btn" data-hide-reception-patient="${patient.id}">Ocultar</button>` : ""}</td>
     </tr>
   `).join("") || `<tr><td colspan="5">No hay pacientes nuevos registrados por recepcion este mes.</td></tr>`;
 }
@@ -2987,16 +2994,25 @@ function bindEvents() {
       openReceptionPatientsModal();
       return;
     }
-    const deleteReceptionPatient = event.target.closest("[data-delete-reception-patient]");
-    if (deleteReceptionPatient) {
+    const hideReceptionPatient = event.target.closest("[data-hide-reception-patient]");
+    if (hideReceptionPatient) {
       if (!isAdmin()) {
-        alert("Solo el administrador puede eliminar desde este registro.");
+        alert("Solo el administrador puede ocultar pacientes de este registro.");
         return;
       }
-      const patient = patientById(deleteReceptionPatient.dataset.deleteReceptionPatient);
-      if (!patient || !confirm(`Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`)) return;
-      const deleted = await deletePatientRecord(patient.id);
-      if (deleted && $("#receptionPatientsDialog")?.open) renderReceptionPatientsModal();
+      const patient = patientById(hideReceptionPatient.dataset.hideReceptionPatient);
+      if (!patient || !confirm(`Quitar a ${patient.name} solo de la lista de pacientes nuevos de recepcion? No se eliminara su ficha, citas, historial, odontograma ni pagos.`)) return;
+      try {
+        await hideReceptionNewPatientApi(patient.id);
+        patient.hideFromReceptionNew = true;
+        addLocalAuditEvent("PATIENT_RECEPTION_NEW_HIDDEN", `Oculto de nuevos recepcion: ${patient.name} (${patient.dni})`, patient.id);
+        if (!API_ENABLED) saveState();
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      renderReports();
+      if ($("#receptionPatientsDialog")?.open) renderReceptionPatientsModal();
       return;
     }
     const closeButton = event.target.closest("[data-close-dialog]");
@@ -3374,6 +3390,7 @@ function bindEvents() {
       createdById: existingPatient?.createdById || user?.id || "",
       createdByName: existingPatient?.createdByName || user?.name || "",
       createdByRole: existingPatient?.createdByRole || user?.role || "",
+      hideFromReceptionNew: Boolean(existingPatient?.hideFromReceptionNew),
       notes: data.notes
     };
     try {

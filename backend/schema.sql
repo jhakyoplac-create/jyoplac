@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS patients (
   created_by_id TEXT,
   created_by_name TEXT,
   created_by_role TEXT,
+  hide_from_reception_new INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
