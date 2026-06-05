@@ -2158,7 +2158,7 @@ function renderPayments() {
       const history = historyById(payment.historyId);
       const showChange = paymentCashPortion(payment) > 0;
       return `<tr>
-        <td>${formatDate(cashDate)}</td>
+        <td>${formatDate(payment.date || cashDate)}</td>
         <td>${escapeHtml(patient?.name || "")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
         <td>${escapeHtml(paymentMethodLabel(payment))}</td>
         <td><strong>${money(payment.amount)}</strong>${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
@@ -2607,6 +2607,37 @@ function renderDailyAuditReport() {
   $("#dailyAuditReport").innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Sin actividad registrada hoy.</td></tr>`}</tbody></table>`;
 }
 
+function renderDailyIncomeBreakdown(month) {
+  const dates = [...new Set([
+    ...state.payments.filter((payment) => payment.date.startsWith(month)).map((payment) => payment.date),
+    ...state.expenses.filter((expense) => expense.date.startsWith(month)).map((expense) => expense.date)
+  ])].sort();
+  const rows = dates.map((date) => {
+    const gross = incomeForDate(date);
+    const cash = incomeForDate(date, "EFECTIVO");
+    const yape = incomeForDate(date, "YAPE");
+    const plin = incomeForDate(date, "PLIN");
+    const transfer = incomeForDate(date, "TRANSFERENCIA");
+    const card = incomeForDate(date, "TARJETA");
+    const operationalExpenses = dailyExpenseTotal(date);
+    const generalExpenses = dailyGeneralExpenseTotal(date);
+    const net = gross - operationalExpenses - generalExpenses;
+    return `<tr>
+      <td>${formatDate(date)}</td>
+      <td><strong>${money(gross)}</strong></td>
+      <td>${money(cash)}</td>
+      <td>${money(yape)}</td>
+      <td>${money(plin)}</td>
+      <td>${money(transfer)}</td>
+      <td>${money(card)}</td>
+      <td>${money(operationalExpenses)}</td>
+      <td>${money(generalExpenses)}</td>
+      <td><strong>${money(net)}</strong></td>
+    </tr>`;
+  }).join("");
+  $("#dailyIncomeBreakdownReport").innerHTML = `<table><thead><tr><th>Fecha</th><th>Bruto</th><th>Efectivo</th><th>Yape</th><th>Plin</th><th>Transfer.</th><th>Tarjeta</th><th>Egresos oper.</th><th>Egresos caja gral.</th><th>Neto</th></tr></thead><tbody>${rows || `<tr><td colspan="10">Sin ingresos registrados este mes.</td></tr>`}</tbody></table>`;
+}
+
 function renderReports() {
   if (!$("#reportMonth").value) $("#reportMonth").value = todayISO().slice(0, 7);
   if (!$("#compareMonth").value) $("#compareMonth").value = previousMonth($("#reportMonth").value);
@@ -2634,6 +2665,7 @@ function renderReports() {
     ["Pacientes con cita", metrics.patientsSeen, compare.patientsSeen, metrics.patientsSeen - compare.patientsSeen]
   ].map(([label, current, previous, variation]) => `<tr><td>${label}</td><td>${current}</td><td>${previous}</td><td><strong>${variation}</strong></td></tr>`).join("");
   $("#monthCompareReport").innerHTML = `<table><thead><tr><th>Indicador</th><th>${monthLabel(month)}</th><th>${monthLabel(compareMonth)}</th><th>Variacion</th></tr></thead><tbody>${compareRows}</tbody></table>`;
+  renderDailyIncomeBreakdown(month);
 
   const doctorRows = state.config.doctors.map((doctor) => {
     const count = appointments.filter((appointment) => appointment.doctor === doctor).length;
@@ -4057,7 +4089,7 @@ function bindEvents() {
   $("#exportPaymentsBtn").addEventListener("click", () => {
     const cashDate = cashViewDate();
     exportCsv(`pagos-${cashDate}.csv`, paymentsForCashView(cashDate).map((payment) => ({
-      fecha: cashDate,
+      fecha: payment.date || cashDate,
       paciente: patientById(payment.patientId)?.name || "",
       metodo: payment.method,
       monto: Number(payment.amount || 0),
@@ -4245,6 +4277,19 @@ function bindEvents() {
       { seccion: "RESUMEN", indicador: "Pacientes nuevos recepcion", mes: month, cantidad: metrics.receptionNewPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes antiguos", mes: month, cantidad: metrics.oldPatients },
       { seccion: "RESUMEN", indicador: "Pacientes inactivos", mes: month, cantidad: metrics.inactivePatients },
+      ...[...new Set(metrics.payments.map((payment) => payment.date))].sort().map((date) => ({
+        seccion: "INGRESOS POR DIA",
+        fecha: date,
+        bruto: incomeForDate(date),
+        efectivo: incomeForDate(date, "EFECTIVO"),
+        yape: incomeForDate(date, "YAPE"),
+        plin: incomeForDate(date, "PLIN"),
+        transferencia: incomeForDate(date, "TRANSFERENCIA"),
+        tarjeta: incomeForDate(date, "TARJETA"),
+        egresos_operativos: dailyExpenseTotal(date),
+        egresos_caja_general: dailyGeneralExpenseTotal(date),
+        neto: incomeForDate(date) - dailyExpenseTotal(date) - dailyGeneralExpenseTotal(date)
+      })),
       ...monthlyCareData(month).map((item) => ({ seccion: "ATENCIONES_MENSUALES", mes: item.month, cantidad: item.count })),
       ...metrics.ageGroups.map((item) => ({ seccion: "EDAD", grupo: item.group, mes: month, cantidad: item.count })),
       ...state.config.doctors.map((doctor) => ({

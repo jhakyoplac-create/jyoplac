@@ -1,9 +1,9 @@
-const CACHE_NAME = "cm-dental-shell-v17";
+const CACHE_NAME = "cm-dental-shell-v18";
 const SHELL_FILES = [
   "/",
   "/index.html",
   "/styles.css?v=20260605-caja-bancos",
-  "/app.js?v=20260605-terceros-reportes",
+  "/app.js?v=20260605-revision-ingresos",
   "/manifest.webmanifest",
   "/assets/logo.svg",
   "/assets/logo-cm.png",

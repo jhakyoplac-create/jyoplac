@@ -878,7 +878,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             cash_portion = float(split["cash_amount"] or 0)
             cash_received = float(data.get("cashReceived") or cash_portion or 0) if cash_portion > 0 else 0.0
             with db() as conn:
-                payment_date = open_cash_date(conn) or data["date"]
+                payment_date = data.get("date") or open_cash_date(conn) or today_lima()
                 patient = conn.execute(
                     "SELECT name, dni, phone, birth_date FROM patients WHERE id = ?",
                     (data.get("patientId"),),
@@ -969,7 +969,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("exp")
             with db() as conn:
-                expense_date = open_cash_date(conn) or data["date"]
+                expense_date = data.get("date") or open_cash_date(conn) or today_lima()
                 conn.execute(
                     """
                     INSERT INTO expenses (
@@ -1126,7 +1126,6 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         },
                         400,
                     )
-                date_params = [date] + included_dates
                 conn.execute(
                     """
                     UPDATE cash_sessions
@@ -1135,8 +1134,6 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """,
                     (closing_cash, difference, income, expenses, data.get("closedAt") or time.strftime("%Y-%m-%dT%H:%M:%S"), session["id"]),
                 )
-                conn.execute(f"UPDATE payments SET date=? WHERE date IN ({placeholders}) AND closed=0", date_params)
-                conn.execute(f"UPDATE expenses SET date=? WHERE date IN ({placeholders}) AND closed=0", date_params)
                 extra_open_dates = [item for item in included_dates if item != date]
                 if extra_open_dates:
                     extra_placeholders = ",".join(["?"] * len(extra_open_dates))
@@ -1144,8 +1141,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         f"DELETE FROM cash_sessions WHERE date IN ({extra_placeholders}) AND closed_at IS NULL",
                         extra_open_dates,
                     )
-                conn.execute("UPDATE payments SET closed=1 WHERE date=?", (date,))
-                conn.execute("UPDATE expenses SET closed=1 WHERE date=?", (date,))
+                conn.execute(f"UPDATE payments SET closed=1 WHERE date IN ({placeholders})", included_dates)
+                conn.execute(f"UPDATE expenses SET closed=1 WHERE date IN ({placeholders})", included_dates)
                 conn.execute(
                     """
                     INSERT INTO petty_cash_allocations (id, date, amount)
