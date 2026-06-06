@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260605-caja-chica-detalle" />
+    <link rel="stylesheet" href="styles.css?v=20260605-comprobantes-internos" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -43,6 +43,7 @@
         <button class="nav-item" data-view="odontograma">Odontograma</button>
         <button class="nav-item" data-view="tratamientos">Tratamientos</button>
         <button class="nav-item" data-view="pagos">Pagos y caja</button>
+        <button class="nav-item" data-view="comprobantes">Comprobantes</button>
         <button class="nav-item" data-view="caja-general">Caja general</button>
         <button class="nav-item" data-view="cuentas-cobrar">Cuentas por cobrar</button>
         <button class="nav-item" data-view="seguimiento-citas">Seguimiento citas</button>
@@ -293,6 +294,17 @@
               <p class="mixed-payment-summary" id="mixedPaymentSummary">Falta S/ 0</p>
               <button class="ghost" id="openMixedPaymentBtn" type="button">Editar pago mixto</button>
             </div>
+            <label>Comprobante electronico
+              <select name="electronicReceiptType">
+                <option value="">No emitir ahora</option>
+                <option value="BOLETA">Boleta electronica interna</option>
+                <option value="FACTURA">Factura electronica interna</option>
+              </select>
+            </label>
+            <div class="settings-grid receipt-fields" id="paymentReceiptFields" hidden>
+              <label>Documento cliente<input name="receiptCustomerDoc" placeholder="DNI o RUC" /></label>
+              <label>Nombre / razon social<input name="receiptCustomerName" placeholder="Paciente o empresa" /></label>
+            </div>
             <label>Comprobante<input name="receipt" placeholder="Boleta, factura o referencia" /></label>
             <button class="primary" type="submit">Guardar pago</button>
           </form>
@@ -369,6 +381,32 @@
             </div>
           </section>
         </div>
+      </section>
+
+      <section id="comprobantes" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Comprobantes internos</h2>
+            <button class="ghost" id="exportReceiptsBtn">CSV</button>
+          </div>
+          <p class="notice">Primera etapa: registro interno exonerado de IGV. Todavia no envia a SUNAT.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Comprobante</th>
+                  <th>Cliente</th>
+                  <th>Descripcion</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                  <th>Accion</th>
+                </tr>
+              </thead>
+              <tbody id="electronicReceiptsTable"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section id="caja-general" class="view">
@@ -858,6 +896,6 @@
       </div>
     </dialog>
 
-    <script src="app.js?v=20260605-caja-chica-detalle"></script>
+    <script src="app.js?v=20260605-comprobantes-internos"></script>
   </body>
 </html>

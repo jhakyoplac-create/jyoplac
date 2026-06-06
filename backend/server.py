@@ -203,6 +203,33 @@ def migrate_db(conn):
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
     ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS electronic_receipts (
+          id TEXT PRIMARY KEY,
+          payment_id TEXT,
+          patient_id TEXT NOT NULL,
+          type TEXT NOT NULL CHECK (type IN ('BOLETA', 'FACTURA')),
+          series TEXT NOT NULL,
+          number INTEGER NOT NULL,
+          issue_date TEXT NOT NULL,
+          customer_doc_type TEXT NOT NULL,
+          customer_doc TEXT NOT NULL,
+          customer_name TEXT NOT NULL,
+          description TEXT NOT NULL,
+          quantity REAL NOT NULL DEFAULT 1,
+          unit_value REAL NOT NULL DEFAULT 0,
+          total REAL NOT NULL DEFAULT 0,
+          tax_condition TEXT NOT NULL DEFAULT 'EXONERADO',
+          igv REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'BORRADOR',
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(type, series, number)
+        )
+        """
+    )
 
 
 def purge_old_audit_events(conn):
@@ -422,6 +449,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "treatments": list_table("treatments", "created_at DESC"),
                 "odontogram": list_table("odontogram", "patient_id ASC, tooth ASC"),
                 "payments": list_table("payments", "date DESC, created_at DESC"),
+                "electronicReceipts": list_table("electronic_receipts", "issue_date DESC, created_at DESC"),
                 "expenses": list_table("expenses", "date DESC, created_at DESC"),
                 "cashSessions": list_table("cash_sessions", "date DESC"),
                 "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
@@ -441,6 +469,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"odontogram": list_table("odontogram", "patient_id ASC, tooth ASC")})
         if parsed.path == "/api/payments":
             return send_json(self, {"payments": list_table("payments", "date DESC, created_at DESC")})
+        if parsed.path == "/api/electronic-receipts":
+            return send_json(self, {"electronicReceipts": list_table("electronic_receipts", "issue_date DESC, created_at DESC")})
         if parsed.path == "/api/expenses":
             return send_json(self, {"expenses": list_table("expenses", "date DESC, created_at DESC")})
         if parsed.path == "/api/cash-sessions":
@@ -951,6 +981,87 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 )
             return send_json(self, {"ok": True, "id": item_id})
 
+        if parsed.path == "/api/electronic-receipts":
+            if not require_role(self, {"ADMIN", "RECEPCION"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("cpe")
+            receipt_type = str(data.get("type") or "").upper()
+            if receipt_type not in {"BOLETA", "FACTURA"}:
+                return send_json(self, {"error": "Selecciona boleta o factura."}, 400)
+            series = str(data.get("series") or "").strip().upper()
+            number = int(data.get("number") or 0)
+            customer_doc = str(data.get("customerDoc") or "").strip()
+            customer_doc_type = str(data.get("customerDocType") or ("RUC" if receipt_type == "FACTURA" else "DNI")).strip().upper()
+            customer_name = str(data.get("customerName") or "").strip()
+            if receipt_type == "FACTURA" and (customer_doc_type != "RUC" or len(customer_doc) != 11):
+                return send_json(self, {"error": "La factura requiere RUC de 11 digitos."}, 400)
+            if receipt_type == "BOLETA" and not customer_doc:
+                return send_json(self, {"error": "La boleta requiere documento del paciente."}, 400)
+            if not series or number <= 0:
+                return send_json(self, {"error": "Serie y correlativo obligatorios."}, 400)
+            if not customer_name:
+                return send_json(self, {"error": "Nombre o razon social obligatoria."}, 400)
+            with db() as conn:
+                patient = conn.execute("SELECT id FROM patients WHERE id = ?", (data.get("patientId"),)).fetchone()
+                if not patient:
+                    return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO electronic_receipts (
+                          id, payment_id, patient_id, type, series, number, issue_date,
+                          customer_doc_type, customer_doc, customer_name, description,
+                          quantity, unit_value, total, tax_condition, igv, status, notes
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                          payment_id=excluded.payment_id,
+                          patient_id=excluded.patient_id,
+                          type=excluded.type,
+                          series=excluded.series,
+                          number=excluded.number,
+                          issue_date=excluded.issue_date,
+                          customer_doc_type=excluded.customer_doc_type,
+                          customer_doc=excluded.customer_doc,
+                          customer_name=excluded.customer_name,
+                          description=excluded.description,
+                          quantity=excluded.quantity,
+                          unit_value=excluded.unit_value,
+                          total=excluded.total,
+                          tax_condition=excluded.tax_condition,
+                          igv=excluded.igv,
+                          status=excluded.status,
+                          notes=excluded.notes,
+                          updated_at=CURRENT_TIMESTAMP
+                        """,
+                        (
+                            item_id,
+                            data.get("paymentId", ""),
+                            data.get("patientId"),
+                            receipt_type,
+                            series,
+                            number,
+                            data.get("issueDate") or today_lima(),
+                            customer_doc_type,
+                            customer_doc,
+                            customer_name,
+                            data.get("description", "Servicio odontologico"),
+                            float(data.get("quantity") or 1),
+                            float(data.get("unitValue") or data.get("total") or 0),
+                            float(data.get("total") or 0),
+                            "EXONERADO",
+                            0,
+                            data.get("status") or "BORRADOR",
+                            data.get("notes", ""),
+                        ),
+                    )
+                except Exception as exc:
+                    if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+                        return send_json(self, {"error": "Ese numero de comprobante ya existe."}, 400)
+                    raise
+            return send_json(self, {"ok": True, "id": item_id})
+
         if parsed.path == "/api/expenses":
             if not require_role(self, {"ADMIN", "RECEPCION"}):
                 return
@@ -1045,6 +1156,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return
             with db() as conn:
                 for table in [
+                    "electronic_receipts",
                     "payments",
                     "expenses",
                     "cash_sessions",

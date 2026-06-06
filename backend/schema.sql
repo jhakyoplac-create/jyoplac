@@ -117,6 +117,32 @@ CREATE TABLE IF NOT EXISTS payments (
   FOREIGN KEY (history_id) REFERENCES clinical_history(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS electronic_receipts (
+  id TEXT PRIMARY KEY,
+  payment_id TEXT,
+  patient_id TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('BOLETA', 'FACTURA')),
+  series TEXT NOT NULL,
+  number INTEGER NOT NULL,
+  issue_date TEXT NOT NULL,
+  customer_doc_type TEXT NOT NULL,
+  customer_doc TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  quantity REAL NOT NULL DEFAULT 1,
+  unit_value REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  tax_condition TEXT NOT NULL DEFAULT 'EXONERADO',
+  igv REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'BORRADOR',
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(type, series, number),
+  FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS expenses (
   id TEXT PRIMARY KEY,
   date TEXT NOT NULL,

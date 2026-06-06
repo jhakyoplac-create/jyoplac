@@ -21,6 +21,17 @@ const seedData = {
     treatmentStatuses: ["PRESUPUESTADO", "EN_PROCESO", "TERMINADO", "PAUSADO"],
     expenseSources: ["INGRESO_DEL_DIA", "CAJA_CHICA", "CAJA_GENERAL"],
     staffPaymentTypes: ["DOCTOR", "ASISTENTE", "DOCTOR_EXTERNO", "CONTADOR", "LABORATORIO", "OTRO"],
+    issuerRuc: "10766704391",
+    issuerLegalName: "TORRES LLANOS MAGHY CAROL",
+    issuerTradeName: "C.O CM ODONTOLOGIA ESTETICA",
+    issuerAddress: "JR. PEDRO PASCASIO NORIEGA 891",
+    issuerDistrict: "MOYOBAMBA",
+    issuerProvince: "MOYOBAMBA",
+    issuerDepartment: "SAN MARTIN",
+    receiptSeriesBoleta: "EB01",
+    receiptSeriesFactura: "E001",
+    receiptStartBoleta: 1113,
+    receiptStartFactura: 17,
     generalCashOpening: 9000,
     generalBankOpening: 10000,
     servicesCustomized: false
@@ -79,6 +90,7 @@ const seedData = {
     { id: "pay1", patientId: "p1", historyId: "h1", date: "2026-05-15", amount: 80, cashReceived: 100, change: 20, method: "YAPE", receipt: "Control mayo" },
     { id: "pay2", patientId: "p5", historyId: "", date: "2026-05-15", amount: 80, cashReceived: 80, change: 0, method: "EFECTIVO", receipt: "Control mayo" }
   ],
+  electronicReceipts: [],
   clinicalHistory: [
     { id: "h1", patientId: "p1", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Control de ortodoncia", anamnesis: "Sin cambios relevantes.", exam: "Higiene regular.", diagnosis: "Evolucion favorable", plan: "Continuar controles.", procedure: "Cambio de ligas y revision de brackets.", instructions: "Mantener higiene y volver en 30 dias.", agreedPrice: 80 },
     { id: "h2", patientId: "p2", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Consulta inicial", anamnesis: "Niega alergias.", exam: "Evaluacion intraoral inicial.", diagnosis: "Evaluacion pendiente", plan: "Solicitar radiografia.", procedure: "Revision clinica general.", instructions: "Tomar radiografia panoramica.", agreedPrice: 50 }
@@ -157,7 +169,7 @@ function loadState() {
     const base = structuredClone(seedData);
     const parsed = JSON.parse(saved);
     const merged = { ...base, ...parsed, config: { ...base.config, ...(parsed.config || {}) } };
-    for (const key of ["services", "patients", "appointments", "treatments", "payments", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "pettyCashAllocations", "auditEvents", "users"]) {
+    for (const key of ["services", "patients", "appointments", "treatments", "payments", "electronicReceipts", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "pettyCashAllocations", "auditEvents", "users"]) {
       if (!Array.isArray(merged[key])) merged[key] = base[key];
     }
     return normalizeState(merged);
@@ -192,6 +204,7 @@ function normalizeState(data) {
   data.config.generalCashOpening = Number(data.config.generalCashOpening ?? defaults.generalCashOpening);
   data.config.generalBankOpening = Number(data.config.generalBankOpening ?? defaults.generalBankOpening);
   if (!Array.isArray(data.users) || !data.users.length) data.users = structuredClone(seedData.users);
+  if (!Array.isArray(data.electronicReceipts)) data.electronicReceipts = [];
   if (!Array.isArray(data.pettyCashAllocations)) data.pettyCashAllocations = [];
   if (!Array.isArray(data.auditEvents)) data.auditEvents = [];
   data.auditEvents = data.auditEvents.filter((event) => event.eventDate === todayISO());
@@ -349,6 +362,30 @@ function mapApiPayment(row) {
   };
 }
 
+function mapApiElectronicReceipt(row) {
+  return {
+    id: row.id,
+    paymentId: row.payment_id || row.paymentId || "",
+    patientId: row.patient_id || row.patientId || "",
+    type: row.type || "BOLETA",
+    series: row.series || "",
+    number: Number(row.number || 0),
+    issueDate: row.issue_date || row.issueDate || "",
+    customerDocType: row.customer_doc_type || row.customerDocType || "",
+    customerDoc: row.customer_doc || row.customerDoc || "",
+    customerName: row.customer_name || row.customerName || "",
+    description: row.description || "",
+    quantity: Number(row.quantity || 1),
+    unitValue: Number(row.unit_value ?? row.unitValue ?? 0),
+    total: Number(row.total || 0),
+    taxCondition: row.tax_condition || row.taxCondition || "EXONERADO",
+    igv: Number(row.igv || 0),
+    status: row.status || "BORRADOR",
+    notes: row.notes || "",
+    createdAt: row.created_at || row.createdAt || ""
+  };
+}
+
 function mapApiExpense(row) {
   return {
     id: row.id,
@@ -439,6 +476,7 @@ function applyApiBootstrap(payload) {
   state.treatments = (payload.treatments || []).map(mapApiTreatment);
   state.odontogram = (payload.odontogram || []).map(mapApiOdontogram);
   state.payments = (payload.payments || []).map(mapApiPayment);
+  state.electronicReceipts = (payload.electronicReceipts || []).map(mapApiElectronicReceipt);
   state.expenses = (payload.expenses || []).map(mapApiExpense);
   state.cashSessions = (payload.cashSessions || []).map(mapApiCashSession);
   state.pettyCashAllocations = (payload.pettyCashAllocations || []).map(mapApiPettyCash);
@@ -455,6 +493,9 @@ function applyApiBootstrap(payload) {
     state.config.interval = Number(payload.config.interval ?? state.config.interval);
     state.config.inactiveDays = Number(payload.config.inactiveDays ?? state.config.inactiveDays);
     state.config.whatsapp = payload.config.whatsapp || state.config.whatsapp;
+    ["issuerRuc", "issuerLegalName", "issuerTradeName", "issuerAddress", "issuerDistrict", "issuerProvince", "issuerDepartment", "receiptSeriesBoleta", "receiptSeriesFactura", "receiptStartBoleta", "receiptStartFactura"].forEach((key) => {
+      if (payload.config[key] !== undefined) state.config[key] = payload.config[key];
+    });
     state.config.doctors = parseApiList(payload.config.doctors, state.config.doctors);
     state.config.units = parseApiList(payload.config.units, state.config.units);
     if (payload.config.services) {
@@ -577,6 +618,12 @@ async function savePaymentApi(payment) {
   if (result.id) payment.id = result.id;
 }
 
+async function saveElectronicReceiptApi(receipt) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/electronic-receipts", { method: "POST", body: JSON.stringify(receipt) });
+  if (result.id) receipt.id = result.id;
+}
+
 async function deletePaymentApi(id) {
   if (!API_ENABLED || !apiToken) return;
   await apiFetch("/api/payments", { method: "POST", body: JSON.stringify({ id, delete: true }) });
@@ -647,6 +694,7 @@ function blankStateFromCurrent() {
     appointments: [],
     treatments: [],
     payments: [],
+    electronicReceipts: [],
     clinicalHistory: [],
     odontogram: [],
     cashSessions: [],
@@ -992,6 +1040,24 @@ function paymentMethodLabel(payment) {
     Number(split.TARJETA || 0) > 0 ? `Tarjeta ${money(split.TARJETA)}` : ""
   ].filter(Boolean);
   return parts.length ? `MIXTO (${parts.join(" + ")})` : "MIXTO";
+}
+
+function receiptFullNumber(receipt) {
+  return `${receipt.series}-${String(receipt.number || 0).padStart(8, "0")}`;
+}
+
+function nextReceiptNumber(type) {
+  const isInvoice = type === "FACTURA";
+  const series = isInvoice ? state.config.receiptSeriesFactura : state.config.receiptSeriesBoleta;
+  const start = Number(isInvoice ? state.config.receiptStartFactura : state.config.receiptStartBoleta) || 1;
+  const used = state.electronicReceipts
+    .filter((receipt) => receipt.type === type && receipt.series === series)
+    .map((receipt) => Number(receipt.number || 0));
+  return Math.max(start - 1, ...used) + 1;
+}
+
+function receiptSeriesForType(type) {
+  return type === "FACTURA" ? state.config.receiptSeriesFactura : state.config.receiptSeriesBoleta;
 }
 
 function paymentCashPortion(payment) {
@@ -1342,9 +1408,9 @@ const roleLabels = {
 };
 
 const roleViews = {
-  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
   DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
-  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
+  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -1450,6 +1516,7 @@ function setView(view) {
     odontograma: "Odontograma",
     tratamientos: "Tratamientos",
     pagos: "Pagos y caja",
+    comprobantes: "Comprobantes electronicos",
     "caja-general": "Caja general",
     "cuentas-cobrar": "Cuentas por cobrar",
     panel: "Panel para doctores y recepcion",
@@ -1475,6 +1542,7 @@ function render() {
   renderOdontogram();
   renderTreatments();
   renderPayments();
+  renderElectronicReceipts();
   renderGeneralCash();
   renderReceivables();
   renderAppointmentFollowUps();
@@ -2175,6 +2243,87 @@ function renderPayments() {
         ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
       </tr>`;
     }).join("") || `<tr><td colspan="${isAdmin() ? 6 : 5}">No hay pagos registrados.</td></tr>`;
+}
+
+function buildElectronicReceiptFromPayment(payment, formDataValues) {
+  const type = String(formDataValues.electronicReceiptType || "").toUpperCase();
+  if (!type) return null;
+  const patient = patientById(payment.patientId);
+  const history = historyById(payment.historyId);
+  const customerDoc = String(formDataValues.receiptCustomerDoc || patient?.dni || "").trim();
+  const customerName = String(formDataValues.receiptCustomerName || patient?.name || "").trim().toUpperCase();
+  const series = receiptSeriesForType(type);
+  const number = nextReceiptNumber(type);
+  return {
+    id: uid("cpe"),
+    paymentId: payment.id,
+    patientId: payment.patientId,
+    type,
+    series,
+    number,
+    issueDate: payment.date,
+    customerDocType: type === "FACTURA" ? "RUC" : "DNI",
+    customerDoc,
+    customerName,
+    description: history?.reason || patient?.mainTreatment || "Servicio odontologico",
+    quantity: 1,
+    unitValue: payment.amount,
+    total: payment.amount,
+    taxCondition: "EXONERADO",
+    igv: 0,
+    status: "BORRADOR",
+    notes: "Operacion exonerada de IGV"
+  };
+}
+
+function renderElectronicReceipts() {
+  const table = $("#electronicReceiptsTable");
+  if (!table) return;
+  const rows = state.electronicReceipts
+    .slice()
+    .sort((a, b) => `${b.issueDate || ""}${b.createdAt || ""}`.localeCompare(`${a.issueDate || ""}${a.createdAt || ""}`));
+  table.innerHTML = rows.map((receipt) => `<tr>
+    <td>${formatDate(receipt.issueDate)}</td>
+    <td><strong>${escapeHtml(receiptFullNumber(receipt))}</strong><br><span class="muted">${escapeHtml(receipt.type)}</span></td>
+    <td>${escapeHtml(receipt.customerName)}<br><span class="muted">${escapeHtml(receipt.customerDocType)} ${escapeHtml(receipt.customerDoc)}</span></td>
+    <td>${escapeHtml(receipt.description)}<br><span class="muted">${escapeHtml(receipt.taxCondition)} | IGV ${money(receipt.igv)}</span></td>
+    <td><strong>${money(receipt.total)}</strong></td>
+    <td><span class="status warn">${escapeHtml(receipt.status)}</span></td>
+    <td><button class="small-btn" data-print-receipt="${receipt.id}">PDF</button></td>
+  </tr>`).join("") || `<tr><td colspan="7">Aun no hay comprobantes internos.</td></tr>`;
+}
+
+function printElectronicReceipt(id) {
+  const receipt = state.electronicReceipts.find((item) => item.id === id);
+  if (!receipt) return;
+  const issuer = state.config;
+  const w = window.open("", "_blank");
+  if (!w) return;
+  const logoUrl = `${location.origin}/assets/logo-cm.png`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(receiptFullNumber(receipt))}</title>
+  <style>
+    body{font-family:Arial,sans-serif;color:#082f49;margin:28px;font-size:13px}
+    .doc{max-width:760px;margin:auto;border:1px solid #b8e5ef;padding:24px}
+    .head{display:flex;justify-content:space-between;gap:20px;border-bottom:1px solid #b8e5ef;padding-bottom:16px}
+    .brand{display:flex;gap:14px;align-items:center}
+    .brand img{width:96px;height:auto}
+    .box{border:1px solid #0ea5e9;padding:14px;text-align:center;border-radius:6px;min-width:220px}
+    h1{font-size:18px;margin:0 0 8px}.muted{color:#607987}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:18px 0}
+    table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border-bottom:1px solid #d6eef4;padding:10px;text-align:left}th{color:#607987}
+    .totals{margin-left:auto;width:320px}.totals td:last-child{text-align:right;font-weight:700}.note{margin-top:20px;color:#607987}
+    @media print{button{display:none}.doc{border:none}}
+  </style></head><body><div class="doc">
+    <div class="head">
+      <div class="brand"><img src="${escapeHtml(logoUrl)}"><div><h1>${escapeHtml(issuer.issuerTradeName)}</h1><div>${escapeHtml(issuer.issuerLegalName)}</div><div class="muted">${escapeHtml(issuer.issuerAddress)}</div><div class="muted">${escapeHtml(issuer.issuerDistrict)} - ${escapeHtml(issuer.issuerProvince)} - ${escapeHtml(issuer.issuerDepartment)}</div></div></div>
+      <div class="box"><strong>RUC: ${escapeHtml(issuer.issuerRuc)}</strong><h1>${receipt.type === "FACTURA" ? "FACTURA ELECTRONICA" : "BOLETA DE VENTA ELECTRONICA"}</h1><strong>${escapeHtml(receiptFullNumber(receipt))}</strong></div>
+    </div>
+    <div class="grid"><div><strong>Fecha de emision:</strong> ${formatDate(receipt.issueDate)}</div><div><strong>Moneda:</strong> SOLES</div><div><strong>Cliente:</strong> ${escapeHtml(receipt.customerName)}</div><div><strong>${escapeHtml(receipt.customerDocType)}:</strong> ${escapeHtml(receipt.customerDoc)}</div></div>
+    <table><thead><tr><th>Cantidad</th><th>Unidad</th><th>Descripcion</th><th>Valor unitario</th><th>Importe</th></tr></thead><tbody><tr><td>${receipt.quantity}</td><td>UNIDAD</td><td>${escapeHtml(receipt.description)}</td><td>${money(receipt.unitValue)}</td><td>${money(receipt.total)}</td></tr></tbody></table>
+    <table class="totals"><tbody><tr><td>Op. Exonerada</td><td>${money(receipt.total)}</td></tr><tr><td>IGV</td><td>${money(0)}</td></tr><tr><td>Importe Total</td><td>${money(receipt.total)}</td></tr></tbody></table>
+    <p class="note">Representacion interna del comprobante electronico. Pendiente de integracion XML/SUNAT.</p>
+    <button onclick="window.print()">Imprimir / guardar PDF</button>
+  </div></body></html>`);
+  w.document.close();
 }
 
 function renderReceivables() {
@@ -3142,6 +3291,11 @@ function bindEvents() {
       openGeneralBalanceDetail(generalDetail.dataset.openGeneralDetail);
       return;
     }
+    const printReceipt = event.target.closest("[data-print-receipt]");
+    if (printReceipt) {
+      printElectronicReceipt(printReceipt.dataset.printReceipt);
+      return;
+    }
     const openReceptionRegistry = event.target.closest("#openReceptionPatientsBtn");
     if (openReceptionRegistry) {
       openReceptionPatientsModal();
@@ -3869,6 +4023,27 @@ function bindEvents() {
     toggleMixedPaymentFields();
     updatePaymentChange();
   });
+  $('#paymentForm select[name="electronicReceiptType"]')?.addEventListener("change", (event) => {
+    const form = $("#paymentForm");
+    const fields = $("#paymentReceiptFields");
+    const patient = patientById(form?.patientId?.value);
+    if (fields) fields.hidden = !event.target.value;
+    if (form && event.target.value === "BOLETA") {
+      form.receiptCustomerDoc.value = patient?.dni || "";
+      form.receiptCustomerName.value = patient?.name || "";
+    } else if (form && event.target.value === "FACTURA") {
+      form.receiptCustomerDoc.value = "";
+      form.receiptCustomerName.value = "";
+    }
+  });
+  $('#paymentForm select[name="patientId"]')?.addEventListener("change", () => {
+    const form = $("#paymentForm");
+    const patient = patientById(form?.patientId?.value);
+    if (form?.electronicReceiptType?.value === "BOLETA" && patient) {
+      form.receiptCustomerDoc.value = patient.dni || "";
+      form.receiptCustomerName.value = patient.name || "";
+    }
+  });
   $("#openMixedPaymentBtn")?.addEventListener("click", openMixedPaymentDialog);
   $("#saveMixedPaymentBtn")?.addEventListener("click", applyMixedPaymentDialog);
   $("#mixedPaymentForm")?.addEventListener("input", updateMixedPaymentDialogSummary);
@@ -3938,6 +4113,16 @@ function bindEvents() {
       return;
     }
     const split = splitResult.split;
+    if (data.electronicReceiptType === "FACTURA" && !/^\d{11}$/.test(String(data.receiptCustomerDoc || ""))) {
+      alert("Para factura ingresa RUC de 11 digitos.");
+      restorePaymentButton();
+      return;
+    }
+    if (data.electronicReceiptType && !String(data.receiptCustomerName || "").trim()) {
+      alert("Ingresa el nombre o razon social para el comprobante.");
+      restorePaymentButton();
+      return;
+    }
     const cashPortion = Number(split.cashAmount || 0);
     const cashReceived = cashPortion > 0 ? Number(data.cashReceived || cashPortion || 0) : 0;
     const payment = {
@@ -3954,6 +4139,13 @@ function bindEvents() {
     };
     try {
       await savePaymentApi(payment);
+      const receipt = buildElectronicReceiptFromPayment(payment, data);
+      if (receipt) {
+        await saveElectronicReceiptApi(receipt);
+        upsert(state.electronicReceipts, receipt);
+        payment.receipt = receiptFullNumber(receipt);
+        await savePaymentApi(payment);
+      }
     } catch (error) {
       alert(error.message);
       restorePaymentButton();
@@ -3962,6 +4154,7 @@ function bindEvents() {
     upsert(state.payments, payment);
     if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
     form.reset();
+    $("#paymentReceiptFields").hidden = true;
     form.date.value = operatingDate();
     if (!API_ENABLED) saveState();
     render();
@@ -4365,6 +4558,22 @@ function bindEvents() {
   });
   $("#generalSummaryFrom")?.addEventListener("change", renderGeneralCash);
   $("#generalSummaryTo")?.addEventListener("change", renderGeneralCash);
+  $("#exportReceiptsBtn")?.addEventListener("click", () => {
+    exportCsv("comprobantes-internos.csv", state.electronicReceipts.map((receipt) => ({
+      fecha: receipt.issueDate,
+      tipo: receipt.type,
+      serie: receipt.series,
+      numero: receipt.number,
+      comprobante: receiptFullNumber(receipt),
+      cliente_documento: receipt.customerDoc,
+      cliente_nombre: receipt.customerName,
+      descripcion: receipt.description,
+      condicion: receipt.taxCondition,
+      igv: receipt.igv,
+      total: receipt.total,
+      estado: receipt.status
+    })));
+  });
   $("#exportStaffPaymentsBtn").addEventListener("click", () => {
     exportCsv("pagos-personal-terceros.csv", staffPayments().map((payment) => ({
       fecha: payment.date,
