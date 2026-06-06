@@ -1160,8 +1160,22 @@ dialog::backdrop {
   width: min(460px, calc(100vw - 32px));
 }
 
+#receiptIssueDialog {
+  width: min(920px, calc(100vw - 24px));
+}
+
 .receipt-issue-modal {
-  width: min(620px, calc(100vw - 32px));
+  width: 100%;
+  max-width: none;
+}
+
+.receipt-issue-modal .settings-grid {
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
+
+.receipt-issue-modal input,
+.receipt-issue-modal select {
+  min-width: 0;
 }
 
 .receipt-issue-modal menu,

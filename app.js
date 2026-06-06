@@ -1045,7 +1045,7 @@ function paymentMethodLabel(payment) {
 }
 
 function receiptFullNumber(receipt) {
-  return `${receipt.series}-${String(receipt.number || 0).padStart(8, "0")}`;
+  return `${receipt.series}-${Number(receipt.number || 0)}`;
 }
 
 function nextReceiptNumber(type) {
@@ -2296,6 +2296,48 @@ function renderElectronicReceipts() {
   </tr>`).join("") || `<tr><td colspan="7">Aun no hay comprobantes internos.</td></tr>`;
 }
 
+function numberToSpanish(value) {
+  const n = Math.trunc(Number(value) || 0);
+  const units = ["CERO", "UNO", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"];
+  const teens = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISEIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"];
+  const twenties = ["VEINTE", "VEINTIUNO", "VEINTIDOS", "VEINTITRES", "VEINTICUATRO", "VEINTICINCO", "VEINTISEIS", "VEINTISIETE", "VEINTIOCHO", "VEINTINUEVE"];
+  const tens = ["", "", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
+  const hundreds = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
+  if (n < 10) return units[n];
+  if (n < 20) return teens[n - 10];
+  if (n < 30) return twenties[n - 20];
+  if (n < 100) {
+    const rest = n % 10;
+    return `${tens[Math.trunc(n / 10)]}${rest ? ` Y ${units[rest]}` : ""}`;
+  }
+  if (n === 100) return "CIEN";
+  if (n < 1000) {
+    const rest = n % 100;
+    return `${hundreds[Math.trunc(n / 100)]}${rest ? ` ${numberToSpanish(rest)}` : ""}`;
+  }
+  if (n < 1000000) {
+    const thousand = Math.trunc(n / 1000);
+    const rest = n % 1000;
+    const prefix = thousand === 1 ? "MIL" : `${numberToSpanish(thousand)} MIL`;
+    return `${prefix}${rest ? ` ${numberToSpanish(rest)}` : ""}`;
+  }
+  return String(n);
+}
+
+function amountInWords(value) {
+  const amount = Number(value) || 0;
+  const integer = Math.trunc(amount);
+  const cents = Math.round((amount - integer) * 100);
+  return `${numberToSpanish(integer)} Y ${String(cents).padStart(2, "0")}/100 SOLES`;
+}
+
+function receiptDateSlash(date) {
+  const value = String(date || "");
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return formatDate(date);
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
 function printElectronicReceipt(id) {
   const receipt = state.electronicReceipts.find((item) => item.id === id);
   if (!receipt) return;
@@ -2303,29 +2345,147 @@ function printElectronicReceipt(id) {
   const w = window.open("", "_blank");
   if (!w) return;
   const logoUrl = `${location.origin}/assets/logo-cm.png`;
+  const isInvoice = receipt.type === "FACTURA";
+  const total = Number(receipt.total || 0);
+  const unitValue = Number(receipt.unitValue || receipt.total || 0);
+  const quantity = Number(receipt.quantity || 1);
+  const amountWords = amountInWords(total);
+  const receiptMoney = (value) => `S/ ${Number(value || 0).toFixed(2)}`;
+  const issuerPlace = `${issuer.issuerDistrict} - ${issuer.issuerProvince} - ${issuer.issuerDepartment}`;
+  const title = isInvoice ? "FACTURA ELECTRONICA" : "BOLETA DE VENTA ELECTRONICA";
+  const customerDocLabel = isInvoice ? "RUC" : "DNI";
+  const detailRows = isInvoice
+    ? `<tr>
+        <td class="right">${quantity.toFixed(2)}</td>
+        <td class="center">UNIDAD</td>
+        <td>${escapeHtml(String(receipt.description || "").toUpperCase())}</td>
+        <td class="right">${unitValue.toFixed(2)}</td>
+      </tr>`
+    : `<tr>
+        <td class="right">${quantity.toFixed(2)}</td>
+        <td class="center">UNIDAD</td>
+        <td>${escapeHtml(String(receipt.description || "").toUpperCase())}</td>
+        <td class="right">${unitValue.toFixed(2)}</td>
+        <td class="right">0.00</td>
+        <td class="right">${total.toFixed(2)}</td>
+      </tr>`;
+  const detailHead = isInvoice
+    ? `<tr><th>Cantidad</th><th>Unidad Medida</th><th>Descripcion</th><th>Valor Unitario</th></tr>`
+    : `<tr><th>Cantidad</th><th>Unidad<br>Medida</th><th>Descripcion</th><th>Valor Unitario(*)</th><th>Descuento(*)</th><th>Importe de Venta(**)</th></tr>`;
+  const totalsBox = isInvoice
+    ? `<div class="split">
+        <div>
+          <p class="free-line">Valor de Venta de Operaciones Gratuitas : <span>S/ 0.00</span></p>
+          <p class="amount-text">SON: ${escapeHtml(amountWords)}</p>
+        </div>
+        <table class="totals"><tbody>
+          <tr><td>Sub Total Ventas</td><td>${receiptMoney(total)}</td></tr>
+          <tr><td>Anticipos</td><td>S/ 0.00</td></tr>
+          <tr><td>Descuentos</td><td>S/ 0.00</td></tr>
+          <tr><td>Valor Venta</td><td>${receiptMoney(total)}</td></tr>
+          <tr><td>ISC</td><td>S/ 0.00</td></tr>
+          <tr><td>IGV</td><td>S/ 0.00</td></tr>
+          <tr><td>Otros Cargos</td><td>S/ 0.00</td></tr>
+          <tr><td>Otros Tributos</td><td>S/ 0.00</td></tr>
+          <tr><td>Monto de redondeo</td><td>S/ 0.00</td></tr>
+          <tr><td>Importe Total</td><td>${receiptMoney(total)}</td></tr>
+        </tbody></table>
+      </div>`
+    : `<div class="boleta-lower">
+        <div>
+          <p>(*) Sin impuestos.<br>(**) Incluye impuestos, de ser Op. Gravada.</p>
+          <p class="amount-text">SON: ${escapeHtml(amountWords)}</p>
+        </div>
+        <div>
+          <p class="amount-text right">SON: ${escapeHtml(amountWords)}</p>
+          <table class="totals"><tbody>
+            <tr><td>Op. Gravada</td><td>S/ 0.00</td></tr>
+            <tr><td>Op. Exonerada</td><td>${receiptMoney(total)}</td></tr>
+            <tr><td>Op. Inafecta</td><td>S/ 0.00</td></tr>
+            <tr><td>ISC</td><td>S/ 0.00</td></tr>
+            <tr><td>IGV</td><td>S/ 0.00</td></tr>
+            <tr><td>Otros Cargos</td><td>S/ 0.00</td></tr>
+            <tr><td>Otros Tributos</td><td>S/ 0.00</td></tr>
+            <tr><td>Monto de Redondeo</td><td>S/ 0.00</td></tr>
+            <tr class="grand"><td>Importe Total</td><td>${receiptMoney(total)}</td></tr>
+          </tbody></table>
+        </div>
+      </div>`;
+  const note = isInvoice
+    ? "Esta es una representacion interna con formato referencial de factura electronica. Pendiente de envio y validacion real en SUNAT."
+    : "Esta es una representacion interna con formato referencial de Boleta de Venta Electronica. Pendiente de envio y validacion real en SUNAT.";
+
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(receiptFullNumber(receipt))}</title>
   <style>
-    body{font-family:Arial,sans-serif;color:#082f49;margin:28px;font-size:13px}
-    .doc{max-width:760px;margin:auto;border:1px solid #b8e5ef;padding:24px}
-    .head{display:flex;justify-content:space-between;gap:20px;border-bottom:1px solid #b8e5ef;padding-bottom:16px}
-    .brand{display:flex;gap:14px;align-items:center}
-    .brand img{width:96px;height:auto}
-    .box{border:1px solid #0ea5e9;padding:14px;text-align:center;border-radius:6px;min-width:220px}
-    h1{font-size:18px;margin:0 0 8px}.muted{color:#607987}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:18px 0}
-    table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border-bottom:1px solid #d6eef4;padding:10px;text-align:left}th{color:#607987}
-    .totals{margin-left:auto;width:320px}.totals td:last-child{text-align:right;font-weight:700}.note{margin-top:20px;color:#607987}
-    @media print{button{display:none}.doc{border:none}}
-  </style></head><body><div class="doc">
-    <div class="head">
-      <div class="brand"><img src="${escapeHtml(logoUrl)}"><div><h1>${escapeHtml(issuer.issuerTradeName)}</h1><div>${escapeHtml(issuer.issuerLegalName)}</div><div class="muted">${escapeHtml(issuer.issuerAddress)}</div><div class="muted">${escapeHtml(issuer.issuerDistrict)} - ${escapeHtml(issuer.issuerProvince)} - ${escapeHtml(issuer.issuerDepartment)}</div></div></div>
-      <div class="box"><strong>RUC: ${escapeHtml(issuer.issuerRuc)}</strong><h1>${receipt.type === "FACTURA" ? "FACTURA ELECTRONICA" : "BOLETA DE VENTA ELECTRONICA"}</h1><strong>${escapeHtml(receiptFullNumber(receipt))}</strong></div>
+    @page{size:A4;margin:12mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;background:#fff;font-size:12px}
+    .actions{position:sticky;top:0;background:#fff;padding:8px 0;text-align:right}
+    button{border:1px solid #111;background:#fff;padding:6px 10px;font-weight:700;cursor:pointer}
+    .doc{width:100%;max-width:980px;margin:0 auto;border:1px solid #000;padding:4px 6px 0}
+    .header{display:grid;grid-template-columns:1fr 340px;gap:14px;align-items:start;border-bottom:1px solid #000;padding:4px 2px 6px}
+    .issuer{display:grid;grid-template-columns:70px 1fr;gap:8px;align-items:start;font-size:15px;line-height:1.18}
+    .issuer img{width:64px;height:auto;margin-top:3px}
+    .issuer strong{font-size:16px}
+    .doc-box{border:3px solid #000;text-align:center;font-weight:700;font-size:18px;line-height:1.18;padding:5px 8px}
+    .meta{display:grid;grid-template-columns:230px 1fr 230px;gap:8px;padding:7px 2px 6px;font-size:14px;line-height:1.55}
+    .meta .label{display:grid;grid-template-columns:150px 10px 1fr}
+    .meta strong{font-weight:700}
+    table{width:100%;border-collapse:collapse}
+    .items{border:1px solid #000;margin-top:2px;font-size:13px}
+    th{font-weight:700;text-align:center;border-bottom:1px solid #000;padding:2px 4px}
+    td{padding:3px 5px;vertical-align:top}
+    .items tbody td{border-top:1px solid #000}
+    .center{text-align:center}.right{text-align:right}
+    .split{display:grid;grid-template-columns:1fr 500px;gap:8px;min-height:185px;padding:18px 6px 8px}
+    .free-line{font-size:14px;margin:0 0 74px 40px}.free-line span{display:inline-block;min-width:180px;border:1px solid #000;padding:2px 4px}
+    .amount-text{font-weight:700;font-size:16px;margin:0 0 0 4px}
+    .totals{font-size:13px}
+    .totals td{padding:2px 5px}
+    .totals td:first-child{text-align:right;width:64%}
+    .totals td:last-child{text-align:right;border:1px solid #000}
+    .totals .grand td{font-size:18px;font-weight:700}
+    .boleta-lower{display:grid;grid-template-columns:1fr 520px;gap:10px;border-left:1px solid #000;border-right:1px solid #000;border-bottom:1px solid #000;min-height:230px;padding:18px 8px 8px;font-size:13px}
+    .boleta-lower .amount-text{margin-top:80px}
+    .note{border:1px solid #000;border-top:0;text-align:center;font-style:italic;font-size:17px;line-height:1.25;padding:8px 18px}
+    @media print{.actions{display:none}.doc{max-width:none}.note{font-size:16px}}
+  </style></head><body>
+    <div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
+    <div class="doc">
+      <div class="header">
+        <div class="issuer">
+          <img src="${escapeHtml(logoUrl)}" alt="Logo CM">
+          <div>
+            <strong>${escapeHtml(issuer.issuerTradeName || "C.O CM ODONTOLOGIA ESTETICA")}</strong><br>
+            <strong>${escapeHtml(issuer.issuerLegalName || "")}</strong><br>
+            ${escapeHtml(issuer.issuerAddress || "")}<br>
+            ${escapeHtml(issuerPlace)}
+          </div>
+        </div>
+        <div class="doc-box">${title}<br>RUC: ${escapeHtml(issuer.issuerRuc || "")}<br>${escapeHtml(receiptFullNumber(receipt))}</div>
+      </div>
+      <div class="meta">
+        <div>
+          ${isInvoice ? "" : `<div class="label"><span>Fecha de Vencimiento</span><span>:</span><strong></strong></div>`}
+          <div class="label"><span>Fecha de Emision</span><span>:</span><strong>${receiptDateSlash(receipt.issueDate)}</strong></div>
+          <div class="label"><span>Senor(es)</span><span>:</span><strong>${escapeHtml(String(receipt.customerName || "").toUpperCase())}</strong></div>
+          <div class="label"><span>${customerDocLabel}</span><span>:</span><strong>${escapeHtml(receipt.customerDoc || "")}</strong></div>
+          ${isInvoice ? `<div class="label"><span>Establecimiento del Emisor</span><span>:</span><strong>${escapeHtml(issuer.issuerAddress || "")}<br>${escapeHtml(issuerPlace)}</strong></div>` : ""}
+          <div class="label"><span>Tipo de Moneda</span><span>:</span><strong>SOLES</strong></div>
+          <div class="label"><span>Observacion</span><span>:</span><strong></strong></div>
+        </div>
+        <div>${isInvoice && receipt.customerAddress ? `<strong>${escapeHtml(String(receipt.customerAddress).toUpperCase())}</strong>` : ""}</div>
+        <div>${isInvoice ? "Forma de pago: Contado" : ""}</div>
+      </div>
+      <table class="items">
+        <thead>${detailHead}</thead>
+        <tbody>${detailRows}</tbody>
+      </table>
+      ${!isInvoice ? `<table class="totals" style="width:360px;margin:8px 12px 0 auto"><tbody><tr><td>Otros Cargos</td><td>S/ 0.00</td></tr><tr><td>Otros Tributos</td><td>S/ 0.00</td></tr><tr><td>Importe Total</td><td>${receiptMoney(total)}</td></tr></tbody></table>` : ""}
+      ${totalsBox}
     </div>
-    <div class="grid"><div><strong>Fecha de emision:</strong> ${formatDate(receipt.issueDate)}</div><div><strong>Moneda:</strong> SOLES</div><div><strong>Cliente:</strong> ${escapeHtml(receipt.customerName)}</div><div><strong>${escapeHtml(receipt.customerDocType)}:</strong> ${escapeHtml(receipt.customerDoc)}</div>${receipt.customerAddress ? `<div><strong>Direccion fiscal:</strong> ${escapeHtml(receipt.customerAddress)}</div>` : ""}</div>
-    <table><thead><tr><th>Cantidad</th><th>Unidad</th><th>Descripcion</th><th>Valor unitario</th><th>Importe</th></tr></thead><tbody><tr><td>${receipt.quantity}</td><td>UNIDAD</td><td>${escapeHtml(receipt.description)}</td><td>${money(receipt.unitValue)}</td><td>${money(receipt.total)}</td></tr></tbody></table>
-    <table class="totals"><tbody><tr><td>Op. Exonerada</td><td>${money(receipt.total)}</td></tr><tr><td>IGV</td><td>${money(0)}</td></tr><tr><td>Importe Total</td><td>${money(receipt.total)}</td></tr></tbody></table>
-    <p class="note">Representacion interna del comprobante electronico. Pendiente de integracion XML/SUNAT.</p>
-    <button onclick="window.print()">Imprimir / guardar PDF</button>
-  </div></body></html>`);
+    <div class="doc" style="border-top:0;padding:0"><div class="note">${note}</div></div>
+  </body></html>`);
   w.document.close();
 }
 
