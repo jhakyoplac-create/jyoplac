@@ -886,9 +886,22 @@ tr.followup-pending td:first-child {
   line-height: 1.22;
 }
 
+#dailyIncomeBreakdownReport {
+  max-height: 310px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .income-breakdown-panel th {
   font-size: 10px;
   padding: 8px 8px;
+}
+
+.income-breakdown-panel thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
 }
 
 .income-breakdown-panel td {
