@@ -1167,20 +1167,38 @@ dialog::backdrop {
 .receipt-issue-modal {
   width: 100%;
   max-width: none;
+  font-size: 14px;
 }
 
-.receipt-issue-modal .settings-grid {
-  grid-template-columns: repeat(2, minmax(240px, 1fr));
+.receipt-fields-grid {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) minmax(150px, 190px) minmax(280px, 1fr);
+  gap: 12px;
+  align-items: end;
 }
 
 .receipt-issue-modal input,
-.receipt-issue-modal select {
+.receipt-issue-modal select,
+.receipt-issue-modal textarea {
   min-width: 0;
+  font-size: 14px;
+  min-height: 42px;
+  padding: 10px 12px;
 }
 
 .receipt-issue-modal menu,
 .alert-dialog menu {
   margin-top: 14px;
+}
+
+#electronicReceiptsTable {
+  font-size: 14px;
+}
+
+#electronicReceiptsTable td,
+#electronicReceiptsTable th {
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 .modal-form {
@@ -2025,6 +2043,10 @@ menu {
 }
 
 @media (max-width: 720px) {
+  .receipt-fields-grid {
+    grid-template-columns: 1fr;
+  }
+
   body {
     display: block;
     background:

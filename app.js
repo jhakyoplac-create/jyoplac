@@ -2254,6 +2254,7 @@ function buildElectronicReceiptFromPayment(payment, formDataValues) {
   const history = historyById(payment.historyId);
   const customerDoc = String(formDataValues.receiptCustomerDoc || formDataValues.customerDoc || patient?.dni || "").trim();
   const customerName = String(formDataValues.receiptCustomerName || formDataValues.customerName || patient?.name || "").trim().toUpperCase();
+  const description = String(formDataValues.description || history?.reason || patient?.mainTreatment || "Servicio odontologico").trim();
   const series = receiptSeriesForType(type);
   const number = nextReceiptNumber(type);
   return {
@@ -2268,7 +2269,7 @@ function buildElectronicReceiptFromPayment(payment, formDataValues) {
     customerDoc,
     customerName,
     customerAddress: String(formDataValues.customerAddress || "").trim().toUpperCase(),
-    description: history?.reason || patient?.mainTreatment || "Servicio odontologico",
+    description,
     quantity: 1,
     unitValue: payment.amount,
     total: payment.amount,
@@ -2419,36 +2420,37 @@ function printElectronicReceipt(id) {
   <style>
     @page{size:A4;margin:12mm}
     *{box-sizing:border-box}
-    body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;background:#fff;font-size:12px}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;background:#fff;font-size:11px}
     .actions{position:sticky;top:0;background:#fff;padding:8px 0;text-align:right}
     button{border:1px solid #111;background:#fff;padding:6px 10px;font-weight:700;cursor:pointer}
     .doc{width:100%;max-width:980px;margin:0 auto;border:1px solid #000;padding:4px 6px 0}
     .header{display:grid;grid-template-columns:1fr 340px;gap:14px;align-items:start;border-bottom:1px solid #000;padding:4px 2px 6px}
-    .issuer{display:grid;grid-template-columns:70px 1fr;gap:8px;align-items:start;font-size:15px;line-height:1.18}
-    .issuer img{width:64px;height:auto;margin-top:3px}
-    .issuer strong{font-size:16px}
-    .doc-box{border:3px solid #000;text-align:center;font-weight:700;font-size:18px;line-height:1.18;padding:5px 8px}
-    .meta{display:grid;grid-template-columns:230px 1fr 230px;gap:8px;padding:7px 2px 6px;font-size:14px;line-height:1.55}
-    .meta .label{display:grid;grid-template-columns:150px 10px 1fr}
+    .issuer{display:grid;grid-template-columns:62px 1fr;gap:8px;align-items:start;font-size:13px;line-height:1.15}
+    .issuer img{width:56px;height:auto;margin-top:3px}
+    .issuer strong{font-size:14px}
+    .doc-box{border:3px solid #000;text-align:center;font-weight:700;font-size:16px;line-height:1.15;padding:5px 8px}
+    .meta{display:grid;grid-template-columns:minmax(420px,1fr) 1fr 150px;gap:8px;padding:7px 2px 6px;font-size:12px;line-height:1.45}
+    .meta.boleta-meta{grid-template-columns:1fr}
+    .meta .label{display:grid;grid-template-columns:175px 10px minmax(0,1fr)}
     .meta strong{font-weight:700}
     table{width:100%;border-collapse:collapse}
-    .items{border:1px solid #000;margin-top:2px;font-size:13px}
+    .items{border:1px solid #000;margin-top:2px;font-size:11.5px}
     th{font-weight:700;text-align:center;border-bottom:1px solid #000;padding:2px 4px}
     td{padding:3px 5px;vertical-align:top}
     .items tbody td{border-top:1px solid #000}
     .center{text-align:center}.right{text-align:right}
     .split{display:grid;grid-template-columns:1fr 500px;gap:8px;min-height:185px;padding:18px 6px 8px}
-    .free-line{font-size:14px;margin:0 0 74px 40px}.free-line span{display:inline-block;min-width:180px;border:1px solid #000;padding:2px 4px}
-    .amount-text{font-weight:700;font-size:16px;margin:0 0 0 4px}
-    .totals{font-size:13px}
+    .free-line{font-size:12px;margin:0 0 74px 40px}.free-line span{display:inline-block;min-width:180px;border:1px solid #000;padding:2px 4px}
+    .amount-text{font-weight:700;font-size:14px;margin:0 0 0 4px}
+    .totals{font-size:11.5px}
     .totals td{padding:2px 5px}
     .totals td:first-child{text-align:right;width:64%}
     .totals td:last-child{text-align:right;border:1px solid #000}
-    .totals .grand td{font-size:18px;font-weight:700}
-    .boleta-lower{display:grid;grid-template-columns:1fr 520px;gap:10px;border-left:1px solid #000;border-right:1px solid #000;border-bottom:1px solid #000;min-height:230px;padding:18px 8px 8px;font-size:13px}
+    .totals .grand td{font-size:16px;font-weight:700}
+    .boleta-lower{display:grid;grid-template-columns:1fr 520px;gap:10px;border-left:1px solid #000;border-right:1px solid #000;border-bottom:1px solid #000;min-height:230px;padding:18px 8px 8px;font-size:11.5px}
     .boleta-lower .amount-text{margin-top:80px}
-    .note{border:1px solid #000;border-top:0;text-align:center;font-style:italic;font-size:17px;line-height:1.25;padding:8px 18px}
-    @media print{.actions{display:none}.doc{max-width:none}.note{font-size:16px}}
+    .note{border:1px solid #000;border-top:0;text-align:center;font-style:italic;font-size:14px;line-height:1.25;padding:8px 18px}
+    @media print{.actions{display:none}.doc{max-width:none}.note{font-size:13px}}
   </style></head><body>
     <div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
     <div class="doc">
@@ -2464,18 +2466,17 @@ function printElectronicReceipt(id) {
         </div>
         <div class="doc-box">${title}<br>RUC: ${escapeHtml(issuer.issuerRuc || "")}<br>${escapeHtml(receiptFullNumber(receipt))}</div>
       </div>
-      <div class="meta">
+      <div class="meta ${isInvoice ? "invoice-meta" : "boleta-meta"}">
         <div>
           ${isInvoice ? "" : `<div class="label"><span>Fecha de Vencimiento</span><span>:</span><strong></strong></div>`}
           <div class="label"><span>Fecha de Emision</span><span>:</span><strong>${receiptDateSlash(receipt.issueDate)}</strong></div>
-          <div class="label"><span>Senor(es)</span><span>:</span><strong>${escapeHtml(String(receipt.customerName || "").toUpperCase())}</strong></div>
+          <div class="label"><span>Señor(es)</span><span>:</span><strong>${escapeHtml(String(receipt.customerName || "").toUpperCase())}</strong></div>
           <div class="label"><span>${customerDocLabel}</span><span>:</span><strong>${escapeHtml(receipt.customerDoc || "")}</strong></div>
           ${isInvoice ? `<div class="label"><span>Establecimiento del Emisor</span><span>:</span><strong>${escapeHtml(issuer.issuerAddress || "")}<br>${escapeHtml(issuerPlace)}</strong></div>` : ""}
           <div class="label"><span>Tipo de Moneda</span><span>:</span><strong>SOLES</strong></div>
           <div class="label"><span>Observacion</span><span>:</span><strong></strong></div>
         </div>
-        <div>${isInvoice && receipt.customerAddress ? `<strong>${escapeHtml(String(receipt.customerAddress).toUpperCase())}</strong>` : ""}</div>
-        <div>${isInvoice ? "Forma de pago: Contado" : ""}</div>
+        ${isInvoice ? `<div>${receipt.customerAddress ? `<strong>${escapeHtml(String(receipt.customerAddress).toUpperCase())}</strong>` : ""}</div><div>Forma de pago: Contado</div>` : ""}
       </div>
       <table class="items">
         <thead>${detailHead}</thead>
@@ -2499,12 +2500,14 @@ function setupReceiptIssueForm() {
   const form = $("#receiptIssueForm");
   if (!context || !form) return;
   const patient = patientById(context.payment.patientId);
+  const history = historyById(context.payment.historyId);
   form.reset();
   form.elements.namedItem("type").value = "BOLETA";
   form.elements.namedItem("customerDoc").placeholder = "DNI";
   form.elements.namedItem("customerDoc").value = patient?.dni || "";
   form.elements.namedItem("customerName").value = patient?.name || "";
   form.elements.namedItem("customerAddress").value = "";
+  form.elements.namedItem("description").value = history?.reason || patient?.mainTreatment || "Servicio odontologico";
   $("#receiptAddressLabel").hidden = true;
   $("#receiptLookupHint").textContent = "Boleta: busca primero en pacientes registrados.";
 }

@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260606-sunat-layout-comprobante" />
+    <link rel="stylesheet" href="styles.css?v=20260606-comprobante-compacto" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -904,17 +904,20 @@
           <h2>Emisión de comprobante</h2>
           <button class="icon" data-close-dialog="receiptIssueDialog" type="button" aria-label="Cerrar">x</button>
         </div>
+        <div class="receipt-fields-grid">
         <label>Tipo de comprobante
           <select name="type">
             <option value="BOLETA">Boleta</option>
             <option value="FACTURA">Factura</option>
           </select>
         </label>
-        <div class="settings-grid">
           <label>Documento<input name="customerDoc" placeholder="DNI" required /></label>
           <label>Nombre / razón social<input name="customerName" required /></label>
         </div>
         <label id="receiptAddressLabel" hidden>Dirección fiscal<input name="customerAddress" /></label>
+        <label>Descripcion del servicio
+          <textarea name="description" rows="2" placeholder="Tratamiento o servicio realizado"></textarea>
+        </label>
         <div class="top-actions">
           <button class="ghost" id="lookupReceiptDocBtn" type="button">Buscar datos</button>
           <span class="muted" id="receiptLookupHint"></span>
@@ -926,6 +929,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260606-sunat-layout-comprobante"></script>
+    <script src="app.js?v=20260606-comprobante-compacto"></script>
   </body>
 </html>
