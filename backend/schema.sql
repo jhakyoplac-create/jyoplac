@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS electronic_receipts (
   customer_doc_type TEXT NOT NULL,
   customer_doc TEXT NOT NULL,
   customer_name TEXT NOT NULL,
+  customer_address TEXT,
   description TEXT NOT NULL,
   quantity REAL NOT NULL DEFAULT 1,
   unit_value REAL NOT NULL DEFAULT 0,

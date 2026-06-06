@@ -129,6 +129,7 @@ let apiRefreshing = false;
 let patientSaving = false;
 let historySaving = false;
 let paymentSaving = false;
+let pendingPaymentContext = null;
 let forcedPaymentHistoryId = "";
 let lastSavedPatientId = "";
 let patientEditingId = "";
@@ -374,6 +375,7 @@ function mapApiElectronicReceipt(row) {
     customerDocType: row.customer_doc_type || row.customerDocType || "",
     customerDoc: row.customer_doc || row.customerDoc || "",
     customerName: row.customer_name || row.customerName || "",
+    customerAddress: row.customer_address || row.customerAddress || "",
     description: row.description || "",
     quantity: Number(row.quantity || 1),
     unitValue: Number(row.unit_value ?? row.unitValue ?? 0),
@@ -2246,12 +2248,12 @@ function renderPayments() {
 }
 
 function buildElectronicReceiptFromPayment(payment, formDataValues) {
-  const type = String(formDataValues.electronicReceiptType || "").toUpperCase();
+  const type = String(formDataValues.electronicReceiptType || formDataValues.type || "").toUpperCase();
   if (!type) return null;
   const patient = patientById(payment.patientId);
   const history = historyById(payment.historyId);
-  const customerDoc = String(formDataValues.receiptCustomerDoc || patient?.dni || "").trim();
-  const customerName = String(formDataValues.receiptCustomerName || patient?.name || "").trim().toUpperCase();
+  const customerDoc = String(formDataValues.receiptCustomerDoc || formDataValues.customerDoc || patient?.dni || "").trim();
+  const customerName = String(formDataValues.receiptCustomerName || formDataValues.customerName || patient?.name || "").trim().toUpperCase();
   const series = receiptSeriesForType(type);
   const number = nextReceiptNumber(type);
   return {
@@ -2265,6 +2267,7 @@ function buildElectronicReceiptFromPayment(payment, formDataValues) {
     customerDocType: type === "FACTURA" ? "RUC" : "DNI",
     customerDoc,
     customerName,
+    customerAddress: String(formDataValues.customerAddress || "").trim().toUpperCase(),
     description: history?.reason || patient?.mainTreatment || "Servicio odontologico",
     quantity: 1,
     unitValue: payment.amount,
@@ -2317,13 +2320,120 @@ function printElectronicReceipt(id) {
       <div class="brand"><img src="${escapeHtml(logoUrl)}"><div><h1>${escapeHtml(issuer.issuerTradeName)}</h1><div>${escapeHtml(issuer.issuerLegalName)}</div><div class="muted">${escapeHtml(issuer.issuerAddress)}</div><div class="muted">${escapeHtml(issuer.issuerDistrict)} - ${escapeHtml(issuer.issuerProvince)} - ${escapeHtml(issuer.issuerDepartment)}</div></div></div>
       <div class="box"><strong>RUC: ${escapeHtml(issuer.issuerRuc)}</strong><h1>${receipt.type === "FACTURA" ? "FACTURA ELECTRONICA" : "BOLETA DE VENTA ELECTRONICA"}</h1><strong>${escapeHtml(receiptFullNumber(receipt))}</strong></div>
     </div>
-    <div class="grid"><div><strong>Fecha de emision:</strong> ${formatDate(receipt.issueDate)}</div><div><strong>Moneda:</strong> SOLES</div><div><strong>Cliente:</strong> ${escapeHtml(receipt.customerName)}</div><div><strong>${escapeHtml(receipt.customerDocType)}:</strong> ${escapeHtml(receipt.customerDoc)}</div></div>
+    <div class="grid"><div><strong>Fecha de emision:</strong> ${formatDate(receipt.issueDate)}</div><div><strong>Moneda:</strong> SOLES</div><div><strong>Cliente:</strong> ${escapeHtml(receipt.customerName)}</div><div><strong>${escapeHtml(receipt.customerDocType)}:</strong> ${escapeHtml(receipt.customerDoc)}</div>${receipt.customerAddress ? `<div><strong>Direccion fiscal:</strong> ${escapeHtml(receipt.customerAddress)}</div>` : ""}</div>
     <table><thead><tr><th>Cantidad</th><th>Unidad</th><th>Descripcion</th><th>Valor unitario</th><th>Importe</th></tr></thead><tbody><tr><td>${receipt.quantity}</td><td>UNIDAD</td><td>${escapeHtml(receipt.description)}</td><td>${money(receipt.unitValue)}</td><td>${money(receipt.total)}</td></tr></tbody></table>
     <table class="totals"><tbody><tr><td>Op. Exonerada</td><td>${money(receipt.total)}</td></tr><tr><td>IGV</td><td>${money(0)}</td></tr><tr><td>Importe Total</td><td>${money(receipt.total)}</td></tr></tbody></table>
     <p class="note">Representacion interna del comprobante electronico. Pendiente de integracion XML/SUNAT.</p>
     <button onclick="window.print()">Imprimir / guardar PDF</button>
   </div></body></html>`);
   w.document.close();
+}
+
+function openPaymentReceiptPrompt(context) {
+  pendingPaymentContext = context;
+  $("#receiptPromptDialog")?.showModal();
+}
+
+function setupReceiptIssueForm() {
+  const context = pendingPaymentContext;
+  const form = $("#receiptIssueForm");
+  if (!context || !form) return;
+  const patient = patientById(context.payment.patientId);
+  form.reset();
+  form.elements.namedItem("type").value = "BOLETA";
+  form.elements.namedItem("customerDoc").placeholder = "DNI";
+  form.elements.namedItem("customerDoc").value = patient?.dni || "";
+  form.elements.namedItem("customerName").value = patient?.name || "";
+  form.elements.namedItem("customerAddress").value = "";
+  $("#receiptAddressLabel").hidden = true;
+  $("#receiptLookupHint").textContent = "Boleta: busca primero en pacientes registrados.";
+}
+
+function applyReceiptTypeUI() {
+  const form = $("#receiptIssueForm");
+  if (!form) return;
+  const typeField = form.elements.namedItem("type");
+  const docField = form.elements.namedItem("customerDoc");
+  const nameField = form.elements.namedItem("customerName");
+  const addressField = form.elements.namedItem("customerAddress");
+  const isInvoice = typeField.value === "FACTURA";
+  docField.placeholder = isInvoice ? "RUC" : "DNI";
+  $("#receiptAddressLabel").hidden = !isInvoice;
+  $("#receiptLookupHint").textContent = isInvoice ? "Factura: consulta RUC o completa manualmente." : "Boleta: busca primero en pacientes registrados.";
+  if (isInvoice) {
+    docField.value = "";
+    nameField.value = "";
+    addressField.value = "";
+  } else {
+    const patient = patientById(pendingPaymentContext?.payment?.patientId);
+    docField.value = patient?.dni || "";
+    nameField.value = patient?.name || "";
+    addressField.value = "";
+  }
+}
+
+async function lookupReceiptDocument() {
+  const form = $("#receiptIssueForm");
+  const hint = $("#receiptLookupHint");
+  if (!form) return;
+  const type = form.elements.namedItem("type").value;
+  const docField = form.elements.namedItem("customerDoc");
+  const nameField = form.elements.namedItem("customerName");
+  const addressField = form.elements.namedItem("customerAddress");
+  const doc = String(docField.value || "").trim();
+  if (type === "BOLETA") {
+    const patient = state.patients.find((item) => String(item.dni || "").trim() === doc);
+    if (patient) {
+      nameField.value = patient.name || "";
+      if (hint) hint.textContent = "Paciente encontrado en la base interna.";
+    } else if (hint) {
+      hint.textContent = "DNI no encontrado internamente. Completa el nombre manualmente.";
+    }
+    return;
+  }
+  if (!/^\d{11}$/.test(doc)) {
+    if (hint) hint.textContent = "El RUC debe tener 11 digitos.";
+    return;
+  }
+  if (doc === state.config.issuerRuc) {
+    nameField.value = state.config.issuerLegalName;
+    addressField.value = `${state.config.issuerAddress}, ${state.config.issuerDistrict} - ${state.config.issuerProvince} - ${state.config.issuerDepartment}`;
+    if (hint) hint.textContent = "Datos encontrados en la ficha RUC cargada.";
+    return;
+  }
+  if (hint) hint.textContent = "Consulta SUNAT automatica pendiente de proveedor/API. Completa razon social y direccion fiscal.";
+}
+
+async function completePendingPayment(receiptValues = null) {
+  const context = pendingPaymentContext;
+  if (!context) return;
+  const { payment, form, restorePaymentButton } = context;
+  try {
+    await savePaymentApi(payment);
+    if (receiptValues) {
+      const receipt = buildElectronicReceiptFromPayment(payment, receiptValues);
+      if (receipt) {
+        await saveElectronicReceiptApi(receipt);
+        upsert(state.electronicReceipts, receipt);
+        payment.receipt = receiptFullNumber(receipt);
+        await savePaymentApi(payment);
+      }
+    }
+  } catch (error) {
+    alert(error.message);
+    restorePaymentButton();
+    return;
+  }
+  upsert(state.payments, payment);
+  if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
+  form.reset();
+  form.date.value = operatingDate();
+  if (!API_ENABLED) saveState();
+  pendingPaymentContext = null;
+  $("#receiptPromptDialog")?.close("ok");
+  $("#receiptIssueDialog")?.close("ok");
+  render();
+  restorePaymentButton();
 }
 
 function renderReceivables() {
@@ -4023,30 +4133,49 @@ function bindEvents() {
     toggleMixedPaymentFields();
     updatePaymentChange();
   });
-  $('#paymentForm select[name="electronicReceiptType"]')?.addEventListener("change", (event) => {
-    const form = $("#paymentForm");
-    const fields = $("#paymentReceiptFields");
-    const patient = patientById(form?.patientId?.value);
-    if (fields) fields.hidden = !event.target.value;
-    if (form && event.target.value === "BOLETA") {
-      form.receiptCustomerDoc.value = patient?.dni || "";
-      form.receiptCustomerName.value = patient?.name || "";
-    } else if (form && event.target.value === "FACTURA") {
-      form.receiptCustomerDoc.value = "";
-      form.receiptCustomerName.value = "";
-    }
-  });
-  $('#paymentForm select[name="patientId"]')?.addEventListener("change", () => {
-    const form = $("#paymentForm");
-    const patient = patientById(form?.patientId?.value);
-    if (form?.electronicReceiptType?.value === "BOLETA" && patient) {
-      form.receiptCustomerDoc.value = patient.dni || "";
-      form.receiptCustomerName.value = patient.name || "";
-    }
-  });
   $("#openMixedPaymentBtn")?.addEventListener("click", openMixedPaymentDialog);
   $("#saveMixedPaymentBtn")?.addEventListener("click", applyMixedPaymentDialog);
   $("#mixedPaymentForm")?.addEventListener("input", updateMixedPaymentDialogSummary);
+  $("#savePaymentOnlyBtn")?.addEventListener("click", () => completePendingPayment(null));
+  $("#openReceiptIssueBtn")?.addEventListener("click", () => {
+    $("#receiptPromptDialog")?.close("emitir");
+    setupReceiptIssueForm();
+    $("#receiptIssueDialog")?.showModal();
+  });
+  $("#cancelReceiptIssueBtn")?.addEventListener("click", () => {
+    $("#receiptIssueDialog")?.close("cancel");
+    pendingPaymentContext?.restorePaymentButton();
+    pendingPaymentContext = null;
+  });
+  $("#receiptIssueForm")?.elements.namedItem("type")?.addEventListener("change", applyReceiptTypeUI);
+  $("#lookupReceiptDocBtn")?.addEventListener("click", lookupReceiptDocument);
+  $("#receiptIssueForm")?.elements.namedItem("customerDoc")?.addEventListener("blur", lookupReceiptDocument);
+  $("#receiptIssueForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = formData(form);
+    if (values.type === "FACTURA" && !/^\d{11}$/.test(String(values.customerDoc || ""))) {
+      alert("Para factura ingresa RUC de 11 digitos.");
+      return;
+    }
+    if (!String(values.customerName || "").trim()) {
+      alert("Ingresa el nombre o razon social.");
+      return;
+    }
+    await completePendingPayment(values);
+  });
+  $("#receiptIssueDialog")?.addEventListener("close", () => {
+    if (pendingPaymentContext && $("#receiptIssueDialog")?.returnValue !== "ok") {
+      pendingPaymentContext.restorePaymentButton();
+      pendingPaymentContext = null;
+    }
+  });
+  $("#receiptPromptDialog")?.addEventListener("close", () => {
+    if (pendingPaymentContext && $("#receiptPromptDialog")?.returnValue === "cancel") {
+      pendingPaymentContext.restorePaymentButton();
+      pendingPaymentContext = null;
+    }
+  });
   $("#paymentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (paymentSaving) return;
@@ -4113,16 +4242,6 @@ function bindEvents() {
       return;
     }
     const split = splitResult.split;
-    if (data.electronicReceiptType === "FACTURA" && !/^\d{11}$/.test(String(data.receiptCustomerDoc || ""))) {
-      alert("Para factura ingresa RUC de 11 digitos.");
-      restorePaymentButton();
-      return;
-    }
-    if (data.electronicReceiptType && !String(data.receiptCustomerName || "").trim()) {
-      alert("Ingresa el nombre o razon social para el comprobante.");
-      restorePaymentButton();
-      return;
-    }
     const cashPortion = Number(split.cashAmount || 0);
     const cashReceived = cashPortion > 0 ? Number(data.cashReceived || cashPortion || 0) : 0;
     const payment = {
@@ -4137,28 +4256,7 @@ function bindEvents() {
       ...split,
       receipt: data.receipt
     };
-    try {
-      await savePaymentApi(payment);
-      const receipt = buildElectronicReceiptFromPayment(payment, data);
-      if (receipt) {
-        await saveElectronicReceiptApi(receipt);
-        upsert(state.electronicReceipts, receipt);
-        payment.receipt = receiptFullNumber(receipt);
-        await savePaymentApi(payment);
-      }
-    } catch (error) {
-      alert(error.message);
-      restorePaymentButton();
-      return;
-    }
-    upsert(state.payments, payment);
-    if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
-    form.reset();
-    $("#paymentReceiptFields").hidden = true;
-    form.date.value = operatingDate();
-    if (!API_ENABLED) saveState();
-    render();
-    restorePaymentButton();
+    openPaymentReceiptPrompt({ payment, form, restorePaymentButton });
   });
 
   $("#openCashBtn").addEventListener("click", async () => {

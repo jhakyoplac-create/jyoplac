@@ -1143,6 +1143,19 @@ dialog::backdrop {
   font-size: 14px;
 }
 
+.alert-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.receipt-issue-modal {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.receipt-issue-modal menu,
+.alert-dialog menu {
+  margin-top: 14px;
+}
+
 .modal-form {
   padding: 18px;
 }

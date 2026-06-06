@@ -216,6 +216,7 @@ def migrate_db(conn):
           customer_doc_type TEXT NOT NULL,
           customer_doc TEXT NOT NULL,
           customer_name TEXT NOT NULL,
+          customer_address TEXT,
           description TEXT NOT NULL,
           quantity REAL NOT NULL DEFAULT 1,
           unit_value REAL NOT NULL DEFAULT 0,
@@ -230,6 +231,7 @@ def migrate_db(conn):
         )
         """
     )
+    ensure_column(conn, "electronic_receipts", "customer_address", "TEXT")
 
 
 def purge_old_audit_events(conn):
@@ -1011,10 +1013,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         """
                         INSERT INTO electronic_receipts (
                           id, payment_id, patient_id, type, series, number, issue_date,
-                          customer_doc_type, customer_doc, customer_name, description,
+                          customer_doc_type, customer_doc, customer_name, customer_address, description,
                           quantity, unit_value, total, tax_condition, igv, status, notes
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           payment_id=excluded.payment_id,
                           patient_id=excluded.patient_id,
@@ -1025,6 +1027,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           customer_doc_type=excluded.customer_doc_type,
                           customer_doc=excluded.customer_doc,
                           customer_name=excluded.customer_name,
+                          customer_address=excluded.customer_address,
                           description=excluded.description,
                           quantity=excluded.quantity,
                           unit_value=excluded.unit_value,
@@ -1046,6 +1049,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             customer_doc_type,
                             customer_doc,
                             customer_name,
+                            data.get("customerAddress", ""),
                             data.get("description", "Servicio odontologico"),
                             float(data.get("quantity") or 1),
                             float(data.get("unitValue") or data.get("total") or 0),
