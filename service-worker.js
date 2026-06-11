@@ -1,12 +1,14 @@
-const CACHE_NAME = "cm-dental-shell-v30";
+const CACHE_NAME = "cm-dental-shell-v31";
 const SHELL_FILES = [
   "/",
   "/index.html",
-  "/styles.css?v=20260606-comprobante-compacto",
-  "/app.js?v=20260606-comprobante-compacto",
+  "/styles.css?v=20260611-sesion-doctores",
+  "/app.js?v=20260611-sesion-doctores",
   "/manifest.webmanifest",
   "/assets/logo.svg",
   "/assets/logo-cm.png",
+  "/assets/app-icon-192.png",
+  "/assets/app-icon-512.png",
   "/assets/favicon.ico"
 ];
 

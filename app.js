@@ -1,6 +1,7 @@
 const STORAGE_KEY = "cm-dental-system-v3";
 const API_TOKEN_KEY = `${STORAGE_KEY}-api-token`;
 const API_TOKEN_EXPIRES_KEY = `${STORAGE_KEY}-api-token-expires`;
+const API_USER_KEY = `${STORAGE_KEY}-api-user`;
 const API_ENABLED = location.protocol === "http:" || location.protocol === "https:";
 const API_SESSION_MS = 4 * 60 * 60 * 1000;
 
@@ -123,7 +124,7 @@ let state = loadState();
 let currentView = "dashboard";
 let currentUserId = localStorage.getItem(`${STORAGE_KEY}-current-user`) || "";
 let apiToken = localStorage.getItem(API_TOKEN_KEY) || "";
-let apiUser = null;
+let apiUser = loadApiUser();
 let apiBootstrapped = false;
 let apiRefreshing = false;
 let patientSaving = false;
@@ -144,9 +145,29 @@ function clearApiSession() {
   apiUser = null;
   localStorage.removeItem(API_TOKEN_KEY);
   localStorage.removeItem(API_TOKEN_EXPIRES_KEY);
+  localStorage.removeItem(API_USER_KEY);
 }
 
-function rememberApiSession(token, expiresAt) {
+function loadApiUser() {
+  try {
+    return JSON.parse(localStorage.getItem(API_USER_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function rememberApiUser(user) {
+  apiUser = user || null;
+  if (apiUser) {
+    currentUserId = apiUser.id || currentUserId;
+    localStorage.setItem(API_USER_KEY, JSON.stringify(apiUser));
+    localStorage.setItem(`${STORAGE_KEY}-current-user`, currentUserId);
+  } else {
+    localStorage.removeItem(API_USER_KEY);
+  }
+}
+
+function rememberApiSession(token, expiresAt, user = null) {
   apiToken = token || "";
   if (!apiToken) {
     clearApiSession();
@@ -156,6 +177,7 @@ function rememberApiSession(token, expiresAt) {
   const normalizedExpires = Number(expiresAt) || fallbackExpires;
   localStorage.setItem(API_TOKEN_KEY, apiToken);
   localStorage.setItem(API_TOKEN_EXPIRES_KEY, String(normalizedExpires));
+  if (user) rememberApiUser(user);
 }
 
 function apiSessionExpired() {
@@ -507,8 +529,7 @@ function applyApiBootstrap(payload) {
       state = normalizeState(state);
     }
   }
-  apiUser = payload.user || apiUser;
-  if (apiUser) currentUserId = apiUser.id;
+  rememberApiUser(payload.user || apiUser);
   apiBootstrapped = true;
   render();
 }
@@ -3612,11 +3633,9 @@ function bindEvents() {
         submitButton.textContent = "Ingresando...";
       }
       $("#loginMessage").textContent = "Conectando con el sistema...";
-      apiFetch("/api/login", { method: "POST", body: JSON.stringify({ username: data.username, password: data.password }) })
+      apiFetch("/api/login", { method: "POST", body: JSON.stringify({ username: data.username, password: data.password, rememberDevice: data.rememberDevice === "on" }) })
         .then((payload) => {
-          rememberApiSession(payload.token, payload.expiresAt);
-          apiUser = payload.user;
-          currentUserId = payload.user.id;
+          rememberApiSession(payload.token, payload.expiresAt, payload.user);
           $("#loginMessage").textContent = "Cargando datos...";
           form.reset();
           return loadFromApi();

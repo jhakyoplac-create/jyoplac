@@ -32,6 +32,7 @@ DB_DIR = Path(os.environ.get("DATA_DIR", ROOT / "database"))
 DB_PATH = DB_DIR / "dental.sqlite3"
 SCHEMA_PATH = ROOT / "backend" / "schema.sql"
 SESSION_SECONDS = int(os.environ.get("SESSION_SECONDS", 60 * 60 * 4))
+DOCTOR_SESSION_SECONDS = int(os.environ.get("DOCTOR_SESSION_SECONDS", 60 * 60 * 12))
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
 TOKEN_SECRET = os.environ.get("TOKEN_SECRET") or os.environ.get("ADMIN_PASSWORD", "cm-odontologia-local-secret")
@@ -109,6 +110,13 @@ def read_token(token):
         return user_id
     except Exception:
         return None
+
+
+def session_seconds_for_role(role, remember_device=False):
+    role = normalize_role(role)
+    if remember_device and role == "DOCTOR":
+        return max(SESSION_SECONDS, DOCTOR_SESSION_SECONDS)
+    return SESSION_SECONDS
 
 
 class CompatConnection:
@@ -501,7 +509,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 row = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?) AND active = 1", (username,)).fetchone()
             if not row or not verify_password(password, row["password_hash"]):
                 return send_json(self, {"error": "Usuario o contraseña incorrectos"}, 401)
-            expires_at = int(time.time() + SESSION_SECONDS)
+            session_seconds = session_seconds_for_role(row["role"], bool(data.get("rememberDevice")))
+            expires_at = int(time.time() + session_seconds)
             token = make_token(row["id"], expires_at)
             sessions[token] = {"user_id": row["id"], "expires": expires_at}
             return send_json(self, {
