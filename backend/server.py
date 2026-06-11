@@ -312,6 +312,7 @@ def init_db():
             "clinicName": "CM Odontologia Estetica",
             "generalCashOpening": "0",
             "generalBankOpening": "0",
+            "generalUtilityOpening": "0",
         }.items():
             conn.execute(
                 "INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
@@ -1152,6 +1153,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 values["generalCashOpening"] = data["generalCashOpening"]
             if "generalBankOpening" in data:
                 values["generalBankOpening"] = data["generalBankOpening"]
+            if "generalUtilityOpening" in data:
+                values["generalUtilityOpening"] = data["generalUtilityOpening"]
             if "clinicName" in data:
                 values["clinicName"] = data["clinicName"]
             for key in ["start", "end", "interval", "inactiveDays", "whatsapp", "doctors", "units"]:
@@ -1186,6 +1189,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 )
                 conn.execute(
                     "INSERT INTO app_config (key, value) VALUES ('generalBankOpening', '0') ON CONFLICT(key) DO UPDATE SET value='0'"
+                )
+                conn.execute(
+                    "INSERT INTO app_config (key, value) VALUES ('generalUtilityOpening', '0') ON CONFLICT(key) DO UPDATE SET value='0'"
                 )
             return send_json(self, {"ok": True})
 

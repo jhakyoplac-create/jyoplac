@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260611-sesion-doctores" />
+    <link rel="stylesheet" href="styles.css?v=20260611-utilidades" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -420,6 +420,10 @@
             <strong id="generalTotalBalance">S/ 0</strong>
           </article>
           <article class="kpi">
+            <span>Utilidad</span>
+            <strong id="utilityBalance">S/ 0</strong>
+          </article>
+          <article class="kpi">
             <span>Ingresos hoy</span>
             <strong id="generalTodayIncome">S/ 0</strong>
           </article>
@@ -431,6 +435,7 @@
             </div>
             <label>Efectivo general S/<input name="cash" type="number" min="0" step="0.01" /></label>
             <label>Yape/Plin/Tarjeta/Transferencia S/<input name="bank" type="number" min="0" step="0.01" /></label>
+            <label>Utilidad inicial S/<input name="utility" type="number" min="0" step="0.01" /></label>
             <label>Salida caja chica del dia S/<input name="pettyCash" type="number" min="0" step="0.01" /></label>
             <button class="primary" type="submit">Guardar saldos</button>
           </form>
@@ -455,6 +460,47 @@
                   </tr>
                 </thead>
                 <tbody id="generalDailyTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div class="content-grid general-layout lower">
+          <form class="panel form" id="utilityForm">
+            <div class="panel-head">
+              <h2>Utilidades</h2>
+            </div>
+            <label>Fecha<input name="date" type="date" required /></label>
+            <label>Movimiento
+              <select name="type">
+                <option value="APORTE">Pasar dinero a utilidad</option>
+                <option value="COMPRA">Compra desde utilidad</option>
+              </select>
+            </label>
+            <label>Metodo<select name="method"></select></label>
+            <label>Detalle<textarea name="detail" rows="3" required placeholder="Cierre del mes, compra de equipo, maquina o articulo"></textarea></label>
+            <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
+            <div class="top-actions">
+              <button class="ghost" id="suggestUtilityTransferBtn" type="button">Usar saldo billeteras/bancos</button>
+              <button class="primary" type="submit">Guardar movimiento</button>
+            </div>
+          </form>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Movimientos de utilidad</h2>
+              <button class="ghost" id="exportUtilityBtn">CSV</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Movimiento</th>
+                    <th>Metodo</th>
+                    <th>Monto</th>
+                    <th>Detalle</th>
+                  </tr>
+                </thead>
+                <tbody id="utilityMovementsTable"></tbody>
               </table>
             </div>
           </section>
@@ -639,6 +685,10 @@
           <article class="kpi">
             <span>Gastos compras</span>
             <strong id="reportPurchaseExpenses">S/ 0</strong>
+          </article>
+          <article class="kpi">
+            <span>Compras con utilidad</span>
+            <strong id="reportUtilityPurchases">S/ 0</strong>
           </article>
           <article class="kpi">
             <span>Pagos a terceros</span>
@@ -930,6 +980,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260611-sesion-doctores"></script>
+    <script src="app.js?v=20260611-utilidades"></script>
   </body>
 </html>

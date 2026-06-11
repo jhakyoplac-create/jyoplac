@@ -35,6 +35,7 @@ const seedData = {
     receiptStartFactura: 17,
     generalCashOpening: 9000,
     generalBankOpening: 10000,
+    generalUtilityOpening: 0,
     servicesCustomized: false
   },
   services: [
@@ -226,6 +227,7 @@ function normalizeState(data) {
   data.config.inactiveDays = Number(data.config.inactiveDays) > 0 ? Number(data.config.inactiveDays) : defaults.inactiveDays;
   data.config.generalCashOpening = Number(data.config.generalCashOpening ?? defaults.generalCashOpening);
   data.config.generalBankOpening = Number(data.config.generalBankOpening ?? defaults.generalBankOpening);
+  data.config.generalUtilityOpening = Number(data.config.generalUtilityOpening ?? defaults.generalUtilityOpening ?? 0);
   if (!Array.isArray(data.users) || !data.users.length) data.users = structuredClone(seedData.users);
   if (!Array.isArray(data.electronicReceipts)) data.electronicReceipts = [];
   if (!Array.isArray(data.pettyCashAllocations)) data.pettyCashAllocations = [];
@@ -511,6 +513,7 @@ function applyApiBootstrap(payload) {
   if (payload.config) {
     state.config.generalCashOpening = Number(payload.config.generalCashOpening ?? state.config.generalCashOpening);
     state.config.generalBankOpening = Number(payload.config.generalBankOpening ?? state.config.generalBankOpening);
+    state.config.generalUtilityOpening = Number(payload.config.generalUtilityOpening ?? state.config.generalUtilityOpening);
     state.config.clinicName = payload.config.clinicName || state.config.clinicName;
     state.config.start = payload.config.start || state.config.start;
     state.config.end = payload.config.end || state.config.end;
@@ -709,7 +712,8 @@ function blankStateFromCurrent() {
     config: {
       ...state.config,
       generalCashOpening: 0,
-      generalBankOpening: 0
+      generalBankOpening: 0,
+      generalUtilityOpening: 0
     },
     services: structuredClone(state.services.length ? state.services : seedData.services),
     users: structuredClone(state.users.length ? state.users : seedData.users),
@@ -1181,7 +1185,15 @@ function cashAffectingExpenseTotalForView(date) {
 }
 
 function expenseAffectsDaily(expense) {
-  return expense.source !== "CAJA_GENERAL";
+  return !["CAJA_GENERAL", "UTILIDAD"].includes(expense.source);
+}
+
+function isUtilityContribution(expense) {
+  return expense.category === "UTILIDAD_APORTE";
+}
+
+function isUtilityPurchase(expense) {
+  return expense.category === "UTILIDAD_COMPRA";
 }
 
 function dailyExpenseTotal(date, includeGeneral = false) {
@@ -2916,8 +2928,11 @@ function reportMetrics(month) {
   const staffExpenses = expenses
     .filter((expense) => expense.category === "PERSONAL_TERCERO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const utilityPurchases = expenses
+    .filter(isUtilityPurchase)
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const purchaseExpenses = expenses
-    .filter((expense) => expense.category !== "PERSONAL_TERCERO")
+    .filter((expense) => expense.category !== "PERSONAL_TERCERO" && !isUtilityPurchase(expense) && !isUtilityContribution(expense))
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   return {
     appointments,
@@ -2926,7 +2941,8 @@ function reportMetrics(month) {
     income: payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
     staffExpenses,
     purchaseExpenses,
-    totalExpenses: staffExpenses + purchaseExpenses,
+    utilityPurchases,
+    totalExpenses: staffExpenses + purchaseExpenses + utilityPurchases,
     newPatients,
     receptionNewPatients,
     ageGroups,
@@ -3113,10 +3129,12 @@ function renderReports() {
   $("#reportInactivePatients").textContent = metrics.inactivePatients;
   $("#reportStaffExpenses").textContent = money(metrics.staffExpenses);
   $("#reportPurchaseExpenses").textContent = money(metrics.purchaseExpenses);
+  $("#reportUtilityPurchases").textContent = money(metrics.utilityPurchases);
 
   const compareRows = [
     ["Ingresos", money(metrics.income), money(compare.income), money(metrics.income - compare.income)],
     ["Gastos compras", money(metrics.purchaseExpenses), money(compare.purchaseExpenses), money(metrics.purchaseExpenses - compare.purchaseExpenses)],
+    ["Compras con utilidad", money(metrics.utilityPurchases), money(compare.utilityPurchases), money(metrics.utilityPurchases - compare.utilityPurchases)],
     ["Pagos a terceros", money(metrics.staffExpenses), money(compare.staffExpenses), money(metrics.staffExpenses - compare.staffExpenses)],
     ["Pacientes nuevos", metrics.newPatients.length, compare.newPatients.length, metrics.newPatients.length - compare.newPatients.length],
     ["Pacientes atendidos", metrics.attended, compare.attended, metrics.attended - compare.attended],
@@ -3188,6 +3206,7 @@ function generalCashBalances() {
   const month = operatingDate().slice(0, 7);
   const monthPayments = state.payments.filter((payment) => String(payment.date || "").startsWith(month));
   const monthExpenses = state.expenses.filter((expense) => String(expense.date || "").startsWith(month));
+  const allUtilityMovements = state.expenses.filter((expense) => isUtilityContribution(expense) || isUtilityPurchase(expense));
   const pettyCash = pettyCashDeliveredTotal(month);
   const cashIncome = monthPayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["EFECTIVO"]), 0);
@@ -3196,32 +3215,43 @@ function generalCashBalances() {
   const transferIncome = monthPayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["TRANSFERENCIA"]), 0);
   const cashExpenses = monthExpenses
-    .filter((expense) => String(expense.method || "").toUpperCase() === "EFECTIVO")
+    .filter((expense) => expense.source !== "UTILIDAD" && String(expense.method || "").toUpperCase() === "EFECTIVO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const walletExpenses = monthExpenses
-    .filter((expense) => ["YAPE", "PLIN", "TARJETA"].includes(String(expense.method || "").toUpperCase()))
+    .filter((expense) => expense.source !== "UTILIDAD" && ["YAPE", "PLIN", "TARJETA"].includes(String(expense.method || "").toUpperCase()))
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const transferExpenses = monthExpenses
-    .filter((expense) => String(expense.method || "").toUpperCase() === "TRANSFERENCIA")
+    .filter((expense) => expense.source !== "UTILIDAD" && String(expense.method || "").toUpperCase() === "TRANSFERENCIA")
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const utilityContributions = allUtilityMovements
+    .filter(isUtilityContribution)
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const utilityPurchases = allUtilityMovements
+    .filter(isUtilityPurchase)
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const cash = Number(state.config.generalCashOpening || 0) + cashIncome - cashExpenses - pettyCash;
   const wallet = Number(state.config.generalBankOpening || 0) + walletIncome - walletExpenses;
   const transfer = transferIncome - transferExpenses;
   const bank = wallet + transfer;
+  const utility = Number(state.config.generalUtilityOpening || 0) + utilityContributions - utilityPurchases;
   return {
     cash,
     bank,
     wallet,
     transfer,
-    total: cash + bank,
+    utility,
+    total: cash + bank + utility,
     cashOpening: Number(state.config.generalCashOpening || 0),
     bankOpening: Number(state.config.generalBankOpening || 0),
+    utilityOpening: Number(state.config.generalUtilityOpening || 0),
     cashIncome,
     walletIncome,
     transferIncome,
     cashExpenses,
     walletExpenses,
     transferExpenses,
+    utilityContributions,
+    utilityPurchases,
     pettyCash
   };
 }
@@ -3299,6 +3329,28 @@ function generalSummaryDates() {
     .reverse();
 }
 
+function utilityMovements() {
+  return state.expenses
+    .filter((expense) => isUtilityContribution(expense) || isUtilityPurchase(expense))
+    .slice()
+    .sort((a, b) => `${b.date || ""}${b.id || ""}`.localeCompare(`${a.date || ""}${a.id || ""}`));
+}
+
+function renderUtilityMovements() {
+  const table = $("#utilityMovementsTable");
+  if (!table) return;
+  table.innerHTML = utilityMovements().map((item) => {
+    const isPurchase = isUtilityPurchase(item);
+    return `<tr>
+      <td>${formatDate(item.date)}</td>
+      <td><span class="status ${isPurchase ? "danger" : ""}">${isPurchase ? "COMPRA" : "APORTE"}</span></td>
+      <td>${escapeHtml(item.method || "")}</td>
+      <td><strong>${isPurchase ? "-" : ""}${money(item.amount)}</strong></td>
+      <td>${escapeHtml(item.detail || "")}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5">Aun no hay movimientos de utilidad.</td></tr>`;
+}
+
 function renderGeneralCash() {
   const cashDate = operatingDate();
   const balances = generalCashBalances();
@@ -3306,19 +3358,23 @@ function renderGeneralCash() {
   $("#generalBankBalance").textContent = money(balances.bank);
   $("#generalWalletBalance").textContent = money(balances.wallet);
   $("#generalTransferBalance").textContent = money(balances.transfer);
+  $("#utilityBalance").textContent = money(balances.utility);
   $("#generalTotalBalance").textContent = money(balances.total);
   $("#generalTodayIncome").textContent = money(todayIncome());
   const form = $("#generalCashForm");
   if (form && (!document.activeElement || !form.contains(document.activeElement))) {
     form.cash.value = state.config.generalCashOpening;
     form.bank.value = state.config.generalBankOpening;
+    form.utility.value = state.config.generalUtilityOpening || "";
     form.pettyCash.value = pettyCashAmount(cashDate) || "";
   }
   if (form) {
     form.cash.readOnly = !isAdmin();
     form.bank.readOnly = !isAdmin();
+    form.utility.readOnly = !isAdmin();
     form.cash.title = isAdmin() ? "" : "Solo el administrador puede cambiar el saldo inicial.";
     form.bank.title = isAdmin() ? "" : "Solo el administrador puede cambiar el saldo inicial.";
+    form.utility.title = isAdmin() ? "" : "Solo el administrador puede cambiar la utilidad inicial.";
   }
   $("#generalDailyTable").innerHTML = generalSummaryDates().map((date) => {
     const income = incomeForDate(date);
@@ -3338,6 +3394,7 @@ function renderGeneralCash() {
       </td>
     </tr>`;
   }).join("") || `<tr><td colspan="5">No hay movimientos en el rango seleccionado.</td></tr>`;
+  renderUtilityMovements();
   renderStaffPayments();
 }
 
@@ -4702,8 +4759,10 @@ function bindEvents() {
     if (isAdmin()) {
       state.config.generalCashOpening = Number(data.cash || 0);
       state.config.generalBankOpening = Number(data.bank || 0);
+      state.config.generalUtilityOpening = Number(data.utility || 0);
       configUpdates.generalCashOpening = state.config.generalCashOpening;
       configUpdates.generalBankOpening = state.config.generalBankOpening;
+      configUpdates.generalUtilityOpening = state.config.generalUtilityOpening;
     }
     const pettyAmount = Number(data.pettyCash || 0);
     const cashDate = operatingDate();
@@ -4717,6 +4776,60 @@ function bindEvents() {
     setPettyCashAllocation(cashDate, pettyAmount);
     const session = cashSessionToday();
     if (session) session.openingCash = pettyAmount;
+    if (!API_ENABLED) saveState();
+    render();
+  });
+  $("#suggestUtilityTransferBtn")?.addEventListener("click", () => {
+    const form = $("#utilityForm");
+    if (!form) return;
+    const balances = generalCashBalances();
+    form.type.value = "APORTE";
+    form.method.value = "TRANSFERENCIA";
+    form.amount.value = Math.max(0, balances.bank).toFixed(2);
+    form.detail.value = `Cierre de mes: traslado a utilidad ${monthLabel(operatingDate().slice(0, 7))}`;
+  });
+  $("#utilityForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!isAdmin()) {
+      alert("Solo el administrador puede registrar movimientos de utilidad.");
+      return;
+    }
+    const form = event.currentTarget;
+    const data = formData(form);
+    const amount = Number(data.amount || 0);
+    const isPurchase = data.type === "COMPRA";
+    if (!data.detail.trim() || amount <= 0) {
+      alert("Completa el detalle y un monto mayor a cero.");
+      return;
+    }
+    if (isPurchase && amount > generalCashBalances().utility) {
+      alert("La compra supera la utilidad disponible.");
+      return;
+    }
+    const balances = generalCashBalances();
+    if (!isPurchase && amount > balances.cash + balances.bank) {
+      alert("El aporte supera el total disponible.");
+      return;
+    }
+    const expense = {
+      id: uid(isPurchase ? "utcompra" : "utaporte"),
+      date: data.date || operatingDate(),
+      detail: data.detail.trim(),
+      amount,
+      method: data.method || "TRANSFERENCIA",
+      source: isPurchase ? "UTILIDAD" : "CAJA_GENERAL",
+      category: isPurchase ? "UTILIDAD_COMPRA" : "UTILIDAD_APORTE",
+      receipt: isPurchase ? "Compra desde utilidad" : "Aporte a utilidad"
+    };
+    try {
+      await saveExpenseApi(expense);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.expenses.push(expense);
+    form.reset();
+    form.date.value = operatingDate();
     if (!API_ENABLED) saveState();
     render();
   });
@@ -4832,9 +4945,21 @@ function bindEvents() {
       ingresos: incomeForDate(date),
       egresos_operativos: dailyExpenseTotal(date),
       egresos_caja_general: dailyGeneralExpenseTotal(date),
+      aportes_utilidad: state.expenses.filter((expense) => expense.date === date && isUtilityContribution(expense)).reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+      compras_utilidad: state.expenses.filter((expense) => expense.date === date && isUtilityPurchase(expense)).reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
       neto: incomeForDate(date) - dailyExpenseTotal(date) - dailyGeneralExpenseTotal(date)
     }));
     exportCsv("caja-general.csv", rows);
+  });
+  $("#exportUtilityBtn")?.addEventListener("click", () => {
+    exportCsv("movimientos-utilidad.csv", utilityMovements().map((item) => ({
+      fecha: item.date,
+      movimiento: isUtilityPurchase(item) ? "COMPRA" : "APORTE",
+      metodo: item.method,
+      monto: isUtilityPurchase(item) ? -Number(item.amount || 0) : Number(item.amount || 0),
+      detalle: item.detail,
+      comprobante: item.receipt || ""
+    })));
   });
   $("#generalSummaryFrom")?.addEventListener("change", renderGeneralCash);
   $("#generalSummaryTo")?.addEventListener("change", renderGeneralCash);
@@ -4875,6 +5000,7 @@ function bindEvents() {
     const rows = [
       { seccion: "RESUMEN", indicador: "Ingresos", mes: month, monto: metrics.income },
       { seccion: "RESUMEN", indicador: "Gastos compras", mes: month, monto: -metrics.purchaseExpenses },
+      { seccion: "RESUMEN", indicador: "Compras con utilidad", mes: month, monto: -metrics.utilityPurchases },
       { seccion: "RESUMEN", indicador: "Pagos a terceros", mes: month, monto: -metrics.staffExpenses },
       { seccion: "RESUMEN", indicador: "Pacientes nuevos", mes: month, cantidad: metrics.newPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes nuevos recepcion", mes: month, cantidad: metrics.receptionNewPatients.length },
@@ -4939,6 +5065,7 @@ function init() {
   $('#paymentForm input[name="date"]').value = operatingDate();
   $('#historyForm input[name="date"]').value = todayISO();
   $('#staffPaymentForm input[name="date"]').value = operatingDate();
+  $('#utilityForm input[name="date"]').value = operatingDate();
   $("#reportMonth").value = todayISO().slice(0, 7);
   $("#compareMonth").value = previousMonth($("#reportMonth").value);
   bindEvents();
