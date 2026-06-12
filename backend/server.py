@@ -1017,7 +1017,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 )
                 if data.get("appointmentId"):
                     conn.execute(
-                        "UPDATE appointments SET status = 'ATENDIDA', updated_at=CURRENT_TIMESTAMP WHERE id = ?",
+                        "UPDATE appointments SET status = 'ATENDIDA' WHERE id = ?",
                         (data.get("appointmentId"),),
                     )
             return send_json(self, {"ok": True, "id": item_id})

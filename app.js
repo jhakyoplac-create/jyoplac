@@ -257,20 +257,31 @@ function saveState() {
 }
 
 async function apiFetch(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
-      ...(options.headers || {})
-    }
-  });
-  const payload = await response.json().catch(() => ({}));
+  let response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+        ...(options.headers || {})
+      }
+    });
+  } catch {
+    throw new Error("No se pudo conectar con el servidor. Revisa internet o espera que Render termine de despertar.");
+  }
+  const responseText = await response.text();
+  let payload = {};
+  try {
+    payload = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    payload = {};
+  }
   if (response.status === 401) {
     clearApiSession();
     throw new Error("Sesion vencida. Cierra sesion e ingresa nuevamente.");
   }
-  if (!response.ok) throw new Error(payload.error || "No se pudo conectar con el servidor.");
+  if (!response.ok) throw new Error(payload.error || responseText || `Servidor respondio con error ${response.status}.`);
   return payload;
 }
 
@@ -2690,7 +2701,6 @@ async function completePendingPayment(receiptValues = null) {
       const appointment = state.appointments.find((item) => item.id === payment.appointmentId);
       if (appointment) {
         appointment.status = "ATENDIDA";
-        await saveAppointmentApi(appointment);
         addLocalAuditEvent(
           "APPOINTMENT_ATTENDED",
           `Marco atendida desde pago: ${patientById(appointment.patientId)?.name || "Paciente"} ${appointment.date} ${appointment.time}`,
