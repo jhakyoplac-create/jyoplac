@@ -969,17 +969,23 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
                 else:
                     return send_json(self, {"error": "Selecciona una atencion pendiente o una cita del dia."}, 400)
+                receipt_value = data.get("receipt", "")
+                if data.get("appointmentId") and not str(receipt_value or "").strip():
+                    appointment_service = conn.execute(
+                        "SELECT service FROM appointments WHERE id = ?",
+                        (data.get("appointmentId"),),
+                    ).fetchone()
+                    receipt_value = "Cita del dia: " + str(appointment_service["service"] if appointment_service else "Servicio")
                 conn.execute(
                     """
                     INSERT INTO payments (
-                      id, patient_id, history_id, appointment_id, date, amount, cash_received,
+                      id, patient_id, history_id, date, amount, cash_received,
                       change_amount, cash_amount, yape_amount, plin_amount,
                       card_amount, transfer_amount, method, receipt, closed
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_id=excluded.patient_id, history_id=excluded.history_id,
-                      appointment_id=excluded.appointment_id,
                       date=excluded.date, amount=excluded.amount,
                       cash_received=excluded.cash_received,
                       change_amount=excluded.change_amount,
@@ -995,7 +1001,6 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         item_id,
                         data["patientId"],
                         history_id,
-                        data.get("appointmentId") or "",
                         payment_date,
                         amount,
                         cash_received,
@@ -1006,10 +1011,15 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         split["card_amount"],
                         split["transfer_amount"],
                         method,
-                        data.get("receipt", ""),
+                        receipt_value,
                         1 if data.get("closed") else 0,
                     ),
                 )
+                if data.get("appointmentId"):
+                    conn.execute(
+                        "UPDATE appointments SET status = 'ATENDIDA', updated_at=CURRENT_TIMESTAMP WHERE id = ?",
+                        (data.get("appointmentId"),),
+                    )
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/electronic-receipts":

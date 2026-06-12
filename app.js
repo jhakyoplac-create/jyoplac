@@ -937,8 +937,12 @@ function appointmentAvailabilityError(candidate) {
 function patientDebt(patientId) {
   const budget = state.treatments.filter((t) => t.patientId === patientId).reduce((sum, t) => sum + Number(t.budget || 0), 0);
   const historyDebt = state.clinicalHistory.filter((h) => h.patientId === patientId).reduce((sum, h) => sum + historyBalance(h.id), 0);
-  const treatmentPaid = state.payments.filter((p) => p.patientId === patientId && !p.historyId && !p.appointmentId).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const treatmentPaid = state.payments.filter((p) => p.patientId === patientId && !p.historyId && !isAgendaPayment(p)).reduce((sum, p) => sum + Number(p.amount || 0), 0);
   return Math.max(0, budget - treatmentPaid) + historyDebt;
+}
+
+function isAgendaPayment(payment) {
+  return Boolean(payment?.appointmentId || String(payment?.receipt || "").startsWith("Cita del dia:"));
 }
 
 function historyById(id) {
@@ -4599,7 +4603,7 @@ function bindEvents() {
       change: Math.max(0, cashReceived - cashPortion),
       method: String(data.method || "").toUpperCase(),
       ...split,
-      receipt: data.receipt
+      receipt: appointment && !String(data.receipt || "").trim() ? `Cita del dia: ${appointment.service || "Servicio"}` : data.receipt
     };
     openPaymentReceiptPrompt({ payment, form, restorePaymentButton });
   });
