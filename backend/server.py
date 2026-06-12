@@ -882,145 +882,148 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/payments":
             if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
                 return
-            data = read_json(self)
-            if data.get("delete"):
-                if not require_role(self, {"ADMIN"}):
-                    return
-                item_id = data.get("id")
-                if not item_id:
-                    return send_json(self, {"error": "Pago no indicado."}, 400)
-                with db() as conn:
-                    row = conn.execute("SELECT id FROM payments WHERE id = ?", (item_id,)).fetchone()
-                    if not row:
-                        return send_json(self, {"error": "Pago no encontrado."}, 404)
-                    conn.execute("DELETE FROM payments WHERE id = ?", (item_id,))
-                return send_json(self, {"ok": True, "id": item_id})
-            item_id = data.get("id") or now_id("pay")
-            amount = float(data.get("amount") or 0)
-            method = str(data.get("method") or "").upper()
-            split = {
-                "cash_amount": float(data.get("cashAmount") or 0),
-                "yape_amount": float(data.get("yapeAmount") or 0),
-                "plin_amount": float(data.get("plinAmount") or 0),
-                "card_amount": float(data.get("cardAmount") or 0),
-                "transfer_amount": float(data.get("transferAmount") or 0),
-            }
-            if method == "MIXTO":
-                if round(sum(split.values()), 2) != round(amount, 2):
-                    return send_json(self, {"error": "La suma del pago mixto debe coincidir con el monto que paga."}, 400)
-            else:
-                split = {key: 0.0 for key in split}
-                method_map = {
-                    "EFECTIVO": "cash_amount",
-                    "YAPE": "yape_amount",
-                    "PLIN": "plin_amount",
-                    "TARJETA": "card_amount",
-                    "TRANSFERENCIA": "transfer_amount",
+            try:
+                data = read_json(self)
+                if data.get("delete"):
+                    if not require_role(self, {"ADMIN"}):
+                        return
+                    item_id = data.get("id")
+                    if not item_id:
+                        return send_json(self, {"error": "Pago no indicado."}, 400)
+                    with db() as conn:
+                        row = conn.execute("SELECT id FROM payments WHERE id = ?", (item_id,)).fetchone()
+                        if not row:
+                            return send_json(self, {"error": "Pago no encontrado."}, 404)
+                        conn.execute("DELETE FROM payments WHERE id = ?", (item_id,))
+                    return send_json(self, {"ok": True, "id": item_id})
+                item_id = data.get("id") or now_id("pay")
+                amount = float(data.get("amount") or 0)
+                method = str(data.get("method") or "").upper()
+                split = {
+                    "cash_amount": float(data.get("cashAmount") or 0),
+                    "yape_amount": float(data.get("yapeAmount") or 0),
+                    "plin_amount": float(data.get("plinAmount") or 0),
+                    "card_amount": float(data.get("cardAmount") or 0),
+                    "transfer_amount": float(data.get("transferAmount") or 0),
                 }
-                if method in method_map:
-                    split[method_map[method]] = amount
-            cash_portion = float(split["cash_amount"] or 0)
-            cash_received = float(data.get("cashReceived") or cash_portion or 0) if cash_portion > 0 else 0.0
-            with db() as conn:
-                payment_date = data.get("date") or open_cash_date(conn) or today_lima()
-                patient = conn.execute(
-                    "SELECT name, dni, phone, birth_date FROM patients WHERE id = ?",
-                    (data.get("patientId"),),
-                ).fetchone()
-                if not patient:
-                    return send_json(self, {"error": "Paciente no encontrado."}, 404)
-                missing_patient_fields = []
-                if not str(patient["name"] or "").strip():
-                    missing_patient_fields.append("nombre completo")
-                if not str(patient["dni"] or "").strip():
-                    missing_patient_fields.append("DNI")
-                if not str(patient["phone"] or "").strip():
-                    missing_patient_fields.append("numero de celular")
-                if not str(patient["birth_date"] or "").strip():
-                    missing_patient_fields.append("fecha de nacimiento")
-                if missing_patient_fields:
-                    return send_json(
-                        self,
-                        {"error": "Antes de registrar el pago, completa los datos del paciente: " + ", ".join(missing_patient_fields) + "."},
-                        400,
-                    )
-                history_id = data.get("historyId") or ""
-                if history_id:
-                    history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (history_id,)).fetchone()
-                    if not history:
-                        return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
-                    paid = conn.execute(
-                        "SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
-                        (history_id, item_id),
-                    ).fetchone()["total"]
-                    due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
-                    if amount <= 0 or amount > due:
-                        return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
-                elif data.get("appointmentId"):
-                    appointment = conn.execute(
-                        "SELECT id, patient_id, date, status FROM appointments WHERE id = ?",
-                        (data.get("appointmentId"),),
-                    ).fetchone()
-                    if not appointment or appointment["patient_id"] != data["patientId"] or appointment["date"] != payment_date:
-                        return send_json(self, {"error": "Selecciona una cita valida del dia para registrar el pago."}, 400)
-                    if str(appointment["status"] or "").upper() in {"CANCELADA", "NO_ASISTIO", "REPROGRAMADA"}:
-                        return send_json(self, {"error": "No se puede cobrar una cita cancelada, no asistida o reprogramada."}, 400)
-                    if amount <= 0:
-                        return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
+                if method == "MIXTO":
+                    if round(sum(split.values()), 2) != round(amount, 2):
+                        return send_json(self, {"error": "La suma del pago mixto debe coincidir con el monto que paga."}, 400)
                 else:
-                    return send_json(self, {"error": "Selecciona una atencion pendiente o una cita del dia."}, 400)
-                receipt_value = data.get("receipt", "")
-                if data.get("appointmentId") and not str(receipt_value or "").strip():
-                    appointment_service = conn.execute(
-                        "SELECT service FROM appointments WHERE id = ?",
-                        (data.get("appointmentId"),),
+                    split = {key: 0.0 for key in split}
+                    method_map = {
+                        "EFECTIVO": "cash_amount",
+                        "YAPE": "yape_amount",
+                        "PLIN": "plin_amount",
+                        "TARJETA": "card_amount",
+                        "TRANSFERENCIA": "transfer_amount",
+                    }
+                    if method in method_map:
+                        split[method_map[method]] = amount
+                cash_portion = float(split["cash_amount"] or 0)
+                cash_received = float(data.get("cashReceived") or cash_portion or 0) if cash_portion > 0 else 0.0
+                with db() as conn:
+                    payment_date = data.get("date") or open_cash_date(conn) or today_lima()
+                    patient = conn.execute(
+                        "SELECT name, dni, phone, birth_date FROM patients WHERE id = ?",
+                        (data.get("patientId"),),
                     ).fetchone()
-                    receipt_value = "Cita del dia: " + str(appointment_service["service"] if appointment_service else "Servicio")
-                conn.execute(
-                    """
-                    INSERT INTO payments (
-                      id, patient_id, history_id, date, amount, cash_received,
-                      change_amount, cash_amount, yape_amount, plin_amount,
-                      card_amount, transfer_amount, method, receipt, closed
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                      patient_id=excluded.patient_id, history_id=excluded.history_id,
-                      date=excluded.date, amount=excluded.amount,
-                      cash_received=excluded.cash_received,
-                      change_amount=excluded.change_amount,
-                      cash_amount=excluded.cash_amount,
-                      yape_amount=excluded.yape_amount,
-                      plin_amount=excluded.plin_amount,
-                      card_amount=excluded.card_amount,
-                      transfer_amount=excluded.transfer_amount,
-                      method=excluded.method, receipt=excluded.receipt,
-                      closed=excluded.closed
-                    """,
-                    (
-                        item_id,
-                        data["patientId"],
-                        history_id,
-                        payment_date,
-                        amount,
-                        cash_received,
-                        max(0, cash_received - cash_portion),
-                        split["cash_amount"],
-                        split["yape_amount"],
-                        split["plin_amount"],
-                        split["card_amount"],
-                        split["transfer_amount"],
-                        method,
-                        receipt_value,
-                        1 if data.get("closed") else 0,
-                    ),
-                )
-                if data.get("appointmentId"):
+                    if not patient:
+                        return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                    missing_patient_fields = []
+                    if not str(patient["name"] or "").strip():
+                        missing_patient_fields.append("nombre completo")
+                    if not str(patient["dni"] or "").strip():
+                        missing_patient_fields.append("DNI")
+                    if not str(patient["phone"] or "").strip():
+                        missing_patient_fields.append("numero de celular")
+                    if not str(patient["birth_date"] or "").strip():
+                        missing_patient_fields.append("fecha de nacimiento")
+                    if missing_patient_fields:
+                        return send_json(
+                            self,
+                            {"error": "Antes de registrar el pago, completa los datos del paciente: " + ", ".join(missing_patient_fields) + "."},
+                            400,
+                        )
+                    history_id = str(data.get("historyId") or "").strip()
+                    if history_id:
+                        history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (history_id,)).fetchone()
+                        if not history:
+                            return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
+                        paid = conn.execute(
+                            "SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
+                            (history_id, item_id),
+                        ).fetchone()["total"]
+                        due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
+                        if amount <= 0 or amount > due:
+                            return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
+                    elif data.get("appointmentId"):
+                        appointment = conn.execute(
+                            "SELECT id, patient_id, date, status FROM appointments WHERE id = ?",
+                            (data.get("appointmentId"),),
+                        ).fetchone()
+                        if not appointment or appointment["patient_id"] != data["patientId"] or appointment["date"] != payment_date:
+                            return send_json(self, {"error": "Selecciona una cita valida del dia para registrar el pago."}, 400)
+                        if str(appointment["status"] or "").upper() in {"CANCELADA", "NO_ASISTIO", "REPROGRAMADA"}:
+                            return send_json(self, {"error": "No se puede cobrar una cita cancelada, no asistida o reprogramada."}, 400)
+                        if amount <= 0:
+                            return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
+                    else:
+                        return send_json(self, {"error": "Selecciona una atencion pendiente o una cita del dia."}, 400)
+                    receipt_value = data.get("receipt", "")
+                    if data.get("appointmentId") and not str(receipt_value or "").strip():
+                        appointment_service = conn.execute(
+                            "SELECT service FROM appointments WHERE id = ?",
+                            (data.get("appointmentId"),),
+                        ).fetchone()
+                        receipt_value = "Cita del dia: " + str(appointment_service["service"] if appointment_service else "Servicio")
                     conn.execute(
-                        "UPDATE appointments SET status = 'ATENDIDA' WHERE id = ?",
-                        (data.get("appointmentId"),),
+                        """
+                        INSERT INTO payments (
+                          id, patient_id, history_id, date, amount, cash_received,
+                          change_amount, cash_amount, yape_amount, plin_amount,
+                          card_amount, transfer_amount, method, receipt, closed
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                          patient_id=excluded.patient_id, history_id=excluded.history_id,
+                          date=excluded.date, amount=excluded.amount,
+                          cash_received=excluded.cash_received,
+                          change_amount=excluded.change_amount,
+                          cash_amount=excluded.cash_amount,
+                          yape_amount=excluded.yape_amount,
+                          plin_amount=excluded.plin_amount,
+                          card_amount=excluded.card_amount,
+                          transfer_amount=excluded.transfer_amount,
+                          method=excluded.method, receipt=excluded.receipt,
+                          closed=excluded.closed
+                        """,
+                        (
+                            item_id,
+                            data["patientId"],
+                            history_id or None,
+                            payment_date,
+                            amount,
+                            cash_received,
+                            max(0, cash_received - cash_portion),
+                            split["cash_amount"],
+                            split["yape_amount"],
+                            split["plin_amount"],
+                            split["card_amount"],
+                            split["transfer_amount"],
+                            method,
+                            receipt_value,
+                            1 if data.get("closed") else 0,
+                        ),
                     )
-            return send_json(self, {"ok": True, "id": item_id})
+                    if data.get("appointmentId"):
+                        conn.execute(
+                            "UPDATE appointments SET status = 'ATENDIDA' WHERE id = ?",
+                            (data.get("appointmentId"),),
+                        )
+                return send_json(self, {"ok": True, "id": item_id})
+            except Exception as exc:
+                return send_json(self, {"error": f"No se pudo guardar el pago: {exc}"}, 500)
 
         if parsed.path == "/api/electronic-receipts":
             if not require_role(self, {"ADMIN", "RECEPCION"}):
