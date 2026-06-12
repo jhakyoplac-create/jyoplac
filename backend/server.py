@@ -208,6 +208,7 @@ def migrate_db(conn):
     ensure_column(conn, "payments", "plin_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "payments", "card_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "payments", "transfer_amount", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "payments", "appointment_id", "TEXT")
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
     ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
@@ -313,6 +314,7 @@ def init_db():
             "generalCashOpening": "0",
             "generalBankOpening": "0",
             "generalUtilityOpening": "0",
+            "enableAgendaPayments": "true",
         }.items():
             conn.execute(
                 "INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
@@ -942,26 +944,42 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         {"error": "Antes de registrar el pago, completa los datos del paciente: " + ", ".join(missing_patient_fields) + "."},
                         400,
                     )
-                history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (data.get("historyId"),)).fetchone()
-                if not history:
-                    return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
-                paid = conn.execute(
-                    "SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
-                    (data.get("historyId"), item_id),
-                ).fetchone()["total"]
-                due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
-                if amount <= 0 or amount > due:
-                    return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
+                history_id = data.get("historyId") or ""
+                if history_id:
+                    history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (history_id,)).fetchone()
+                    if not history:
+                        return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
+                    paid = conn.execute(
+                        "SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
+                        (history_id, item_id),
+                    ).fetchone()["total"]
+                    due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
+                    if amount <= 0 or amount > due:
+                        return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
+                elif data.get("appointmentId"):
+                    appointment = conn.execute(
+                        "SELECT id, patient_id, date, status FROM appointments WHERE id = ?",
+                        (data.get("appointmentId"),),
+                    ).fetchone()
+                    if not appointment or appointment["patient_id"] != data["patientId"] or appointment["date"] != payment_date:
+                        return send_json(self, {"error": "Selecciona una cita valida del dia para registrar el pago."}, 400)
+                    if str(appointment["status"] or "").upper() in {"CANCELADA", "NO_ASISTIO", "REPROGRAMADA"}:
+                        return send_json(self, {"error": "No se puede cobrar una cita cancelada, no asistida o reprogramada."}, 400)
+                    if amount <= 0:
+                        return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
+                else:
+                    return send_json(self, {"error": "Selecciona una atencion pendiente o una cita del dia."}, 400)
                 conn.execute(
                     """
                     INSERT INTO payments (
-                      id, patient_id, history_id, date, amount, cash_received,
+                      id, patient_id, history_id, appointment_id, date, amount, cash_received,
                       change_amount, cash_amount, yape_amount, plin_amount,
                       card_amount, transfer_amount, method, receipt, closed
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_id=excluded.patient_id, history_id=excluded.history_id,
+                      appointment_id=excluded.appointment_id,
                       date=excluded.date, amount=excluded.amount,
                       cash_received=excluded.cash_received,
                       change_amount=excluded.change_amount,
@@ -976,7 +994,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     (
                         item_id,
                         data["patientId"],
-                        data.get("historyId"),
+                        history_id,
+                        data.get("appointmentId") or "",
                         payment_date,
                         amount,
                         cash_received,
@@ -1157,7 +1176,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 values["generalUtilityOpening"] = data["generalUtilityOpening"]
             if "clinicName" in data:
                 values["clinicName"] = data["clinicName"]
-            for key in ["start", "end", "interval", "inactiveDays", "whatsapp", "doctors", "units"]:
+            for key in ["start", "end", "interval", "inactiveDays", "enableAgendaPayments", "whatsapp", "doctors", "units"]:
                 if key in data:
                     values[key] = data[key]
             if "services" in data:

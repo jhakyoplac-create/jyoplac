@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
   patient_id TEXT NOT NULL,
   history_id TEXT,
+  appointment_id TEXT,
   date TEXT NOT NULL,
   amount REAL NOT NULL,
   cash_received REAL NOT NULL DEFAULT 0,
@@ -114,7 +115,8 @@ CREATE TABLE IF NOT EXISTS payments (
   closed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
-  FOREIGN KEY (history_id) REFERENCES clinical_history(id) ON DELETE SET NULL
+  FOREIGN KEY (history_id) REFERENCES clinical_history(id) ON DELETE SET NULL,
+  FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS electronic_receipts (

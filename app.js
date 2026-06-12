@@ -36,6 +36,7 @@ const seedData = {
     generalCashOpening: 9000,
     generalBankOpening: 10000,
     generalUtilityOpening: 0,
+    enableAgendaPayments: true,
     servicesCustomized: false
   },
   services: [
@@ -131,6 +132,7 @@ let apiRefreshing = false;
 let patientSaving = false;
 let historySaving = false;
 let paymentSaving = false;
+let rescheduleSaving = false;
 let pendingPaymentContext = null;
 let forcedPaymentHistoryId = "";
 let lastSavedPatientId = "";
@@ -228,6 +230,7 @@ function normalizeState(data) {
   data.config.generalCashOpening = Number(data.config.generalCashOpening ?? defaults.generalCashOpening);
   data.config.generalBankOpening = Number(data.config.generalBankOpening ?? defaults.generalBankOpening);
   data.config.generalUtilityOpening = Number(data.config.generalUtilityOpening ?? defaults.generalUtilityOpening ?? 0);
+  data.config.enableAgendaPayments = String(data.config.enableAgendaPayments).toLowerCase() !== "false";
   if (!Array.isArray(data.users) || !data.users.length) data.users = structuredClone(seedData.users);
   if (!Array.isArray(data.electronicReceipts)) data.electronicReceipts = [];
   if (!Array.isArray(data.pettyCashAllocations)) data.pettyCashAllocations = [];
@@ -372,6 +375,7 @@ function mapApiPayment(row) {
     id: row.id,
     patientId: row.patient_id || row.patientId,
     historyId: row.history_id || row.historyId || "",
+    appointmentId: row.appointment_id || row.appointmentId || "",
     date: row.date,
     amount: Number(row.amount || 0),
     cashReceived: Number(row.cash_received ?? row.cashReceived ?? 0),
@@ -519,6 +523,9 @@ function applyApiBootstrap(payload) {
     state.config.end = payload.config.end || state.config.end;
     state.config.interval = Number(payload.config.interval ?? state.config.interval);
     state.config.inactiveDays = Number(payload.config.inactiveDays ?? state.config.inactiveDays);
+    if (payload.config.enableAgendaPayments !== undefined) {
+      state.config.enableAgendaPayments = String(payload.config.enableAgendaPayments).toLowerCase() !== "false";
+    }
     state.config.whatsapp = payload.config.whatsapp || state.config.whatsapp;
     ["issuerRuc", "issuerLegalName", "issuerTradeName", "issuerAddress", "issuerDistrict", "issuerProvince", "issuerDepartment", "receiptSeriesBoleta", "receiptSeriesFactura", "receiptStartBoleta", "receiptStartFactura"].forEach((key) => {
       if (payload.config[key] !== undefined) state.config[key] = payload.config[key];
@@ -930,7 +937,7 @@ function appointmentAvailabilityError(candidate) {
 function patientDebt(patientId) {
   const budget = state.treatments.filter((t) => t.patientId === patientId).reduce((sum, t) => sum + Number(t.budget || 0), 0);
   const historyDebt = state.clinicalHistory.filter((h) => h.patientId === patientId).reduce((sum, h) => sum + historyBalance(h.id), 0);
-  const treatmentPaid = state.payments.filter((p) => p.patientId === patientId && !p.historyId).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const treatmentPaid = state.payments.filter((p) => p.patientId === patientId && !p.historyId && !p.appointmentId).reduce((sum, p) => sum + Number(p.amount || 0), 0);
   return Math.max(0, budget - treatmentPaid) + historyDebt;
 }
 
@@ -1397,11 +1404,46 @@ function fillPaymentPatientSelect(select, selected = "") {
   const patients = state.patients
     .filter((patient) => ids.includes(patient.id))
     .sort((a, b) => a.name.localeCompare(b.name));
-  select.innerHTML = patients.length
-    ? patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - deuda ${money(patientDebt(patient.id))}</option>`).join("")
-    : `<option value="">Sin pacientes pendientes</option>`;
-  if (selected && patients.some((patient) => patient.id === selected)) select.value = selected;
+  const debtOptions = patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - deuda ${money(patientDebt(patient.id))}</option>`);
+  const agendaOptions = agendaPaymentAppointments()
+    .map((appointment) => {
+      const patient = patientById(appointment.patientId);
+      return `<option value="appt:${escapeHtml(appointment.id)}">${agendaTimeLabel(appointment.time)} - ${escapeHtml(patient?.name || "Paciente")} - ${escapeHtml(appointment.service || "")}</option>`;
+    });
+  const groups = [];
+  if (debtOptions.length) groups.push(`<optgroup label="Atenciones pendientes">${debtOptions.join("")}</optgroup>`);
+  if (agendaOptions.length) groups.push(`<optgroup label="Citas del dia">${agendaOptions.join("")}</optgroup>`);
+  select.innerHTML = groups.length ? groups.join("") : `<option value="">Sin pacientes pendientes</option>`;
+  if (selected && paymentSelectionExists(selected)) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
+  else if (agendaOptions.length) select.value = agendaPaymentAppointments()[0]?.id ? `appt:${agendaPaymentAppointments()[0].id}` : "";
+}
+
+function agendaPaymentAppointments() {
+  if (state.config.enableAgendaPayments === false) return [];
+  const date = operatingDate();
+  return state.appointments
+    .filter((appointment) => {
+      const status = String(appointment.status || "").toUpperCase();
+      return appointment.date === date && !["CANCELADA", "NO_ASISTIO", "REPROGRAMADA", "ATENDIDA"].includes(status);
+    })
+    .sort((a, b) => `${a.time || ""} ${patientById(a.patientId)?.name || ""}`.localeCompare(`${b.time || ""} ${patientById(b.patientId)?.name || ""}`));
+}
+
+function appointmentFromPaymentSelection(value) {
+  const id = String(value || "").startsWith("appt:") ? String(value).slice(5) : "";
+  return id ? state.appointments.find((appointment) => appointment.id === id) : null;
+}
+
+function patientIdFromPaymentSelection(value) {
+  const appointment = appointmentFromPaymentSelection(value);
+  return appointment?.patientId || value || "";
+}
+
+function paymentSelectionExists(value) {
+  if (!value) return false;
+  if (appointmentFromPaymentSelection(value)) return true;
+  return state.patients.some((patient) => patient.id === value);
 }
 
 function fillAppointmentPatientSelectForDate(select, date, selected = "") {
@@ -1627,21 +1669,45 @@ function renderTreatmentPaymentOptions() {
   const patientSelect = $('#paymentForm select[name="patientId"]');
   const historySelect = $('#paymentForm select[name="historyId"]');
   if (!patientSelect || !historySelect) return;
-  const patientId = patientSelect.value;
+  const appointment = appointmentFromPaymentSelection(patientSelect.value);
+  if (appointment) {
+    const amount = Number(serviceByName(appointment.service)?.price || 0);
+    historySelect.innerHTML = `<option value="">Cita del dia - ${escapeHtml(appointment.service || "Servicio")}</option>`;
+    historySelect.disabled = true;
+    const form = $("#paymentForm");
+    if (form?.amount) form.amount.readOnly = false;
+    if (form?.amountDue) form.amountDue.value = amount || 0;
+    if (form?.amount && (!Number(form.amount.value || 0) || form.dataset.paymentMode !== "agenda")) form.amount.value = amount || "";
+    if (form) form.dataset.paymentMode = "agenda";
+    const clearDebtBtn = $("#clearHistoryDebtBtn");
+    if (clearDebtBtn) clearDebtBtn.hidden = true;
+    updatePaymentChange();
+    return;
+  }
+  const patientId = patientIdFromPaymentSelection(patientSelect.value);
   const pending = pendingCashHistories().filter((entry) => entry.patientId === patientId);
+  historySelect.disabled = false;
   historySelect.innerHTML = pending.length
     ? pending.map((entry) => `<option value="${entry.id}">${formatDate(entry.date)} - ${escapeHtml(entry.reason)} - saldo ${money(historyBalance(entry.id))}</option>`).join("")
     : `<option value="">Sin atenciones pendientes</option>`;
   if (forcedPaymentHistoryId && pending.some((entry) => entry.id === forcedPaymentHistoryId)) historySelect.value = forcedPaymentHistoryId;
+  const form = $("#paymentForm");
+  if (form) form.dataset.paymentMode = "debt";
   updatePaymentDue();
 }
 
 function updatePaymentDue() {
   const form = $("#paymentForm");
   if (!form) return;
+  if (appointmentFromPaymentSelection(form.patientId.value)) {
+    form.amount.readOnly = false;
+    updatePaymentChange();
+    return;
+  }
   const due = historyBalance(form.historyId.value);
   form.amountDue.value = due || 0;
   form.amount.value = due || "";
+  form.amount.readOnly = true;
   const clearDebtBtn = $("#clearHistoryDebtBtn");
   if (clearDebtBtn) clearDebtBtn.hidden = !isAdmin() || !form.historyId.value || due <= 0;
   updatePaymentChange();
@@ -2534,13 +2600,14 @@ function setupReceiptIssueForm() {
   if (!context || !form) return;
   const patient = patientById(context.payment.patientId);
   const history = historyById(context.payment.historyId);
+  const appointment = state.appointments.find((item) => item.id === context.payment.appointmentId);
   form.reset();
   form.elements.namedItem("type").value = "BOLETA";
   form.elements.namedItem("customerDoc").placeholder = "DNI";
   form.elements.namedItem("customerDoc").value = patient?.dni || "";
   form.elements.namedItem("customerName").value = patient?.name || "";
   form.elements.namedItem("customerAddress").value = "";
-  form.elements.namedItem("description").value = history?.reason || patient?.mainTreatment || "Servicio odontologico";
+  form.elements.namedItem("description").value = history?.reason || appointment?.service || patient?.mainTreatment || "Servicio odontologico";
   $("#receiptAddressLabel").hidden = true;
   $("#receiptLookupHint").textContent = "Boleta: busca primero en pacientes registrados.";
 }
@@ -2613,6 +2680,18 @@ async function completePendingPayment(receiptValues = null) {
         upsert(state.electronicReceipts, receipt);
         payment.receipt = receiptFullNumber(receipt);
         await savePaymentApi(payment);
+      }
+    }
+    if (payment.appointmentId && state.config.enableAgendaPayments !== false) {
+      const appointment = state.appointments.find((item) => item.id === payment.appointmentId);
+      if (appointment) {
+        appointment.status = "ATENDIDA";
+        await saveAppointmentApi(appointment);
+        addLocalAuditEvent(
+          "APPOINTMENT_ATTENDED",
+          `Marco atendida desde pago: ${patientById(appointment.patientId)?.name || "Paciente"} ${appointment.date} ${appointment.time}`,
+          appointment.patientId
+        );
       }
     }
   } catch (error) {
@@ -3180,6 +3259,7 @@ function renderConfig() {
     form.interval.value = state.config.interval;
     form.inactiveDays.value = state.config.inactiveDays;
     form.whatsapp.value = state.config.whatsapp;
+    form.enableAgendaPayments.checked = state.config.enableAgendaPayments !== false;
     form.doctors.value = state.config.doctors.join(", ");
     form.units.value = state.config.units.join(", ");
     form.services.value = state.services.filter((service) => service.active).map((service) => service.name).join(", ");
@@ -3918,15 +3998,34 @@ function bindEvents() {
   });
 
   $("#saveRescheduleBtn").addEventListener("click", async () => {
+    if (rescheduleSaving) return;
+    const button = $("#saveRescheduleBtn");
+    const restoreRescheduleButton = () => {
+      rescheduleSaving = false;
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Guardar reprogramacion";
+      }
+    };
+    rescheduleSaving = true;
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Guardando...";
+    }
     if (!canManageAppointments()) {
       alert("Tu usuario no tiene permiso para reprogramar citas.");
+      restoreRescheduleButton();
       return;
     }
     const data = formData($("#rescheduleForm"));
     const original = state.appointments.find((appointment) => appointment.id === data.appointmentId);
-    if (!original) return;
+    if (!original) {
+      restoreRescheduleButton();
+      return;
+    }
     if (!data.comment.trim()) {
       alert("Agrega un comentario para registrar el seguimiento de la reprogramacion.");
+      restoreRescheduleButton();
       return;
     }
     const previousStatus = original.status;
@@ -3962,6 +4061,7 @@ function bindEvents() {
       original.followUpComment = previousFollowUpComment;
       original.newAppointmentId = previousNewAppointmentId;
       alert(availabilityError);
+      restoreRescheduleButton();
       return;
     }
     const conflict = findAppointmentConflict(newAppointment);
@@ -3972,6 +4072,7 @@ function bindEvents() {
       original.followUpComment = previousFollowUpComment;
       original.newAppointmentId = previousNewAppointmentId;
       alert(conflict.message);
+      restoreRescheduleButton();
       return;
     }
     try {
@@ -3984,6 +4085,7 @@ function bindEvents() {
       original.followUpComment = previousFollowUpComment;
       original.newAppointmentId = previousNewAppointmentId;
       alert(error.message);
+      restoreRescheduleButton();
       return;
     }
     state.appointments.push(newAppointment);
@@ -3995,6 +4097,7 @@ function bindEvents() {
     if (!API_ENABLED) saveState();
     $("#rescheduleDialog").close();
     render();
+    restoreRescheduleButton();
   });
 
   $("#patientForm").addEventListener("submit", async (event) => {
@@ -4356,7 +4459,7 @@ function bindEvents() {
   });
 
   $('#paymentForm select[name="patientId"]').addEventListener("change", () => {
-    const selectedPatient = $('#paymentForm select[name="patientId"]').value;
+    const selectedPatient = patientIdFromPaymentSelection($('#paymentForm select[name="patientId"]').value);
     const forcedHistory = historyById(forcedPaymentHistoryId);
     if (!forcedHistory || forcedHistory.patientId !== selectedPatient) forcedPaymentHistoryId = "";
     renderTreatmentPaymentOptions();
@@ -4444,14 +4547,16 @@ function bindEvents() {
     }
     const data = formData(form);
     const cashDate = operatingDate();
-    const due = historyBalance(data.historyId);
+    const appointment = appointmentFromPaymentSelection(data.patientId);
+    const paymentPatientId = patientIdFromPaymentSelection(data.patientId);
+    const due = appointment ? 0 : historyBalance(data.historyId);
     const amount = Number(data.amount || 0);
-    if (!data.historyId) {
+    if (!appointment && !data.historyId) {
       alert("Selecciona una atencion pendiente para registrar el pago.");
       restorePaymentButton();
       return;
     }
-    const paymentPatient = patientById(data.patientId);
+    const paymentPatient = patientById(paymentPatientId);
     const missingPatientFields = patientPaymentMissingFields(paymentPatient);
     if (missingPatientFields.length) {
       alert(`Antes de registrar el pago, completa los datos del paciente: ${missingPatientFields.join(", ")}.`);
@@ -4469,8 +4574,8 @@ function bindEvents() {
       }
       return;
     }
-    if (amount <= 0 || amount > due) {
-      alert("El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
+    if (amount <= 0 || (!appointment && amount > due)) {
+      alert(appointment ? "El monto debe ser mayor a cero." : "El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
       restorePaymentButton();
       return;
     }
@@ -4485,8 +4590,9 @@ function bindEvents() {
     const cashReceived = cashPortion > 0 ? Number(data.cashReceived || cashPortion || 0) : 0;
     const payment = {
       id: data.id || uid("pay"),
-      patientId: data.patientId,
-      historyId: data.historyId,
+      patientId: paymentPatientId,
+      historyId: appointment ? "" : data.historyId,
+      appointmentId: appointment?.id || "",
       date: cashDate,
       amount,
       cashReceived,
@@ -4666,6 +4772,7 @@ function bindEvents() {
       end: data.end,
       interval: Number(data.interval),
       inactiveDays: Number(data.inactiveDays),
+      enableAgendaPayments: data.enableAgendaPayments === "on",
       whatsapp: data.whatsapp,
       doctors: doctors.length ? doctors : seedData.config.doctors,
       units: units.length ? units : seedData.config.units,
@@ -4678,6 +4785,7 @@ function bindEvents() {
         end: state.config.end,
         interval: state.config.interval,
         inactiveDays: state.config.inactiveDays,
+        enableAgendaPayments: state.config.enableAgendaPayments,
         whatsapp: state.config.whatsapp,
         doctors: state.config.doctors,
         units: state.config.units,
