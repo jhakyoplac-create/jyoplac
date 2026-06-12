@@ -1692,6 +1692,7 @@ function renderTreatmentPaymentOptions() {
     const form = $("#paymentForm");
     if (form?.amount) form.amount.readOnly = false;
     if (form?.amountDue) form.amountDue.value = amount || 0;
+    if (form?.date) form.date.value = appointment.date || operatingDate();
     if (form?.amount && (!Number(form.amount.value || 0) || form.dataset.paymentMode !== "agenda")) form.amount.value = amount || "";
     if (form) form.dataset.paymentMode = "agenda";
     const clearDebtBtn = $("#clearHistoryDebtBtn");
@@ -4560,8 +4561,8 @@ function bindEvents() {
       return;
     }
     const data = formData(form);
-    const cashDate = operatingDate();
     const appointment = appointmentFromPaymentSelection(data.patientId);
+    const cashDate = appointment?.date || operatingDate();
     const paymentPatientId = patientIdFromPaymentSelection(data.patientId);
     const due = appointment ? 0 : historyBalance(data.historyId);
     const amount = Number(data.amount || 0);
