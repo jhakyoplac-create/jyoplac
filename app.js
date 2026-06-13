@@ -1954,9 +1954,29 @@ function appointmentFollowUpStatus(appointment) {
   return "";
 }
 
+function relatedFollowUpAppointments(appointment) {
+  if (!appointment) return [];
+  return state.appointments
+    .filter((item) => {
+      if (item.id === appointment.id || item.patientId !== appointment.patientId) return false;
+      if (appointmentSortKey(item) <= appointmentSortKey(appointment)) return false;
+      return !["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(String(item.status || "").toUpperCase());
+    })
+    .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
+}
+
+function attendedAfterFollowUp(appointment) {
+  return relatedFollowUpAppointments(appointment).find((item) => String(item.status || "").toUpperCase() === "ATENDIDA");
+}
+
+function nextAppointmentAfterFollowUp(appointment) {
+  return relatedFollowUpAppointments(appointment).find((item) => String(item.status || "").toUpperCase() !== "ATENDIDA") || null;
+}
+
 function isFollowUpOpen(appointment) {
   const status = appointmentFollowUpStatus(appointment);
   if (!status || status === "CERRADO") return false;
+  if (attendedAfterFollowUp(appointment)) return false;
   if (status === "REPROGRAMADO") {
     const next = appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null;
     return !next || next.status !== "ATENDIDA";
@@ -1971,15 +1991,16 @@ function appointmentFollowUps() {
 }
 
 function followUpLabel(appointment) {
+  if (nextAppointmentAfterFollowUp(appointment)) return "REPROG.";
   return appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "REPROG." : "PENDIENTE";
 }
 
 function followUpClass(appointment) {
-  return appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "followup-rescheduled" : "followup-pending";
+  return nextAppointmentAfterFollowUp(appointment) || appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "followup-rescheduled" : "followup-pending";
 }
 
 function followUpNextText(appointment) {
-  const next = appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null;
+  const next = (appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null) || nextAppointmentAfterFollowUp(appointment);
   return next ? `${formatDate(next.date)} ${agendaTimeLabel(next.time)} | ${appointmentStatusText(next.status)}` : "Pendiente";
 }
 
@@ -2768,7 +2789,7 @@ function renderAppointmentFollowUps() {
       <td>${formatDate(appointment.date)}<br><span class="muted">${agendaTimeLabel(appointment.time)} | ${escapeHtml(appointment.unit || "")}</span></td>
       <td><strong>${escapeHtml(patient?.name || "Paciente")}</strong><br><span class="muted">${escapeHtml(appointment.service || "")}</span></td>
       <td>${escapeHtml(patient?.phone || "-")}</td>
-      <td><span class="status ${appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "warn" : "danger"}">${escapeHtml(followUpLabel(appointment))}</span></td>
+      <td><span class="status ${followUpLabel(appointment) === "REPROG." ? "warn" : "danger"}">${escapeHtml(followUpLabel(appointment))}</span></td>
       <td>${escapeHtml(followUpNextText(appointment))}</td>
       <td>${escapeHtml(appointment.followUpComment || appointment.notes || "")}</td>
       <td class="row-actions">
