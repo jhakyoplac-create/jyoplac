@@ -1757,6 +1757,23 @@ menu {
   font-size: 13px;
 }
 
+#pagos .table-wrap table {
+  font-size: 14px;
+}
+
+#pagos .table-wrap th {
+  font-size: 11px;
+}
+
+#pagos .table-wrap td {
+  padding: 10px 9px;
+}
+
+#pagos .table-wrap .small-btn {
+  font-size: 14px;
+  padding: 5px 8px;
+}
+
 .tooth-legend {
   display: flex;
   gap: 14px;
