@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260612-seguimiento-auto" />
+    <link rel="stylesheet" href="styles.css?v=20260615-egresos-general" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -353,6 +353,23 @@
                   </tr>
                 </thead>
                 <tbody id="expensesTable"></tbody>
+              </table>
+            </div>
+            <div class="panel-head">
+              <h2>Egresos de caja general</h2>
+            </div>
+            <p class="muted">No afectan el cierre de caja diaria, pero si descuentan la caja general.</p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Detalle</th>
+                    <th>Metodo</th>
+                    <th>Monto</th>
+                    <th>Accion</th>
+                  </tr>
+                </thead>
+                <tbody id="generalExpensesTable"></tbody>
               </table>
             </div>
             <div class="table-wrap">
@@ -981,6 +998,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260612-seguimiento-auto"></script>
+    <script src="app.js?v=20260615-egresos-general"></script>
   </body>
 </html>

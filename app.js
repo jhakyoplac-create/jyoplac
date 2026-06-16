@@ -2857,6 +2857,28 @@ function renderExpenses(cashDate = cashViewDate()) {
     ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-expense="${expense.id}">Eliminar</button></td>` : ""}
   </tr>`);
   expensesTable.innerHTML = rows.join("") || `<tr><td colspan="${isAdmin() ? 5 : 4}">No hay egresos registrados hoy.</td></tr>`;
+
+  const generalExpensesTable = $("#generalExpensesTable");
+  const generalExpensesHeader = generalExpensesTable?.closest("table")?.querySelector("thead tr");
+  if (generalExpensesHeader) {
+    generalExpensesHeader.innerHTML = `
+      <th>Detalle</th>
+      <th>Metodo</th>
+      <th>Monto</th>
+      ${isAdmin() ? "<th>Accion</th>" : ""}
+    `;
+  }
+  if (generalExpensesTable) {
+    const generalRows = expensesForCashView(cashDate)
+      .filter((expense) => expense.source === "CAJA_GENERAL")
+      .map((expense) => `<tr>
+        <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
+        <td>${escapeHtml(expense.method)}</td>
+        <td><strong>${money(expense.amount)}</strong></td>
+        ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-expense="${expense.id}">Eliminar</button></td>` : ""}
+      </tr>`);
+    generalExpensesTable.innerHTML = generalRows.join("") || `<tr><td colspan="${isAdmin() ? 4 : 3}">No hay egresos de caja general en esta fecha.</td></tr>`;
+  }
 }
 
 function toggleCashLockedState(isOpen) {
@@ -4282,7 +4304,7 @@ function bindEvents() {
     render();
   });
 
-  $("#expensesTable")?.addEventListener("click", async (event) => {
+  const handleExpenseDelete = async (event) => {
     const del = event.target.closest("[data-delete-expense]");
     if (!del || !isAdmin()) return;
     const expense = state.expenses.find((item) => item.id === del.dataset.deleteExpense);
@@ -4297,7 +4319,9 @@ function bindEvents() {
     state.expenses = state.expenses.filter((item) => item.id !== expense.id);
     if (!API_ENABLED) saveState();
     render();
-  });
+  };
+  $("#expensesTable")?.addEventListener("click", handleExpenseDelete);
+  $("#generalExpensesTable")?.addEventListener("click", handleExpenseDelete);
 
   $("#receivablesTable")?.addEventListener("click", (event) => {
     const pay = event.target.closest("[data-pay-history]");
