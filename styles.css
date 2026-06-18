@@ -192,6 +192,7 @@ textarea {
 
 .nav-item[hidden],
 [data-role-action][hidden],
+#patientTopActions[hidden],
 #userAdminPanel[hidden] {
   display: none !important;
 }
