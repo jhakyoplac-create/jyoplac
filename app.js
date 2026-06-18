@@ -1589,7 +1589,7 @@ function applyAuthState() {
     quickAppointmentBtn.textContent = currentView === "cuentas-cobrar" ? "Buscar" : "Nueva cita";
   }
   const patientTopActions = $("#patientTopActions");
-  if (patientTopActions) patientTopActions.hidden = !["pacientes", "cuentas-cobrar"].includes(currentView);
+  if (patientTopActions) patientTopActions.hidden = currentView !== "pacientes";
   const agendaAppointmentBtn = $("#newAppointmentBtn");
   if (agendaAppointmentBtn) agendaAppointmentBtn.hidden = !canManageAppointments();
   const quickPatientBtn = $("#quickPatientBtn");
