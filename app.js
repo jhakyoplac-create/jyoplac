@@ -644,6 +644,12 @@ async function saveClinicalHistoryApi(entry) {
   if (result.id) entry.id = result.id;
 }
 
+async function saveReceivableApi(entry, options = {}) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/receivables", { method: "POST", body: JSON.stringify({ ...entry, ...options }) });
+  if (result.id) entry.id = result.id;
+}
+
 async function saveTreatmentApi(treatment) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/treatments", { method: "POST", body: JSON.stringify(treatment) });
@@ -1544,6 +1550,10 @@ function canManageClinical() {
   return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
 }
 
+function canEditReceivableAmount() {
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+}
+
 function canManagePayments() {
   return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
 }
@@ -1574,9 +1584,12 @@ function applyAuthState() {
     button.hidden = !hasRoleView(button.dataset.view);
   });
   const quickAppointmentBtn = $("#quickAppointmentBtn");
-  if (quickAppointmentBtn) quickAppointmentBtn.hidden = !canManageAppointments();
+  if (quickAppointmentBtn) {
+    quickAppointmentBtn.hidden = currentView === "cuentas-cobrar" ? false : !canManageAppointments();
+    quickAppointmentBtn.textContent = currentView === "cuentas-cobrar" ? "Buscar" : "Nueva cita";
+  }
   const patientTopActions = $("#patientTopActions");
-  if (patientTopActions) patientTopActions.hidden = currentView !== "pacientes";
+  if (patientTopActions) patientTopActions.hidden = !["pacientes", "cuentas-cobrar"].includes(currentView);
   const agendaAppointmentBtn = $("#newAppointmentBtn");
   if (agendaAppointmentBtn) agendaAppointmentBtn.hidden = !canManageAppointments();
   const quickPatientBtn = $("#quickPatientBtn");
@@ -1889,6 +1902,38 @@ function openPaymentForHistory(historyId) {
   if (form?.date) form.date.value = operatingDate();
   updatePaymentDue();
   setTimeout(() => $('#paymentForm input[name="cashReceived"]')?.focus(), 0);
+}
+
+function receivableEntryFromForm(data) {
+  const patient = patientById(data.patientId);
+  const amount = Number(data.creditAmount || 0);
+  return {
+    id: uid("h"),
+    patientId: data.patientId,
+    date: todayISO(),
+    attendedBy: patient?.doctor || currentUser()?.name || "",
+    attended: true,
+    reason: "Cuenta por cobrar",
+    anamnesis: "",
+    exam: "",
+    diagnosis: "",
+    plan: "",
+    procedure: "",
+    instructions: "",
+    agreedPrice: amount,
+    creditPending: true,
+    creditAmount: amount,
+    creditDueDate: data.creditDueDate || todayISO(),
+    creditNote: data.creditNote || ""
+  };
+}
+
+async function updateReceivableAmount(entry, amount) {
+  const updated = { ...entry, agreedPrice: amount, creditAmount: amount };
+  await saveReceivableApi(updated, { editAmount: true });
+  upsert(state.clinicalHistory, updated);
+  if (!API_ENABLED) saveState();
+  render();
 }
 
 function openCreditDialog() {
@@ -2750,6 +2795,20 @@ async function completePendingPayment(receiptValues = null) {
 function renderReceivables() {
   const table = $("#receivablesTable");
   if (!table) return;
+  const form = $("#manualReceivableForm");
+  if (form?.patientId) {
+    const query = currentView === "cuentas-cobrar" ? ($("#globalSearch")?.value || "").trim().toLowerCase() : "";
+    const patients = state.patients
+      .filter((patient) => [patient.name, patient.dni, patient.phone].join(" ").toLowerCase().includes(query));
+    const selected = form.patientId.value;
+    form.patientId.innerHTML = patients
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni)}</option>`)
+      .join("");
+    if (selected && patients.some((patient) => patient.id === selected)) form.patientId.value = selected;
+    else if (patients[0]) form.patientId.value = patients[0].id;
+    if (form.creditDueDate && !form.creditDueDate.value) form.creditDueDate.value = todayISO();
+  }
   const rows = receivableEntries();
   const today = todayISO();
   $("#receivablesTotal").textContent = money(rows.reduce((sum, item) => sum + item.balance, 0));
@@ -2765,7 +2824,7 @@ function renderReceivables() {
       <td>${escapeHtml(patient?.phone || "")}</td>
       <td>${escapeHtml(entry.attendedBy || patient?.doctor || "")}</td>
       <td><strong>${money(balance)}</strong></td>
-      <td><span class="status ${status === "VENCIDO" ? "danger" : status === "COBRAR HOY" ? "warn" : ""}">${status}</span></td>
+      <td><span class="status ${status === "VENCIDO" ? "danger" : status === "COBRAR HOY" ? "warn" : ""}">${status}</span>${canEditReceivableAmount() ? `<button class="inline-edit-btn" data-edit-receivable="${entry.id}" title="Editar monto">Editar</button>` : ""}</td>
       <td class="row-actions">
         <a class="small-btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>
         <button class="small-btn" data-pay-history="${entry.id}">Registrar pago</button>
@@ -3873,7 +3932,10 @@ function bindEvents() {
   });
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
   $$("[data-go]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.go)));
-  on("#globalSearch", "input", renderPatients);
+  on("#globalSearch", "input", () => {
+    if (currentView === "cuentas-cobrar") renderReceivables();
+    else renderPatients();
+  });
   on("#agendaDate", "change", renderAgenda);
   on("#reportMonth", "change", renderReports);
   on("#compareMonth", "change", renderReports);
@@ -3882,7 +3944,14 @@ function bindEvents() {
   on("#doctorFilter", "change", renderAgenda);
   on("#unitFilter", "change", renderAgenda);
   on("#newAppointmentBtn", "click", () => openAppointment());
-  on("#quickAppointmentBtn", "click", () => openAppointment());
+  on("#quickAppointmentBtn", "click", () => {
+    if (currentView === "cuentas-cobrar") {
+      renderReceivables();
+      $("#manualReceivableForm select[name='patientId']")?.focus();
+      return;
+    }
+    openAppointment();
+  });
   on("#openRescheduleBtn", "click", () => {
     const appointment = state.appointments.find((item) => item.id === $("#appointmentForm").id.value);
     openReschedule(appointment);
@@ -4324,9 +4393,58 @@ function bindEvents() {
   $("#generalExpensesTable")?.addEventListener("click", handleExpenseDelete);
 
   $("#receivablesTable")?.addEventListener("click", (event) => {
+    const edit = event.target.closest("[data-edit-receivable]");
+    if (edit) {
+      if (!canEditReceivableAmount()) {
+        alert("Solo doctores y administrador pueden editar el monto.");
+        return;
+      }
+      const entry = historyById(edit.dataset.editReceivable);
+      if (!entry) return;
+      const currentBalance = historyBalance(entry.id);
+      const currentPaid = historyPaid(entry.id);
+      const value = prompt("Nuevo saldo pendiente S/", String(currentBalance));
+      if (value === null) return;
+      const amount = Number(value);
+      if (!amount || amount <= 0) {
+        alert("Ingresa un monto valido.");
+        return;
+      }
+      const newAgreedPrice = currentPaid + amount;
+      updateReceivableAmount(entry, newAgreedPrice).catch((error) => alert(error.message));
+      return;
+    }
     const pay = event.target.closest("[data-pay-history]");
     if (!pay) return;
     openPaymentForHistory(pay.dataset.payHistory);
+  });
+
+  $("#manualReceivableForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = formData(form);
+    const patient = patientById(data.patientId);
+    if (!patient) {
+      alert("Selecciona un paciente.");
+      return;
+    }
+    const amount = Number(data.creditAmount || 0);
+    if (!amount || amount <= 0) {
+      alert("Ingresa el monto de deuda.");
+      return;
+    }
+    const entry = receivableEntryFromForm(data);
+    try {
+      await saveReceivableApi(entry);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    upsert(state.clinicalHistory, entry);
+    form.reset();
+    form.creditDueDate.value = todayISO();
+    if (!API_ENABLED) saveState();
+    render();
   });
 
   $("#treatmentForm").addEventListener("submit", async (event) => {

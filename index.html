@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260616-pagos-tablas-compactas" />
+    <link rel="stylesheet" href="styles.css?v=20260617-cuentas-manuales" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -564,6 +564,21 @@
             <h2>Agenda de cuentas por cobrar</h2>
             <button class="ghost" id="exportReceivablesBtn">Excel</button>
           </div>
+          <form class="receivable-form" id="manualReceivableForm">
+            <label>Paciente
+              <select name="patientId" required></select>
+            </label>
+            <label>Fecha de pago
+              <input name="creditDueDate" type="date" required />
+            </label>
+            <label>Monto S/
+              <input name="creditAmount" type="number" min="0.01" step="0.01" required />
+            </label>
+            <label>Detalle
+              <input name="creditNote" placeholder="Ej. En la noche paga" />
+            </label>
+            <button class="primary" type="submit">Registrar</button>
+          </form>
           <div class="summary-row">
             <span>Total pendiente <strong id="receivablesTotal">S/ 0</strong></span>
             <span>Vencidos <strong id="receivablesOverdue">0</strong></span>
@@ -997,6 +1012,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260616-pagos-tablas-compactas"></script>
+    <script src="app.js?v=20260617-cuentas-manuales"></script>
   </body>
 </html>

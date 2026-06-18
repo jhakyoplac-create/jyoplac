@@ -823,6 +823,55 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     )
             return send_json(self, {"ok": True, "id": item_id})
 
+        if parsed.path == "/api/receivables":
+            user = require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"})
+            if not user:
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("hist")
+            edit_amount = bool(data.get("editAmount"))
+            with db() as conn:
+                existing = conn.execute("SELECT id FROM clinical_history WHERE id = ?", (item_id,)).fetchone()
+                if existing and (edit_amount or normalize_role(user["role"]) == "RECEPCION"):
+                    if normalize_role(user["role"]) not in {"ADMIN", "DOCTOR"}:
+                        return send_json(self, {"error": "Solo doctores y administrador pueden editar el monto."}, 403)
+                conn.execute(
+                    """
+                    INSERT INTO clinical_history (
+                      id, patient_id, date, attended_by, attended, reason, anamnesis,
+                      exam, diagnosis, plan, procedure_done, instructions, agreed_price,
+                      credit_pending, credit_amount, credit_due_date, credit_note
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      agreed_price=excluded.agreed_price,
+                      credit_amount=excluded.credit_amount,
+                      credit_due_date=excluded.credit_due_date,
+                      credit_note=excluded.credit_note,
+                      updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (
+                        item_id,
+                        data["patientId"],
+                        data.get("date") or date.today().isoformat(),
+                        data.get("attendedBy", ""),
+                        1,
+                        data.get("reason", "Cuenta por cobrar"),
+                        data.get("anamnesis", ""),
+                        data.get("exam", ""),
+                        data.get("diagnosis", ""),
+                        data.get("plan", ""),
+                        data.get("procedure", ""),
+                        data.get("instructions", ""),
+                        float(data.get("agreedPrice") or data.get("creditAmount") or 0),
+                        1,
+                        float(data.get("creditAmount") or data.get("agreedPrice") or 0),
+                        data.get("creditDueDate", ""),
+                        data.get("creditNote", ""),
+                    ),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
         if parsed.path == "/api/treatments":
             if not require_role(self, {"ADMIN", "DOCTOR"}):
                 return
