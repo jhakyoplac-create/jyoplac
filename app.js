@@ -807,6 +807,52 @@ function formatDate(date) {
   return parsed.toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function reminderDateLabel(date) {
+  if (!date) return "";
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function reminderTimeLabel(time) {
+  if (!time) return "";
+  const [hourText, minuteText = "00"] = String(time).split(":");
+  const hour = Number(hourText);
+  if (Number.isNaN(hour)) return time;
+  const suffix = hour >= 12 ? "p. m." : "a. m.";
+  const displayHour = hour % 12 || 12;
+  return `${String(displayHour).padStart(2, "0")}:${minuteText.padStart(2, "0")} ${suffix}`;
+}
+
+function politeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Buenos dias";
+  if (hour < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
+function friendlyName(name) {
+  return String(name || "").toLowerCase().replace(/\b[\p{L}]/gu, (letter) => letter.toUpperCase());
+}
+
+function appointmentDayPhrase(date) {
+  const target = new Date(`${date}T00:00:00`);
+  const today = new Date(`${todayISO()}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return `el ${formatDate(date)}`;
+  const diffDays = Math.round((target - today) / 86400000);
+  const label = reminderDateLabel(date);
+  return diffDays === 1 ? `manana ${label}` : `el ${label}`;
+}
+
+function appointmentReminderMessage(appointment, patient) {
+  const patientName = friendlyName(patient?.name || "");
+  const clinicName = state.config.clinicName || "CM ODONTOLOGIA ESTETICA";
+  const service = appointment.service || "su cita";
+  const dayPhrase = appointmentDayPhrase(appointment.date);
+  const hour = reminderTimeLabel(appointment.time);
+  return `${politeGreeting()} *${patientName}*, te saludamos del consultorio odontologico *${clinicName}*, para hacerte recordar que ${dayPhrase} tienes ${service} a las ${hour}. Agradeceriamos tu confirmacion por favor 🦷🙌😊`;
+}
+
 function ageFromBirthDate(birthDate, referenceDate = todayISO()) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T00:00:00`);
@@ -3050,14 +3096,14 @@ function renderReminders() {
     .slice(0, 30);
   $("#remindersList").innerHTML = upcoming.map((appointment) => {
     const patient = patientById(appointment.patientId);
-    const text = `Hola ${patient?.name || ""}, le recordamos su cita odontologica en ${state.config.clinicName} el ${formatDate(appointment.date)} a las ${appointment.time}.`;
+    const text = appointmentReminderMessage(appointment, patient);
     const wa = `https://wa.me/51${patient?.phone || ""}?text=${encodeURIComponent(text)}`;
     return `<article class="campaign-card">
       <div class="card-title">
-        <strong>${formatDate(appointment.date)} ${appointment.time}</strong>
+        <strong>${formatDate(appointment.date)} ${reminderTimeLabel(appointment.time)}</strong>
         <span class="status">${escapeHtml(appointment.status)}</span>
       </div>
-      <p>${escapeHtml(patient?.name || "")}</p>
+      <p>${escapeHtml(friendlyName(patient?.name || ""))}</p>
       <p class="muted">${escapeHtml(appointment.service)} | ${escapeHtml(appointment.doctor)}</p>
       <a class="primary" href="${wa}" target="_blank" rel="noopener">Enviar recordatorio</a>
     </article>`;

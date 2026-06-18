@@ -1172,6 +1172,37 @@ th {
   gap: 14px;
 }
 
+#recordatorios .campaign-grid {
+  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+  gap: 10px;
+}
+
+#recordatorios .campaign-card {
+  padding: 11px 12px;
+}
+
+#recordatorios .card-title {
+  margin-bottom: 6px;
+}
+
+#recordatorios .card-title strong {
+  font-size: 14px;
+}
+
+#recordatorios .campaign-card p {
+  margin: 7px 0;
+  font-size: 14px;
+}
+
+#recordatorios .campaign-card .muted {
+  font-size: 13px;
+}
+
+#recordatorios .campaign-card .primary {
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
 .summary-row {
   justify-content: space-between;
   padding: 12px;
