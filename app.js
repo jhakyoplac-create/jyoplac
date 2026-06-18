@@ -826,9 +826,15 @@ function reminderTimeLabel(time) {
 
 function politeGreeting() {
   const hour = new Date().getHours();
-  if (hour < 12) return "Buenos dias";
+  if (hour < 12) return "Buenos días";
   if (hour < 19) return "Buenas tardes";
   return "Buenas noches";
+}
+
+function reminderClinicName(name) {
+  return String(name || "CM Odontología Estética")
+    .replace(/Odontologia/g, "Odontología")
+    .replace(/Estetica/g, "Estética");
 }
 
 function friendlyName(name) {
@@ -846,7 +852,7 @@ function appointmentDayPhrase(date) {
 
 function appointmentReminderMessage(appointment, patient) {
   const patientName = friendlyName(patient?.name || "");
-  const clinicName = state.config.clinicName || "CM ODONTOLOGIA ESTETICA";
+  const clinicName = reminderClinicName(state.config.clinicName);
   const service = appointment.service || "su cita";
   const dayPhrase = appointmentDayPhrase(appointment.date);
   const hour = reminderTimeLabel(appointment.time);
