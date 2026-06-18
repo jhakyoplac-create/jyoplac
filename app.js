@@ -1928,6 +1928,46 @@ function receivableEntryFromForm(data) {
   };
 }
 
+function receivablePatientMatches(query) {
+  const normalized = String(query || "").trim().toLowerCase();
+  if (normalized.length < 3) return [];
+  return state.patients
+    .filter((patient) => [patient.name, patient.dni, patient.phone].join(" ").toLowerCase().includes(normalized))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 12);
+}
+
+function patientOptionLabel(patient) {
+  return `${patient.name} - ${patient.dni}`;
+}
+
+function selectReceivablePatient(patient) {
+  const form = $("#manualReceivableForm");
+  if (!form || !patient) return;
+  form.patientId.value = patient.id;
+  form.patientSearch.value = patientOptionLabel(patient);
+  const suggestions = $("#receivablePatientSuggestions");
+  if (suggestions) suggestions.innerHTML = "";
+}
+
+function renderReceivablePatientSuggestions() {
+  const form = $("#manualReceivableForm");
+  const suggestions = $("#receivablePatientSuggestions");
+  if (!form || !suggestions) return;
+  const query = form.patientSearch.value;
+  const matches = receivablePatientMatches(query);
+  if (form.patientId.value) {
+    const selected = patientById(form.patientId.value);
+    if (!selected || form.patientSearch.value !== patientOptionLabel(selected)) form.patientId.value = "";
+  }
+  suggestions.innerHTML = matches.map((patient) => `
+    <button type="button" data-select-receivable-patient="${patient.id}">
+      <strong>${escapeHtml(patient.name)}</strong>
+      <span>${escapeHtml(patient.dni)}${patient.phone ? ` | ${escapeHtml(patient.phone)}` : ""}</span>
+    </button>
+  `).join("");
+}
+
 async function updateReceivableAmount(entry, amount) {
   const updated = { ...entry, agreedPrice: amount, creditAmount: amount };
   await saveReceivableApi(updated, { editAmount: true });
@@ -2796,17 +2836,7 @@ function renderReceivables() {
   const table = $("#receivablesTable");
   if (!table) return;
   const form = $("#manualReceivableForm");
-  if (form?.patientId) {
-    const query = currentView === "cuentas-cobrar" ? ($("#globalSearch")?.value || "").trim().toLowerCase() : "";
-    const patients = state.patients
-      .filter((patient) => [patient.name, patient.dni, patient.phone].join(" ").toLowerCase().includes(query));
-    const selected = form.patientId.value;
-    form.patientId.innerHTML = patients
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni)}</option>`)
-      .join("");
-    if (selected && patients.some((patient) => patient.id === selected)) form.patientId.value = selected;
-    else if (patients[0]) form.patientId.value = patients[0].id;
+  if (form) {
     if (form.creditDueDate && !form.creditDueDate.value) form.creditDueDate.value = todayISO();
   }
   const rows = receivableEntries();
@@ -3946,8 +3976,8 @@ function bindEvents() {
   on("#newAppointmentBtn", "click", () => openAppointment());
   on("#quickAppointmentBtn", "click", () => {
     if (currentView === "cuentas-cobrar") {
-      renderReceivables();
-      $("#manualReceivableForm select[name='patientId']")?.focus();
+      renderReceivablePatientSuggestions();
+      $("#manualReceivableForm input[name='patientSearch']")?.focus();
       return;
     }
     openAppointment();
@@ -4423,9 +4453,17 @@ function bindEvents() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = formData(form);
-    const patient = patientById(data.patientId);
+    let patient = patientById(data.patientId);
     if (!patient) {
-      alert("Selecciona un paciente.");
+      const matches = receivablePatientMatches(data.patientSearch);
+      if (matches.length === 1) {
+        patient = matches[0];
+        form.patientId.value = patient.id;
+        data.patientId = patient.id;
+      }
+    }
+    if (!patient) {
+      alert("Busca y selecciona un paciente de la lista.");
       return;
     }
     const amount = Number(data.creditAmount || 0);
@@ -4443,8 +4481,23 @@ function bindEvents() {
     upsert(state.clinicalHistory, entry);
     form.reset();
     form.creditDueDate.value = todayISO();
+    const suggestions = $("#receivablePatientSuggestions");
+    if (suggestions) suggestions.innerHTML = "";
     if (!API_ENABLED) saveState();
     render();
+  });
+
+  on('#manualReceivableForm input[name="patientSearch"]', "input", (event) => {
+    const form = $("#manualReceivableForm");
+    if (form?.patientId) form.patientId.value = "";
+    renderReceivablePatientSuggestions();
+  });
+
+  $("#receivablePatientSuggestions")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-select-receivable-patient]");
+    if (!button) return;
+    const patient = patientById(button.dataset.selectReceivablePatient);
+    selectReceivablePatient(patient);
   });
 
   $("#treatmentForm").addEventListener("submit", async (event) => {

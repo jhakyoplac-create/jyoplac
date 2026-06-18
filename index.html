@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260617-cuentas-manuales" />
+    <link rel="stylesheet" href="styles.css?v=20260617-buscador-cuentas" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
@@ -566,7 +566,9 @@
           </div>
           <form class="receivable-form" id="manualReceivableForm">
             <label>Paciente
-              <select name="patientId" required></select>
+              <input name="patientSearch" autocomplete="off" placeholder="Escribe nombre o DNI" required />
+              <input name="patientId" type="hidden" />
+              <div class="patient-suggestions" id="receivablePatientSuggestions"></div>
             </label>
             <label>Fecha de pago
               <input name="creditDueDate" type="date" required />
@@ -1012,6 +1014,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260617-cuentas-manuales"></script>
+    <script src="app.js?v=20260617-buscador-cuentas"></script>
   </body>
 </html>

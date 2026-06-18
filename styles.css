@@ -547,6 +547,52 @@ label {
   margin-bottom: 14px;
 }
 
+.receivable-form label:first-child {
+  position: relative;
+}
+
+.patient-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 14px 28px rgba(0, 105, 130, 0.16);
+}
+
+.patient-suggestions:empty {
+  display: none;
+}
+
+.patient-suggestions button {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 0;
+  border-bottom: 1px solid #e0f2f6;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.patient-suggestions button:hover,
+.patient-suggestions button:focus {
+  background: #eefbff;
+  outline: none;
+}
+
+.patient-suggestions span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 #receivablesTable .muted {
   font-size: 13px;
 }
