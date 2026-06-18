@@ -1,9 +1,9 @@
-const CACHE_NAME = "cm-dental-shell-v50";
+const CACHE_NAME = "cm-dental-shell-v51";
 const SHELL_FILES = [
   "/",
   "/index.html",
-  "/styles.css?v=20260618-recordatorios-tildes-v2",
-  "/app.js?v=20260618-recordatorios-tildes-v2",
+  "/styles.css?v=20260618-arranque-seguro",
+  "/app.js?v=20260618-arranque-seguro",
   "/manifest.webmanifest",
   "/assets/logo.svg",
   "/assets/logo-cm.png",

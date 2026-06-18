@@ -5461,8 +5461,8 @@ function init() {
   $("#compareMonth").value = previousMonth($("#reportMonth").value);
   bindEvents();
   setupApiAutoRefresh();
+  render();
   if (API_ENABLED && apiToken) loadFromApi();
-  else render();
 }
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
@@ -5471,4 +5471,11 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
   });
 }
 
-init();
+try {
+  init();
+} catch (error) {
+  console.error(error);
+  document.body.classList.add("locked");
+  const message = $("#loginMessage");
+  if (message) message.textContent = "No se pudo cargar la pantalla. Actualiza la pagina o borra cache si el problema continua.";
+}
