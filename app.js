@@ -850,7 +850,7 @@ function appointmentReminderMessage(appointment, patient) {
   const service = appointment.service || "su cita";
   const dayPhrase = appointmentDayPhrase(appointment.date);
   const hour = reminderTimeLabel(appointment.time);
-  return `${politeGreeting()} *${patientName}*, te saludamos del consultorio odontologico *${clinicName}*, para hacerte recordar que ${dayPhrase} tienes ${service} a las ${hour}. Agradeceriamos tu confirmacion por favor. :-)`;
+  return `${politeGreeting()} *${patientName}*, te saludamos del consultorio odontológico *${clinicName}*, para hacerte recordar que ${dayPhrase} tienes ${service} a las ${hour}. Agradeceríamos tu confirmación por favor.`;
 }
 
 function ageFromBirthDate(birthDate, referenceDate = todayISO()) {
