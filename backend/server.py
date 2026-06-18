@@ -438,6 +438,22 @@ class DentalHandler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[Dental] {self.address_string()} - {fmt % args}")
 
+    def end_headers(self):
+        parsed = urlparse(self.path)
+        no_cache_paths = {
+            "/",
+            "/index.html",
+            "/app.js",
+            "/styles.css",
+            "/service-worker.js",
+            "/manifest.webmanifest",
+        }
+        if parsed.path in no_cache_paths:
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        super().end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if not parsed.path.startswith("/api/"):
