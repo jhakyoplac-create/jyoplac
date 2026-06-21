@@ -3519,7 +3519,7 @@ function generalCashBalances() {
     wallet,
     transfer,
     utility,
-    total: cash + bank + utility,
+    total: cash + bank,
     cashOpening: Number(state.config.generalCashOpening || 0),
     bankOpening: Number(state.config.generalBankOpening || 0),
     utilityOpening: Number(state.config.generalUtilityOpening || 0),
@@ -3593,10 +3593,9 @@ function openGeneralBalanceDetail(type) {
 }
 
 function generalSummaryDates() {
-  const month = operatingDate().slice(0, 7);
   const fromInput = $("#generalSummaryFrom");
   const toInput = $("#generalSummaryTo");
-  const defaultFrom = `${month}-01`;
+  const defaultFrom = operatingDate();
   const defaultTo = operatingDate();
   if (fromInput && !fromInput.value) fromInput.value = defaultFrom;
   if (toInput && !toInput.value) toInput.value = defaultTo;
