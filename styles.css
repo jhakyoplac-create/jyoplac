@@ -1920,7 +1920,7 @@ menu {
 }
 
 #pagos .payments-cash-box {
-  padding: 14px;
+  padding: 12px;
   border-radius: 12px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(235, 252, 255, 0.9)),
@@ -1930,7 +1930,7 @@ menu {
 
 #pagos .payments-cash-box .settings-grid {
   grid-template-columns: repeat(3, minmax(130px, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 #pagos .payments-cash-box label {
@@ -1939,53 +1939,56 @@ menu {
 }
 
 #pagos .payments-cash-box input {
-  min-height: 38px;
-  padding: 8px 10px;
-  font-size: 13px;
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: 12px;
 }
 
 #pagos .payments-cash-box .summary-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 8px;
+  gap: 6px;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
 #pagos .payments-cash-box .summary-row span {
-  padding: 9px 10px;
+  padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #f5fcfd;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 #pagos .payments-cash-box .summary-row strong {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 15px;
 }
 
 #pagos .payments-cash-box .top-actions {
   align-items: stretch;
-}
-
-#pagos .cash-breakdown {
-  min-width: min(100%, 460px);
   gap: 8px;
 }
 
+#pagos .cash-breakdown {
+  min-width: min(100%, 360px);
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
+  gap: 6px;
+}
+
 #pagos .cash-breakdown span {
-  min-height: 56px;
-  padding: 9px 11px;
-  font-size: 12px;
+  min-height: 46px;
+  padding: 7px 9px;
+  font-size: 11px;
 }
 
 #pagos .cash-breakdown strong {
-  font-size: 17px;
+  font-size: 15px;
+  margin-top: 2px;
 }
 
 #pagos .compact-section-head {
@@ -2027,6 +2030,43 @@ menu {
 #pagos .payments-table-wrap {
   max-height: 420px;
   overflow: auto;
+}
+
+#utilityForm {
+  gap: 10px;
+  padding: 18px 20px;
+}
+
+#utilityForm label {
+  gap: 5px;
+  font-size: 12px;
+}
+
+#utilityForm input,
+#utilityForm select,
+#utilityForm textarea {
+  min-height: 38px;
+  padding: 8px 11px;
+  font-size: 13px;
+}
+
+#utilityForm textarea {
+  min-height: 76px;
+}
+
+#utilityForm .top-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.82fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+#utilityForm .top-actions .ghost,
+#utilityForm .top-actions .primary {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: 13px;
 }
 
 .tooth-legend {
@@ -2420,6 +2460,10 @@ menu {
 
   #pagos .payment-entry-panel {
     position: static;
+  }
+
+  #utilityForm .top-actions {
+    grid-template-columns: 1fr;
   }
 }
 
