@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260621-compacto" />
+    <link rel="stylesheet" href="styles.css?v=20260621-pagos-caja" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -266,8 +266,8 @@
       </section>
 
       <section id="pagos" class="view">
-        <div class="content-grid form-and-list">
-          <form class="panel form" id="paymentForm">
+        <div class="content-grid form-and-list payments-layout">
+          <form class="panel form payment-entry-panel" id="paymentForm">
             <div class="panel-head">
               <h2>Registrar pago</h2>
               <div class="top-actions">
@@ -299,7 +299,7 @@
             <button class="primary" type="submit">Guardar pago</button>
           </form>
 
-          <section class="panel">
+          <section class="panel payments-workspace">
             <div class="panel-head">
               <h2>Caja y saldos</h2>
               <button class="ghost" id="exportPaymentsBtn">CSV</button>
@@ -310,7 +310,7 @@
             <div class="summary-row">
               <span>Pendiente total <strong id="totalDebt">S/ 0</strong></span>
             </div>
-            <div class="cash-box">
+            <div class="cash-box payments-cash-box">
               <div class="panel-head">
                 <h2>Caja diaria</h2>
                 <span class="status" id="cashStatus">SIN APERTURA</span>
@@ -332,13 +332,13 @@
                 <button class="ghost" id="printCloseBtn" type="button">Imprimir cierre</button>
                 <button class="ghost" id="exportCloseBtn" type="button">Excel cierre</button>
                 <div class="cash-breakdown">
-                  <span>Efectivo disponible <strong id="cashMethodCash">S/ 0</strong></span>
+                  <span>Efectivo <strong id="cashMethodCash">S/ 0</strong></span>
                   <span>Yape + Plin disp. <strong id="cashMethodWallet">S/ 0</strong></span>
                   <span>Tarjeta + Transf. disp. <strong id="cashMethodBank">S/ 0</strong></span>
                 </div>
               </div>
             </div>
-            <div class="panel-head">
+            <div class="panel-head compact-section-head">
               <h2>Egresos del dia</h2>
             </div>
             <div class="table-wrap">
@@ -355,7 +355,7 @@
                 <tbody id="expensesTable"></tbody>
               </table>
             </div>
-            <div class="panel-head">
+            <div class="panel-head compact-section-head">
               <h2>Egresos de caja general</h2>
             </div>
             <div class="table-wrap">
@@ -371,7 +371,10 @@
                 <tbody id="generalExpensesTable"></tbody>
               </table>
             </div>
-            <div class="table-wrap">
+            <div class="panel-head compact-section-head">
+              <h2>Pagos registrados</h2>
+            </div>
+            <div class="table-wrap payments-table-wrap">
               <table>
                 <thead>
                   <tr>

@@ -1878,21 +1878,155 @@ menu {
   font-size: 13px;
 }
 
+#pagos .payments-layout {
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  align-items: start;
+}
+
+#pagos .payment-entry-panel {
+  position: sticky;
+  top: 18px;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 14px;
+}
+
+#pagos .payment-entry-panel .panel-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(200, 234, 242, 0.9);
+}
+
+#pagos .payment-entry-panel label {
+  gap: 5px;
+  font-size: 12px;
+}
+
+#pagos .payment-entry-panel input,
+#pagos .payment-entry-panel select,
+#pagos .payment-entry-panel textarea {
+  min-height: 38px;
+  padding: 8px 11px;
+  font-size: 13px;
+}
+
+#pagos .payment-entry-panel .primary {
+  min-height: 44px;
+  margin-top: 4px;
+}
+
+#pagos .payments-workspace {
+  padding: 18px 22px;
+  border-radius: 14px;
+}
+
+#pagos .payments-cash-box {
+  padding: 14px;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(235, 252, 255, 0.9)),
+    #fbfeff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+#pagos .payments-cash-box .settings-grid {
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+#pagos .payments-cash-box label {
+  font-size: 12px;
+  gap: 5px;
+}
+
+#pagos .payments-cash-box input {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+#pagos .payments-cash-box .summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+#pagos .payments-cash-box .summary-row span {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f5fcfd;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#pagos .payments-cash-box .summary-row strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+#pagos .payments-cash-box .top-actions {
+  align-items: stretch;
+}
+
+#pagos .cash-breakdown {
+  min-width: min(100%, 460px);
+  gap: 8px;
+}
+
+#pagos .cash-breakdown span {
+  min-height: 56px;
+  padding: 9px 11px;
+  font-size: 12px;
+}
+
+#pagos .cash-breakdown strong {
+  font-size: 17px;
+}
+
+#pagos .compact-section-head {
+  margin: 16px 0 6px;
+  padding-top: 4px;
+}
+
+#pagos .compact-section-head h2 {
+  font-size: 17px;
+}
+
+#pagos .table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 #pagos .table-wrap table {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 #pagos .table-wrap th {
-  font-size: 11px;
+  font-size: 10px;
+  padding: 9px 11px;
+  background: rgba(245, 252, 253, 0.86);
 }
 
 #pagos .table-wrap td {
-  padding: 10px 9px;
+  padding: 9px 11px;
+  line-height: 1.25;
 }
 
 #pagos .table-wrap .small-btn {
-  font-size: 14px;
+  min-height: 32px;
+  font-size: 12px;
   padding: 5px 8px;
+}
+
+#pagos .payments-table-wrap {
+  max-height: 420px;
+  overflow: auto;
 }
 
 .tooth-legend {
@@ -2276,6 +2410,16 @@ menu {
   .cash-breakdown {
     min-width: 100%;
     grid-template-columns: 1fr;
+  }
+
+  #pagos .payments-layout,
+  #pagos .payments-cash-box .settings-grid,
+  #pagos .payments-cash-box .summary-row {
+    grid-template-columns: 1fr;
+  }
+
+  #pagos .payment-entry-panel {
+    position: static;
   }
 }
 
