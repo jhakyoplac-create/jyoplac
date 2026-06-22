@@ -3595,8 +3595,8 @@ function openGeneralBalanceDetail(type) {
 function generalSummaryDates() {
   const fromInput = $("#generalSummaryFrom");
   const toInput = $("#generalSummaryTo");
-  const defaultFrom = operatingDate();
-  const defaultTo = operatingDate();
+  const defaultFrom = todayISO();
+  const defaultTo = todayISO();
   if (fromInput && !fromInput.value) fromInput.value = defaultFrom;
   if (toInput && !toInput.value) toInput.value = defaultTo;
   const from = fromInput?.value || defaultFrom;
@@ -3630,7 +3630,7 @@ function renderUtilityMovements() {
 }
 
 function renderGeneralCash() {
-  const cashDate = operatingDate();
+  const cashDate = todayISO();
   const balances = generalCashBalances();
   $("#generalCashBalance").textContent = money(balances.cash);
   $("#generalBankBalance").textContent = money(balances.bank);
@@ -4896,7 +4896,7 @@ function bindEvents() {
       alert(`La caja de ${formatDate(existing.date)} sigue abierta. Primero debes cerrar esa caja antes de abrir otra.`);
       return;
     }
-    const cashDate = operatingDate();
+    const cashDate = todayISO();
     const openingCash = Number(pettyCashAmount(cashDate) || 0);
     if (openingCash > generalCashBalances().cash) {
       alert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
@@ -5219,7 +5219,7 @@ function bindEvents() {
     }
     state.expenses.push(expense);
     form.reset();
-    form.date.value = operatingDate();
+    form.date.value = todayISO();
     if (!API_ENABLED) saveState();
     render();
   });
@@ -5455,7 +5455,7 @@ function init() {
   $('#paymentForm input[name="date"]').value = operatingDate();
   $('#historyForm input[name="date"]').value = todayISO();
   $('#staffPaymentForm input[name="date"]').value = operatingDate();
-  $('#utilityForm input[name="date"]').value = operatingDate();
+  $('#utilityForm input[name="date"]').value = todayISO();
   $("#reportMonth").value = todayISO().slice(0, 7);
   $("#compareMonth").value = previousMonth($("#reportMonth").value);
   bindEvents();
