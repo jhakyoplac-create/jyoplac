@@ -581,14 +581,14 @@ function shouldAutoRefreshApi() {
 function setupApiAutoRefresh() {
   if (!API_ENABLED) return;
   window.addEventListener("focus", () => {
-    if (apiToken) loadFromApi();
+    if (shouldAutoRefreshApi()) loadFromApi();
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && apiToken) loadFromApi();
+    if (shouldAutoRefreshApi()) loadFromApi();
   });
   setInterval(() => {
     if (shouldAutoRefreshApi()) loadFromApi();
-  }, 8000);
+  }, 30000);
 }
 
 async function savePatientApi(patient) {
@@ -1692,6 +1692,66 @@ function render() {
   const todayLabel = $("#todayLabel");
   if (todayLabel) todayLabel.textContent = `${state.config.clinicName} | ${formatDate(todayISO())}`;
   hydrateForms();
+  renderActiveView();
+}
+
+function renderActiveView() {
+  switch (currentView) {
+    case "dashboard":
+      renderDashboard();
+      break;
+    case "agenda":
+      renderAgenda();
+      break;
+    case "pacientes":
+      renderPatients();
+      break;
+    case "historial":
+      renderClinicalHistory();
+      break;
+    case "odontograma":
+      renderOdontogram();
+      break;
+    case "tratamientos":
+      renderTreatments();
+      break;
+    case "pagos":
+      renderPayments();
+      break;
+    case "comprobantes":
+      renderElectronicReceipts();
+      break;
+    case "caja-general":
+      renderGeneralCash();
+      break;
+    case "cuentas-cobrar":
+      renderReceivables();
+      break;
+    case "seguimiento-citas":
+      renderAppointmentFollowUps();
+      break;
+    case "panel":
+      renderStaffPanel();
+      break;
+    case "recordatorios":
+      renderReminders();
+      break;
+    case "reportes":
+      renderReports();
+      break;
+    case "campanas":
+      renderCampaigns();
+      break;
+    case "configuracion":
+      renderConfig();
+      break;
+    default:
+      renderDashboard();
+      break;
+  }
+}
+
+function renderFullApp() {
   renderDashboard();
   renderAgenda();
   renderPatients();
@@ -2233,13 +2293,14 @@ function renderAgenda() {
   const end = dayInfo.end;
   const units = state.config.units.length ? state.config.units : seedData.config.units;
   const rows = dayInfo.message ? [`<div class="agenda-notice">${dayInfo.message}</div>`] : [];
+  const appointmentsForDay = state.appointments.filter((item) => item.date === date && isSlotBlockingAppointment(item));
   agendaTimesForDay(date, start, end).forEach((time) => {
     const cursor = minutes(time);
     const slots = units.map((unitName) => {
-      const appointment = state.appointments.find((item) => {
+      const appointment = appointmentsForDay.find((item) => {
         const doctorOk = !doctor || doctor === "Todos los doctores" || item.doctor === doctor;
         const unitOk = !unit || unit === "Todas las unidades" || item.unit === unit;
-        return isSlotBlockingAppointment(item) && item.date === date && item.time === time && item.unit === unitName && doctorOk && unitOk;
+        return item.time === time && item.unit === unitName && doctorOk && unitOk;
       });
       const isLunch = dayOfWeek(date) !== 6 && cursor >= minutes(state.config.lunchStart) && cursor < minutes(state.config.lunchEnd);
       if (appointment) {
@@ -4362,7 +4423,6 @@ function bindEvents() {
     };
     try {
       await savePatientApi(patient);
-      if (API_ENABLED && apiToken) await refreshPatientsApi();
     } catch (error) {
       alert(error.message);
       patientSaving = false;
@@ -4372,7 +4432,7 @@ function bindEvents() {
       }
       return;
     }
-    if (!API_ENABLED || !apiToken) upsert(state.patients, patient);
+    upsert(state.patients, patient);
     addLocalAuditEvent(existingPatient ? "PATIENT_UPDATED" : "PATIENT_CREATED", `${existingPatient ? "Edito paciente" : "Ingreso paciente"}: ${patient.name} (${patient.dni})`, patient.id);
     lastSavedPatientId = patient.id;
     form.reset();
