@@ -332,7 +332,9 @@ function mapApiAppointment(row) {
     notes: row.notes || "",
     followUpStatus: row.follow_up_status || row.followUpStatus || "",
     followUpComment: row.follow_up_comment || row.followUpComment || "",
-    newAppointmentId: row.new_appointment_id || row.newAppointmentId || ""
+    newAppointmentId: row.new_appointment_id || row.newAppointmentId || "",
+    reminderSentAt: row.reminder_sent_at || row.reminderSentAt || "",
+    reminderSentBy: row.reminder_sent_by || row.reminderSentBy || ""
   };
 }
 
@@ -772,6 +774,16 @@ function todayISO() {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysISO(date, days) {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  parsed.setDate(parsed.getDate() + days);
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -3157,10 +3169,17 @@ function renderStaffPanel() {
 }
 
 function renderReminders() {
+  const startDate = todayISO();
+  const endDate = addDaysISO(startDate, 2);
   const upcoming = state.appointments
-    .filter((appointment) => appointment.date >= todayISO() && isSlotBlockingAppointment(appointment))
+    .filter((appointment) =>
+      appointment.date >= startDate &&
+      appointment.date <= endDate &&
+      !appointment.reminderSentAt &&
+      isSlotBlockingAppointment(appointment)
+    )
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
-    .slice(0, 30);
+    .slice(0, 60);
   $("#remindersList").innerHTML = upcoming.map((appointment) => {
     const patient = patientById(appointment.patientId);
     const text = appointmentReminderMessage(appointment, patient);
@@ -3172,9 +3191,9 @@ function renderReminders() {
       </div>
       <p>${escapeHtml(friendlyName(patient?.name || ""))}</p>
       <p class="muted">${escapeHtml(appointment.service)} | ${escapeHtml(appointment.doctor)}</p>
-      <a class="primary" href="${wa}" target="_blank" rel="noopener">Enviar recordatorio</a>
+      <button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>
     </article>`;
-  }).join("") || `<p class="muted">No hay citas futuras para recordar.</p>`;
+  }).join("") || `<p class="muted">No hay recordatorios pendientes para hoy, manana o pasado manana.</p>`;
 }
 
 function monthLabel(month) {
@@ -4012,6 +4031,31 @@ function bindEvents() {
       if ($("#receptionPatientsDialog")?.open) renderReceptionPatientsModal();
       return;
     }
+    const reminderButton = event.target.closest("[data-send-reminder]");
+    if (reminderButton) {
+      const appointment = state.appointments.find((item) => item.id === reminderButton.dataset.sendReminder);
+      if (!appointment) return;
+      const updated = {
+        ...appointment,
+        reminderSentAt: new Date().toISOString(),
+        reminderSentBy: currentUser()?.name || ""
+      };
+      reminderButton.disabled = true;
+      reminderButton.textContent = "Abriendo WhatsApp...";
+      try {
+        await saveAppointmentApi(updated);
+      } catch (error) {
+        alert(error.message);
+        reminderButton.disabled = false;
+        reminderButton.textContent = "Enviar recordatorio";
+        return;
+      }
+      upsert(state.appointments, updated);
+      if (!API_ENABLED) saveState();
+      window.open(reminderButton.dataset.wa, "_blank", "noopener");
+      renderReminders();
+      return;
+    }
     const closeButton = event.target.closest("[data-close-dialog]");
     if (!closeButton) return;
     const dialog = document.getElementById(closeButton.dataset.closeDialog);
@@ -4225,7 +4269,9 @@ function bindEvents() {
       service: data.service,
       duration: service?.duration || state.config.interval,
       status: data.status,
-      notes: data.notes
+      notes: data.notes,
+      reminderSentAt: existingAppointment?.reminderSentAt || "",
+      reminderSentBy: existingAppointment?.reminderSentBy || ""
     };
     if (["CANCELADA", "NO_ASISTIO"].includes(appointment.status)) {
       appointment.followUpStatus = "PENDIENTE_REPROGRAMAR";

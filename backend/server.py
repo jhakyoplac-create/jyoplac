@@ -212,6 +212,8 @@ def migrate_db(conn):
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
     ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
+    ensure_column(conn, "appointments", "reminder_sent_at", "TEXT")
+    ensure_column(conn, "appointments", "reminder_sent_by", "TEXT")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS electronic_receipts (
@@ -687,12 +689,18 @@ class DentalHandler(SimpleHTTPRequestHandler):
             follow_up_status = data.get("followUpStatus") or data.get("follow_up_status") or ""
             follow_up_comment = data.get("followUpComment") or data.get("follow_up_comment") or ""
             new_appointment_id = data.get("newAppointmentId") or data.get("new_appointment_id") or ""
+            reminder_sent_at = data.get("reminderSentAt") if "reminderSentAt" in data else data.get("reminder_sent_at")
+            reminder_sent_by = data.get("reminderSentBy") if "reminderSentBy" in data else data.get("reminder_sent_by")
             free_statuses = {"CANCELADA", "REPROGRAMADA", "NO_ASISTIO"}
             with db() as conn:
                 existing_appointment = conn.execute(
-                    "SELECT id, status, patient_id, date, time FROM appointments WHERE id = ?",
+                    "SELECT id, status, patient_id, date, time, reminder_sent_at, reminder_sent_by FROM appointments WHERE id = ?",
                     (item_id,),
                 ).fetchone()
+                if reminder_sent_at is None and existing_appointment:
+                    reminder_sent_at = existing_appointment["reminder_sent_at"] or ""
+                if reminder_sent_by is None and existing_appointment:
+                    reminder_sent_by = existing_appointment["reminder_sent_by"] or ""
                 if data.get("status") not in free_statuses:
                     duplicate_patient = conn.execute(
                         """
@@ -729,9 +737,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """
                     INSERT INTO appointments (
                       id, date, time, unit, doctor, patient_id, service, duration, status, notes,
-                      follow_up_status, follow_up_comment, new_appointment_id
+                      follow_up_status, follow_up_comment, new_appointment_id, reminder_sent_at, reminder_sent_by
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       date=excluded.date, time=excluded.time, unit=excluded.unit,
                       doctor=excluded.doctor, patient_id=excluded.patient_id,
@@ -740,6 +748,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                       follow_up_status=excluded.follow_up_status,
                       follow_up_comment=excluded.follow_up_comment,
                       new_appointment_id=excluded.new_appointment_id,
+                      reminder_sent_at=excluded.reminder_sent_at,
+                      reminder_sent_by=excluded.reminder_sent_by,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -756,6 +766,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         follow_up_status,
                         follow_up_comment,
                         new_appointment_id,
+                        reminder_sent_at or "",
+                        reminder_sent_by or "",
                     ),
                 )
                 patient = conn.execute("SELECT name FROM patients WHERE id = ?", (data["patientId"],)).fetchone()
