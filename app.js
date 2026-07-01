@@ -1102,11 +1102,11 @@ function setPettyCashAllocation(date, amount) {
   else state.pettyCashAllocations.push({ id: uid("petty"), date, amount: Number(amount || 0) });
 }
 
-function pettyCashDeliveredTotal(month = null) {
+function pettyCashDeliveredTotal(month = null, fromDate = null) {
   const dates = [...new Set([
     ...state.pettyCashAllocations.map((item) => item.date),
     ...state.cashSessions.map((session) => session.date)
-  ])].filter((date) => !month || String(date || "").startsWith(month));
+  ])].filter((date) => (!month || String(date || "").startsWith(month)) && (!fromDate || String(date || "") >= fromDate));
   return dates.reduce((sum, date) => sum + pettyCashDeliveredForDate(date), 0);
 }
 
@@ -3561,25 +3561,39 @@ function renderUsers() {
   </tr>`).join("");
 }
 
+function cashBalanceStartDate() {
+  const today = todayISO();
+  const day = Number(today.slice(8, 10));
+  const month = today.slice(0, 7);
+  return `${day <= 5 ? previousMonth(month) : month}-01`;
+}
+
+function isFromCashBalancePeriod(item) {
+  return String(item?.date || "") >= cashBalanceStartDate();
+}
+
+function cashBalancePeriodLabel() {
+  return `${formatDate(cashBalanceStartDate())} - ${formatDate(todayISO())}`;
+}
+
 function generalCashBalances() {
-  const month = operatingDate().slice(0, 7);
-  const monthPayments = state.payments.filter((payment) => String(payment.date || "").startsWith(month));
-  const monthExpenses = state.expenses.filter((expense) => String(expense.date || "").startsWith(month));
+  const balancePayments = state.payments.filter(isFromCashBalancePeriod);
+  const balanceExpenses = state.expenses.filter(isFromCashBalancePeriod);
   const allUtilityMovements = state.expenses.filter((expense) => isUtilityContribution(expense) || isUtilityPurchase(expense));
-  const pettyCash = pettyCashDeliveredTotal(month);
-  const cashIncome = monthPayments
+  const pettyCash = pettyCashDeliveredTotal(null, cashBalanceStartDate());
+  const cashIncome = balancePayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["EFECTIVO"]), 0);
-  const walletIncome = monthPayments
+  const walletIncome = balancePayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["YAPE", "PLIN", "TARJETA"]), 0);
-  const transferIncome = monthPayments
+  const transferIncome = balancePayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["TRANSFERENCIA"]), 0);
-  const cashExpenses = monthExpenses
+  const cashExpenses = balanceExpenses
     .filter((expense) => expense.source !== "UTILIDAD" && String(expense.method || "").toUpperCase() === "EFECTIVO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const walletExpenses = monthExpenses
+  const walletExpenses = balanceExpenses
     .filter((expense) => expense.source !== "UTILIDAD" && ["YAPE", "PLIN", "TARJETA"].includes(String(expense.method || "").toUpperCase()))
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const transferExpenses = monthExpenses
+  const transferExpenses = balanceExpenses
     .filter((expense) => expense.source !== "UTILIDAD" && String(expense.method || "").toUpperCase() === "TRANSFERENCIA")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const utilityContributions = allUtilityMovements
@@ -3622,12 +3636,23 @@ function openGeneralBalanceDetail(type) {
   const body = $("#generalBalanceDetailBody");
   if (!title || !summary || !head || !body) return;
   const isCash = type === "cash";
-  const month = operatingDate().slice(0, 7);
-  const rows = dailyIncomeBreakdownRows(month);
+  const fromDate = cashBalanceStartDate();
+  const toDate = todayISO();
+  const rows = allDatesWithCashActivity()
+    .filter((date) => date >= fromDate && date <= toDate)
+    .sort()
+    .map((date) => ({
+      date,
+      cash: incomeForDate(date, "EFECTIVO"),
+      yape: incomeForDate(date, "YAPE"),
+      plin: incomeForDate(date, "PLIN"),
+      transfer: incomeForDate(date, "TRANSFERENCIA"),
+      card: incomeForDate(date, "TARJETA")
+    }));
   const balances = generalCashBalances();
   const titlePrefix = isCash ? "Ingresos efectivo" : "Ingresos billeteras y bancos";
-  const startLabel = formatDate(`${month}-01`);
-  title.textContent = `${titlePrefix} | ${monthLabel(month)}`;
+  const startLabel = formatDate(fromDate);
+  title.textContent = `${titlePrefix} | ${cashBalancePeriodLabel()}`;
   const total = rows.reduce((sum, row) => {
     return sum + (isCash ? row.cash : row.yape + row.plin + row.transfer + row.card);
   }, 0);
@@ -3699,14 +3724,18 @@ function renderUtilityMovements() {
   if (!table) return;
   table.innerHTML = utilityMovements().map((item) => {
     const isPurchase = isUtilityPurchase(item);
+    const action = isAdmin() && isPurchase
+      ? `<button class="small-btn" data-utility-to-contribution="${item.id}">Pasar a utilidad</button>`
+      : "";
     return `<tr>
       <td>${formatDate(item.date)}</td>
       <td><span class="status ${isPurchase ? "danger" : ""}">${isPurchase ? "COMPRA" : "APORTE"}</span></td>
       <td>${escapeHtml(item.method || "")}</td>
       <td><strong>${isPurchase ? "-" : ""}${money(item.amount)}</strong></td>
       <td>${escapeHtml(item.detail || "")}</td>
+      <td class="row-actions">${action}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="5">Aun no hay movimientos de utilidad.</td></tr>`;
+  }).join("") || `<tr><td colspan="6">Aun no hay movimientos de utilidad.</td></tr>`;
 }
 
 function renderGeneralCash() {
@@ -4578,6 +4607,28 @@ function bindEvents() {
   };
   $("#expensesTable")?.addEventListener("click", handleExpenseDelete);
   $("#generalExpensesTable")?.addEventListener("click", handleExpenseDelete);
+  $("#utilityMovementsTable")?.addEventListener("click", async (event) => {
+    const convert = event.target.closest("[data-utility-to-contribution]");
+    if (!convert || !isAdmin()) return;
+    const expense = state.expenses.find((item) => item.id === convert.dataset.utilityToContribution);
+    if (!expense || !isUtilityPurchase(expense)) return;
+    if (!confirm(`Cambiar ${money(expense.amount)} de compra a aporte de utilidad? Esto sumara utilidad y descontara caja general segun su metodo.`)) return;
+    const updated = {
+      ...expense,
+      source: "CAJA_GENERAL",
+      category: "UTILIDAD_APORTE",
+      receipt: "Aporte a utilidad"
+    };
+    try {
+      await saveExpenseApi(updated);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    upsert(state.expenses, updated);
+    if (!API_ENABLED) saveState();
+    render();
+  });
 
   $("#receivablesTable")?.addEventListener("click", (event) => {
     const edit = event.target.closest("[data-edit-receivable]");
@@ -5026,7 +5077,7 @@ function bindEvents() {
       return;
     }
     const session = cashSessionToday();
-    const cashDate = operatingDate();
+    const cashDate = todayISO();
     if (!session) {
       alert("Primero abre la caja del dia.");
       return;
@@ -5309,7 +5360,7 @@ function bindEvents() {
     }
     const expense = {
       id: uid(isPurchase ? "utcompra" : "utaporte"),
-      date: data.date || operatingDate(),
+      date: data.date || todayISO(),
       detail: data.detail.trim(),
       amount,
       method: data.method || "TRANSFERENCIA",
@@ -5431,7 +5482,7 @@ function bindEvents() {
     }
     state.expenses.push(expense);
     event.currentTarget.reset();
-    event.currentTarget.date.value = operatingDate();
+    event.currentTarget.date.value = todayISO();
     if (!API_ENABLED) saveState();
     render();
   });
@@ -5560,7 +5611,7 @@ function init() {
   $("#agendaDate").value = todayISO();
   $('#paymentForm input[name="date"]').value = operatingDate();
   $('#historyForm input[name="date"]').value = todayISO();
-  $('#staffPaymentForm input[name="date"]').value = operatingDate();
+  $('#staffPaymentForm input[name="date"]').value = todayISO();
   $('#utilityForm input[name="date"]').value = todayISO();
   $("#reportMonth").value = todayISO().slice(0, 7);
   $("#compareMonth").value = previousMonth($("#reportMonth").value);
