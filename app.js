@@ -3802,7 +3802,8 @@ function renderStaffPayments() {
     <td>${escapeHtml(payment.method || "")}</td>
     <td><strong>${money(payment.amount)}</strong></td>
     <td>${escapeHtml(payment.detail || "")}</td>
-  </tr>`).join("") || `<tr><td colspan="6">Aun no hay pagos de personal o terceros.</td></tr>`;
+    <td class="row-actions">${isAdmin() ? `<button class="small-btn danger-btn" data-delete-staff-payment="${payment.id}">Eliminar</button>` : ""}</td>
+  </tr>`).join("") || `<tr><td colspan="7">Aun no hay pagos de personal o terceros.</td></tr>`;
 }
 
 function openAppointment(appointment = {}) {
@@ -4626,6 +4627,22 @@ function bindEvents() {
       return;
     }
     upsert(state.expenses, updated);
+    if (!API_ENABLED) saveState();
+    render();
+  });
+  $("#staffPaymentsTable")?.addEventListener("click", async (event) => {
+    const del = event.target.closest("[data-delete-staff-payment]");
+    if (!del || !isAdmin()) return;
+    const expense = state.expenses.find((item) => item.id === del.dataset.deleteStaffPayment && item.category === "PERSONAL_TERCERO");
+    if (!expense) return;
+    if (!confirm(`Eliminar este pago de ${expense.person || "personal/tercero"} por ${money(expense.amount)}? La caja general se recalculara automaticamente.`)) return;
+    try {
+      await deleteExpenseApi(expense.id);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.expenses = state.expenses.filter((item) => item.id !== expense.id);
     if (!API_ENABLED) saveState();
     render();
   });
@@ -5456,16 +5473,48 @@ function bindEvents() {
   });
   $("#staffPaymentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = formData(event.currentTarget);
+    const form = event.currentTarget;
+    if (form.dataset.saving === "1") return;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const previousText = submitButton?.textContent || "Guardar pago";
+    form.dataset.saving = "1";
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Guardando...";
+    }
+    const data = formData(form);
     const amount = Number(data.amount || 0);
     if (!data.person.trim() || !data.detail.trim() || amount <= 0) {
       alert("Completa la persona, el detalle y un monto mayor a cero.");
+      delete form.dataset.saving;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = previousText;
+      }
+      return;
+    }
+    const normalizedPerson = data.person.trim().toUpperCase();
+    const normalizedDetail = data.detail.trim().toUpperCase();
+    const duplicate = state.expenses.find((expense) =>
+      expense.category === "PERSONAL_TERCERO" &&
+      expense.date === (data.date || todayISO()) &&
+      String(expense.person || "").toUpperCase() === normalizedPerson &&
+      String(expense.detail || "").toUpperCase() === normalizedDetail &&
+      String(expense.method || "").toUpperCase() === String(data.method || "").toUpperCase() &&
+      cents(expense.amount) === cents(amount)
+    );
+    if (duplicate && !confirm("Ya existe un pago igual registrado en esa fecha. Deseas guardarlo nuevamente?")) {
+      delete form.dataset.saving;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = previousText;
+      }
       return;
     }
     const expense = {
       id: uid("staff"),
-      date: data.date || operatingDate(),
-      person: data.person.trim().toUpperCase(),
+      date: data.date || todayISO(),
+      person: normalizedPerson,
       type: data.type || "OTRO",
       detail: data.detail.trim(),
       amount,
@@ -5478,11 +5527,21 @@ function bindEvents() {
       await saveExpenseApi(expense);
     } catch (error) {
       alert(error.message);
+      delete form.dataset.saving;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = previousText;
+      }
       return;
     }
     state.expenses.push(expense);
-    event.currentTarget.reset();
-    event.currentTarget.date.value = todayISO();
+    form.reset();
+    form.date.value = todayISO();
+    delete form.dataset.saving;
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = previousText;
+    }
     if (!API_ENABLED) saveState();
     render();
   });
