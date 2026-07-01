@@ -1223,6 +1223,17 @@ function totalExpenseByMethodsForDate(date, methods) {
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 }
 
+function cashBoxDetailExpenseByMethodsForDate(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return expensesForDate(date)
+    .filter((expense) =>
+      normalized.includes(String(expense.method || "").toUpperCase()) &&
+      !isUtilityContribution(expense) &&
+      !isUtilityPurchase(expense)
+    )
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
 function todayExpenseByMethods(methods) {
   return expenseByMethodsForDate(operatingDate(), methods);
 }
@@ -3636,8 +3647,30 @@ function openGeneralBalanceDetail(type) {
   const body = $("#generalBalanceDetailBody");
   if (!title || !summary || !head || !body) return;
   const isCash = type === "cash";
+  const isUtility = type === "utility";
   const fromDate = cashBalanceStartDate();
   const toDate = todayISO();
+  const balances = generalCashBalances();
+  if (isUtility) {
+    const movements = utilityMovements();
+    const totalContributions = movements.filter(isUtilityContribution).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const totalPurchases = movements.filter(isUtilityPurchase).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    title.textContent = "Movimientos de utilidad";
+    summary.innerHTML = `<span>Utilidad inicial: <strong>${money(balances.utilityOpening)}</strong></span><span>Aportes: <strong>${money(totalContributions)}</strong></span><span>Compras: <strong>${money(totalPurchases)}</strong></span><span>Saldo actual: <strong>${money(balances.utility)}</strong></span>`;
+    head.innerHTML = `<tr><th>Fecha</th><th>Movimiento</th><th>Metodo</th><th>Monto</th><th>Detalle</th></tr>`;
+    body.innerHTML = movements.map((item) => {
+      const isPurchase = isUtilityPurchase(item);
+      return `<tr>
+        <td>${formatDate(item.date)}</td>
+        <td><span class="status ${isPurchase ? "danger" : ""}">${isPurchase ? "COMPRA" : "APORTE"}</span></td>
+        <td>${escapeHtml(item.method || "")}</td>
+        <td><strong>${isPurchase ? "-" : ""}${money(item.amount)}</strong></td>
+        <td>${escapeHtml(item.detail || "")}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="5">Aun no hay movimientos de utilidad.</td></tr>`;
+    $("#generalBalanceDetailDialog")?.showModal();
+    return;
+  }
   const rows = allDatesWithCashActivity()
     .filter((date) => date >= fromDate && date <= toDate)
     .sort()
@@ -3649,7 +3682,6 @@ function openGeneralBalanceDetail(type) {
       transfer: incomeForDate(date, "TRANSFERENCIA"),
       card: incomeForDate(date, "TARJETA")
     }));
-  const balances = generalCashBalances();
   const titlePrefix = isCash ? "Ingresos efectivo" : "Ingresos billeteras y bancos";
   const startLabel = formatDate(fromDate);
   title.textContent = `${titlePrefix} | ${cashBalancePeriodLabel()}`;
@@ -3659,7 +3691,7 @@ function openGeneralBalanceDetail(type) {
   if (isCash) {
     const cashRows = rows.map((row) => ({
       ...row,
-      cashExpense: totalExpenseByMethodsForDate(row.date, ["EFECTIVO"]),
+      cashExpense: cashBoxDetailExpenseByMethodsForDate(row.date, ["EFECTIVO"]),
       pettyCash: pettyCashDeliveredForDate(row.date)
     })).filter((row) => row.cash > 0 || row.cashExpense > 0 || row.pettyCash > 0);
     const totalExpense = cashRows.reduce((sum, row) => sum + row.cashExpense, 0);
@@ -3676,7 +3708,7 @@ function openGeneralBalanceDetail(type) {
   } else {
     const bankRows = rows.map((row) => ({
       ...row,
-      bankExpense: totalExpenseByMethodsForDate(row.date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"])
+      bankExpense: cashBoxDetailExpenseByMethodsForDate(row.date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"])
     })).filter((row) => row.yape + row.plin + row.transfer + row.card > 0 || row.bankExpense > 0);
     const totalExpense = bankRows.reduce((sum, row) => sum + row.bankExpense, 0);
     summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.bankOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos billeteras/bancos: <strong>${money(totalExpense)}</strong></span><span>Neto mes: <strong>${money(total - totalExpense)}</strong></span><span>Saldo actual: <strong>${money(balances.bank)}</strong></span>`;
