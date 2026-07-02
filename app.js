@@ -2224,7 +2224,7 @@ function isFollowUpOpen(appointment) {
 function appointmentFollowUps() {
   return state.appointments
     .filter(isFollowUpOpen)
-    .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+    .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
 }
 
 function followUpLabel(appointment) {
@@ -5171,8 +5171,8 @@ function bindEvents() {
       alert("Tu usuario no tiene permiso para cerrar caja.");
       return;
     }
-    const session = cashSessionToday();
-    const cashDate = todayISO();
+    const session = activeOpenCashSession();
+    const cashDate = session?.date || cashViewDate();
     if (!session) {
       alert("Primero abre la caja del dia.");
       return;
@@ -5195,7 +5195,9 @@ function bindEvents() {
       $("#closingCash").focus();
       return;
     }
-    const expected = Number(session.openingCash || 0) + todayIncome() - dailyCashAffectingExpenseTotal(cashDate);
+    const incomeTotal = incomeForCashView(cashDate);
+    const expenseTotal = dailyCashAffectingExpenseTotal(cashDate);
+    const expected = Number(session.openingCash || 0) + incomeTotal - expenseTotal;
     const closing = Number($("#closingCash").value || 0);
     const difference = closing - expected;
     if (Math.abs(difference) > 0.009) {
@@ -5209,8 +5211,8 @@ function bindEvents() {
     const closureCsvRows = csvRowsForDailyClose(cashDate);
     session.closingCash = closing;
     session.difference = difference;
-    session.incomeTotal = todayIncome();
-    session.expenseTotal = dailyCashAffectingExpenseTotal(cashDate);
+    session.incomeTotal = incomeTotal;
+    session.expenseTotal = expenseTotal;
     session.closedAt = new Date().toISOString();
     try {
       await closeCashApi({ date: cashDate, includedDates: cashDates, closingCash: closing, closedAt: session.closedAt });
