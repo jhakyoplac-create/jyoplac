@@ -1299,6 +1299,23 @@ function isUtilityPurchase(expense) {
   return expense.category === "UTILIDAD_COMPRA";
 }
 
+function isGeneralCashExpense(expense) {
+  return expense.source === "CAJA_GENERAL" && !isUtilityContribution(expense) && !isUtilityPurchase(expense);
+}
+
+function utilityContributionTotalForDate(date) {
+  return expensesForDate(date)
+    .filter(isUtilityContribution)
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function utilityContributionByMethodsForDate(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return expensesForDate(date)
+    .filter((expense) => isUtilityContribution(expense) && normalized.includes(String(expense.method || "").toUpperCase()))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
 function dailyExpenseTotal(date, includeGeneral = false) {
   return expensesForDate(date)
     .filter((expense) => includeGeneral || expenseAffectsDaily(expense))
@@ -1307,7 +1324,7 @@ function dailyExpenseTotal(date, includeGeneral = false) {
 
 function dailyGeneralExpenseTotal(date) {
   return expensesForDate(date)
-    .filter((expense) => expense.source === "CAJA_GENERAL")
+    .filter(isGeneralCashExpense)
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 }
 
@@ -3458,8 +3475,9 @@ function dailyIncomeBreakdownRows(month) {
     const card = incomeForDate(date, "TARJETA");
     const operationalExpenses = dailyExpenseTotal(date);
     const generalExpenses = dailyGeneralExpenseTotal(date);
-    const net = gross - operationalExpenses - generalExpenses;
-    return { date, gross, cash, yape, plin, transfer, card, operationalExpenses, generalExpenses, net };
+    const utilityTransfer = utilityContributionTotalForDate(date);
+    const net = gross - operationalExpenses - generalExpenses - utilityTransfer;
+    return { date, gross, cash, yape, plin, transfer, card, operationalExpenses, generalExpenses, utilityTransfer, net };
   });
 }
 
@@ -3475,10 +3493,11 @@ function renderDailyIncomeBreakdown(month) {
       <td>${money(row.card)}</td>
       <td>${money(row.operationalExpenses)}</td>
       <td>${money(row.generalExpenses)}</td>
+      <td>${money(row.utilityTransfer)}</td>
       <td><strong>${money(row.net)}</strong></td>
     </tr>`;
   }).join("");
-  $("#dailyIncomeBreakdownReport").innerHTML = `<table><thead><tr><th>Fecha</th><th>Bruto</th><th>Efectivo</th><th>Yape</th><th>Plin</th><th>Transfer.</th><th>Tarjeta</th><th>Egresos oper.</th><th>Egresos caja gral.</th><th>Neto</th></tr></thead><tbody>${rows || `<tr><td colspan="10">Sin ingresos registrados este mes.</td></tr>`}</tbody></table>`;
+  $("#dailyIncomeBreakdownReport").innerHTML = `<table><thead><tr><th>Fecha</th><th>Bruto</th><th>Efectivo</th><th>Yape</th><th>Plin</th><th>Transfer.</th><th>Tarjeta</th><th>Egresos oper.</th><th>Egresos caja gral.</th><th>A utilidad</th><th>Neto</th></tr></thead><tbody>${rows || `<tr><td colspan="11">Sin ingresos registrados este mes.</td></tr>`}</tbody></table>`;
 }
 
 function renderReports() {
@@ -3692,27 +3711,32 @@ function openGeneralBalanceDetail(type) {
     const cashRows = rows.map((row) => ({
       ...row,
       cashExpense: cashBoxDetailExpenseByMethodsForDate(row.date, ["EFECTIVO"]),
-      pettyCash: pettyCashDeliveredForDate(row.date)
-    })).filter((row) => row.cash > 0 || row.cashExpense > 0 || row.pettyCash > 0);
+      pettyCash: pettyCashDeliveredForDate(row.date),
+      utilityOut: utilityContributionByMethodsForDate(row.date, ["EFECTIVO"])
+    })).filter((row) => row.cash > 0 || row.cashExpense > 0 || row.pettyCash > 0 || row.utilityOut > 0);
     const totalExpense = cashRows.reduce((sum, row) => sum + row.cashExpense, 0);
     const totalPettyCash = cashRows.reduce((sum, row) => sum + row.pettyCash, 0);
-    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.cashOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos efectivo: <strong>${money(totalExpense)}</strong></span><span>Salida caja chica: <strong>${money(totalPettyCash)}</strong></span><span>Neto mes: <strong>${money(total - totalExpense - totalPettyCash)}</strong></span><span>Saldo actual: <strong>${money(balances.cash)}</strong></span>`;
-    head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Egreso efectivo</th><th>Caja chica</th><th>Neto</th></tr>`;
+    const utilityOut = cashRows.reduce((sum, row) => sum + row.utilityOut, 0);
+    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.cashOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos efectivo: <strong>${money(totalExpense)}</strong></span><span>Salida caja chica: <strong>${money(totalPettyCash)}</strong></span><span>A utilidad: <strong>${money(utilityOut)}</strong></span><span>Neto disponible: <strong>${money(total - totalExpense - totalPettyCash - utilityOut)}</strong></span><span>Saldo actual: <strong>${money(balances.cash)}</strong></span>`;
+    head.innerHTML = `<tr><th>Fecha</th><th>Efectivo</th><th>Egreso efectivo</th><th>Caja chica</th><th>A utilidad</th><th>Neto disponible</th></tr>`;
     body.innerHTML = cashRows.map((row) => `<tr>
       <td>${formatDate(row.date)}</td>
       <td>${money(row.cash)}</td>
       <td>${money(row.cashExpense)}</td>
       <td>${money(row.pettyCash)}</td>
-      <td><strong>${money(row.cash - row.cashExpense - row.pettyCash)}</strong></td>
-    </tr>`).join("") || `<tr><td colspan="5">Sin movimientos en efectivo desde ${startLabel}.</td></tr>`;
+      <td>${money(row.utilityOut)}</td>
+      <td><strong>${money(row.cash - row.cashExpense - row.pettyCash - row.utilityOut)}</strong></td>
+    </tr>`).join("") || `<tr><td colspan="6">Sin movimientos en efectivo desde ${startLabel}.</td></tr>`;
   } else {
     const bankRows = rows.map((row) => ({
       ...row,
-      bankExpense: cashBoxDetailExpenseByMethodsForDate(row.date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"])
-    })).filter((row) => row.yape + row.plin + row.transfer + row.card > 0 || row.bankExpense > 0);
+      bankExpense: cashBoxDetailExpenseByMethodsForDate(row.date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"]),
+      utilityOut: utilityContributionByMethodsForDate(row.date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"])
+    })).filter((row) => row.yape + row.plin + row.transfer + row.card > 0 || row.bankExpense > 0 || row.utilityOut > 0);
     const totalExpense = bankRows.reduce((sum, row) => sum + row.bankExpense, 0);
-    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.bankOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos billeteras/bancos: <strong>${money(totalExpense)}</strong></span><span>Neto mes: <strong>${money(total - totalExpense)}</strong></span><span>Saldo actual: <strong>${money(balances.bank)}</strong></span>`;
-    head.innerHTML = `<tr><th>Fecha</th><th>Yape</th><th>Plin</th><th>Transferencia</th><th>Tarjeta</th><th>Egresos</th><th>Neto</th></tr>`;
+    const utilityOut = bankRows.reduce((sum, row) => sum + row.utilityOut, 0);
+    summary.innerHTML = `<span>Saldo inicial: <strong>${money(balances.bankOpening)}</strong></span><span>Desde ${startLabel}: <strong>${money(total)}</strong></span><span>Egresos billeteras/bancos: <strong>${money(totalExpense)}</strong></span><span>A utilidad: <strong>${money(utilityOut)}</strong></span><span>Neto disponible: <strong>${money(total - totalExpense - utilityOut)}</strong></span><span>Saldo actual: <strong>${money(balances.bank)}</strong></span>`;
+    head.innerHTML = `<tr><th>Fecha</th><th>Yape</th><th>Plin</th><th>Transferencia</th><th>Tarjeta</th><th>Egresos</th><th>A utilidad</th><th>Neto disponible</th></tr>`;
     body.innerHTML = bankRows.map((row) => {
       const dayTotal = row.yape + row.plin + row.transfer + row.card;
       return `<tr>
@@ -3722,9 +3746,10 @@ function openGeneralBalanceDetail(type) {
         <td>${money(row.transfer)}</td>
         <td>${money(row.card)}</td>
         <td>${money(row.bankExpense)}</td>
-        <td><strong>${money(dayTotal - row.bankExpense)}</strong></td>
+        <td>${money(row.utilityOut)}</td>
+        <td><strong>${money(dayTotal - row.bankExpense - row.utilityOut)}</strong></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="7">Sin movimientos por billeteras o bancos desde ${startLabel}.</td></tr>`;
+    }).join("") || `<tr><td colspan="8">Sin movimientos por billeteras o bancos desde ${startLabel}.</td></tr>`;
   }
   $("#generalBalanceDetailDialog")?.showModal();
 }
@@ -3759,13 +3784,16 @@ function renderUtilityMovements() {
     const action = isAdmin() && isPurchase
       ? `<button class="small-btn" data-utility-to-contribution="${item.id}">Pasar a utilidad</button>`
       : "";
+    const deleteAction = isAdmin()
+      ? `<button class="small-btn danger-btn" data-delete-utility-movement="${item.id}">Eliminar</button>`
+      : "";
     return `<tr>
       <td>${formatDate(item.date)}</td>
       <td><span class="status ${isPurchase ? "danger" : ""}">${isPurchase ? "COMPRA" : "APORTE"}</span></td>
       <td>${escapeHtml(item.method || "")}</td>
       <td><strong>${isPurchase ? "-" : ""}${money(item.amount)}</strong></td>
       <td>${escapeHtml(item.detail || "")}</td>
-      <td class="row-actions">${action}</td>
+      <td class="row-actions">${action}${deleteAction}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="6">Aun no hay movimientos de utilidad.</td></tr>`;
 }
@@ -3799,6 +3827,7 @@ function renderGeneralCash() {
     const income = incomeForDate(date);
     const opExpenses = dailyExpenseTotal(date);
     const generalExpenses = dailyGeneralExpenseTotal(date);
+    const utilityTransfer = utilityContributionTotalForDate(date);
     const details = printableRowsForDailyClose(date);
     const detailRows = details.map((row) => `<tr><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.detalle)}</td><td>${escapeHtml(row.metodo || "")}</td><td>${escapeHtml(row.origen || "")}</td><td>${moneyForPrint(row.monto)}</td></tr>`).join("");
     return `<tr>
@@ -3806,13 +3835,14 @@ function renderGeneralCash() {
       <td>${money(income)}</td>
       <td>${money(opExpenses)}</td>
       <td>${money(generalExpenses)}</td>
-      <td><strong>${money(income - opExpenses - generalExpenses)}</strong>
+      <td>${money(utilityTransfer)}</td>
+      <td><strong>${money(income - opExpenses - generalExpenses - utilityTransfer)}</strong>
         <details class="day-detail"><summary>Ver detalle</summary>
           <table><thead><tr><th>Tipo</th><th>Detalle</th><th>Metodo</th><th>Origen</th><th>Monto</th></tr></thead><tbody>${detailRows}</tbody></table>
         </details>
       </td>
     </tr>`;
-  }).join("") || `<tr><td colspan="5">No hay movimientos en el rango seleccionado.</td></tr>`;
+  }).join("") || `<tr><td colspan="6">No hay movimientos en el rango seleccionado.</td></tr>`;
   renderUtilityMovements();
   renderStaffPayments();
 }
@@ -4641,6 +4671,22 @@ function bindEvents() {
   $("#expensesTable")?.addEventListener("click", handleExpenseDelete);
   $("#generalExpensesTable")?.addEventListener("click", handleExpenseDelete);
   $("#utilityMovementsTable")?.addEventListener("click", async (event) => {
+    const del = event.target.closest("[data-delete-utility-movement]");
+    if (del && isAdmin()) {
+      const expense = state.expenses.find((item) => item.id === del.dataset.deleteUtilityMovement && (isUtilityContribution(item) || isUtilityPurchase(item)));
+      if (!expense) return;
+      if (!confirm(`Eliminar este movimiento de utilidad por ${money(expense.amount)}? Los saldos se recalcularan automaticamente.`)) return;
+      try {
+        await deleteExpenseApi(expense.id);
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      state.expenses = state.expenses.filter((item) => item.id !== expense.id);
+      if (!API_ENABLED) saveState();
+      render();
+      return;
+    }
     const convert = event.target.closest("[data-utility-to-contribution]");
     if (!convert || !isAdmin()) return;
     const expense = state.expenses.find((item) => item.id === convert.dataset.utilityToContribution);
@@ -5585,7 +5631,7 @@ function bindEvents() {
       egresos_caja_general: dailyGeneralExpenseTotal(date),
       aportes_utilidad: state.expenses.filter((expense) => expense.date === date && isUtilityContribution(expense)).reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
       compras_utilidad: state.expenses.filter((expense) => expense.date === date && isUtilityPurchase(expense)).reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
-      neto: incomeForDate(date) - dailyExpenseTotal(date) - dailyGeneralExpenseTotal(date)
+      neto: incomeForDate(date) - dailyExpenseTotal(date) - dailyGeneralExpenseTotal(date) - utilityContributionTotalForDate(date)
     }));
     exportCsv("caja-general.csv", rows);
   });
@@ -5655,6 +5701,7 @@ function bindEvents() {
         tarjeta: row.card,
         egresos_operativos: row.operationalExpenses,
         egresos_caja_general: row.generalExpenses,
+        a_utilidad: row.utilityTransfer,
         neto: row.net
       })),
       ...monthlyCareData(month).map((item) => ({ seccion: "ATENCIONES_MENSUALES", mes: item.month, cantidad: item.count })),
@@ -5691,6 +5738,7 @@ function bindEvents() {
       tarjeta: row.card,
       egresos_operativos: row.operationalExpenses,
       egresos_caja_general: row.generalExpenses,
+      a_utilidad: row.utilityTransfer,
       neto: row.net
     }));
     exportCsv(`ingresos-por-dia-${month}.csv`, rows);
