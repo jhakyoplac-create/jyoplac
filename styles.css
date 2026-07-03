@@ -1296,6 +1296,19 @@ dialog::backdrop {
   width: min(460px, calc(100vw - 32px));
 }
 
+.alert-dialog .panel-head {
+  justify-content: center;
+}
+
+.alert-dialog h2 {
+  font-size: 20px;
+  text-align: center;
+}
+
+.alert-dialog menu {
+  justify-content: center;
+}
+
 #receiptIssueDialog {
   width: min(920px, calc(100vw - 24px));
 }
@@ -1322,8 +1335,7 @@ dialog::backdrop {
   padding: 10px 12px;
 }
 
-.receipt-issue-modal menu,
-.alert-dialog menu {
+.receipt-issue-modal menu {
   margin-top: 14px;
 }
 

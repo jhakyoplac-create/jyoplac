@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260621-caja-chips" />
+    <link rel="stylesheet" href="styles.css?v=20260702-pagos-rapidos" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -980,12 +980,11 @@
     <dialog id="receiptPromptDialog">
       <div class="form modal-form alert-dialog">
         <div class="panel-head">
-          <h2>¿Desea emitir comprobante?</h2>
+          <h2>¿Emitir comprobante?</h2>
         </div>
-        <p class="muted">Puedes emitir una boleta o factura interna ahora, o guardar solo el pago.</p>
         <menu>
-          <button class="ghost" id="savePaymentOnlyBtn" type="button">No, solo guardar pago</button>
-          <button class="primary" id="openReceiptIssueBtn" type="button">Sí, emitir comprobante</button>
+          <button class="ghost" id="savePaymentOnlyBtn" type="button">No</button>
+          <button class="primary" id="openReceiptIssueBtn" type="button">Sí</button>
         </menu>
       </div>
     </dialog>
@@ -1021,6 +1020,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260702-seguimiento-reciente"></script>
+    <script src="app.js?v=20260702-pagos-rapidos"></script>
   </body>
 </html>

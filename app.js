@@ -2946,6 +2946,37 @@ async function completePendingPayment(receiptValues = null) {
   const context = pendingPaymentContext;
   if (!context) return;
   const { payment, form, restorePaymentButton } = context;
+  const optimisticSave = !receiptValues;
+  const appointment = payment.appointmentId && state.config.enableAgendaPayments !== false
+    ? state.appointments.find((item) => item.id === payment.appointmentId)
+    : null;
+  const previousAppointmentStatus = appointment?.status || "";
+  const finishPaymentUi = () => {
+    if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
+    form.reset();
+    form.date.value = operatingDate();
+    pendingPaymentContext = null;
+    $("#receiptPromptDialog")?.close("ok");
+    $("#receiptIssueDialog")?.close("ok");
+    render();
+    restorePaymentButton();
+  };
+  const applyPaymentLocally = () => {
+    upsert(state.payments, payment);
+    if (appointment) {
+      appointment.status = "ATENDIDA";
+      addLocalAuditEvent(
+        "APPOINTMENT_ATTENDED",
+        `Marco atendida desde pago: ${patientById(appointment.patientId)?.name || "Paciente"} ${appointment.date} ${appointment.time}`,
+        appointment.patientId
+      );
+    }
+    if (!API_ENABLED) saveState();
+  };
+  if (optimisticSave) {
+    applyPaymentLocally();
+    finishPaymentUi();
+  }
   try {
     await savePaymentApi(payment);
     if (receiptValues) {
@@ -2957,32 +2988,19 @@ async function completePendingPayment(receiptValues = null) {
         await savePaymentApi(payment);
       }
     }
-    if (payment.appointmentId && state.config.enableAgendaPayments !== false) {
-      const appointment = state.appointments.find((item) => item.id === payment.appointmentId);
-      if (appointment) {
-        appointment.status = "ATENDIDA";
-        addLocalAuditEvent(
-          "APPOINTMENT_ATTENDED",
-          `Marco atendida desde pago: ${patientById(appointment.patientId)?.name || "Paciente"} ${appointment.date} ${appointment.time}`,
-          appointment.patientId
-        );
-      }
-    }
+    if (!optimisticSave) applyPaymentLocally();
   } catch (error) {
+    if (optimisticSave) {
+      state.payments = state.payments.filter((item) => item.id !== payment.id);
+      if (appointment) appointment.status = previousAppointmentStatus;
+      if (!API_ENABLED) saveState();
+      render();
+    }
     alert(error.message);
     restorePaymentButton();
     return;
   }
-  upsert(state.payments, payment);
-  if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
-  form.reset();
-  form.date.value = operatingDate();
-  if (!API_ENABLED) saveState();
-  pendingPaymentContext = null;
-  $("#receiptPromptDialog")?.close("ok");
-  $("#receiptIssueDialog")?.close("ok");
-  render();
-  restorePaymentButton();
+  if (!optimisticSave) finishPaymentUi();
 }
 
 function renderReceivables() {
@@ -4559,24 +4577,40 @@ function bindEvents() {
       hideFromReceptionNew: Boolean(existingPatient?.hideFromReceptionNew),
       notes: data.notes
     };
-    try {
-      await savePatientApi(patient);
-    } catch (error) {
-      alert(error.message);
-      patientSaving = false;
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.textContent = "Guardar paciente";
-      }
-      return;
-    }
+    const previousPatient = existingPatient ? { ...existingPatient } : null;
     upsert(state.patients, patient);
-    addLocalAuditEvent(existingPatient ? "PATIENT_UPDATED" : "PATIENT_CREATED", `${existingPatient ? "Edito paciente" : "Ingreso paciente"}: ${patient.name} (${patient.dni})`, patient.id);
     lastSavedPatientId = patient.id;
     form.reset();
     resetPatientFormMode();
     const search = $("#globalSearch");
     if (search) search.value = "";
+    if (!API_ENABLED) saveState();
+    render();
+    if (saveMessage) {
+      saveMessage.textContent = "Paciente guardado. Sincronizando con la nube...";
+      saveMessage.hidden = false;
+    }
+    try {
+      await savePatientApi(patient);
+    } catch (error) {
+      if (previousPatient) upsert(state.patients, previousPatient);
+      else state.patients = state.patients.filter((item) => item.id !== patient.id);
+      if (!API_ENABLED) saveState();
+      render();
+      Object.entries(patient).forEach(([key, value]) => {
+        const field = form.elements.namedItem(key);
+        if (field) field.value = value;
+      });
+      if (editingId) patientEditingId = editingId;
+      alert(error.message);
+      patientSaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = editingId ? "Actualizar paciente" : "Guardar paciente";
+      }
+      return;
+    }
+    addLocalAuditEvent(existingPatient ? "PATIENT_UPDATED" : "PATIENT_CREATED", `${existingPatient ? "Edito paciente" : "Ingreso paciente"}: ${patient.name} (${patient.dni})`, patient.id);
     if (!API_ENABLED) saveState();
     render();
     if (saveMessage) {
