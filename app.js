@@ -2224,7 +2224,7 @@ function isFollowUpOpen(appointment) {
 function appointmentFollowUps() {
   return state.appointments
     .filter(isFollowUpOpen)
-    .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
+    .sort((a, b) => appointmentSortKey(b).localeCompare(appointmentSortKey(a)));
 }
 
 function followUpLabel(appointment) {
