@@ -1320,6 +1320,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         {"error": f"La caja de {existing['date']} sigue abierta. Primero debes cerrar esa caja antes de abrir otra."},
                         409,
                     )
+                existing_for_date = conn.execute(
+                    "SELECT date FROM cash_sessions WHERE date=? LIMIT 1",
+                    (date,),
+                ).fetchone()
+                if existing_for_date:
+                    return send_json(
+                        self,
+                        {"error": f"La caja de {date} ya fue registrada. Selecciona esa fecha para revisar sus pagos."},
+                        409,
+                    )
                 item_id = data.get("id") or now_id("cash")
                 conn.execute(
                     """

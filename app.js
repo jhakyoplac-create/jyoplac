@@ -1264,6 +1264,16 @@ function expensesForCashView(date) {
   return expensesForDate(date);
 }
 
+function visiblePaymentsForCashView(date) {
+  const dates = cashOperationDates(date);
+  return state.payments.filter((payment) => dates.includes(payment.date));
+}
+
+function visibleExpensesForCashView(date) {
+  const dates = cashOperationDates(date);
+  return state.expenses.filter((expense) => dates.includes(expense.date));
+}
+
 function incomeForCashView(date, method = null) {
   return paymentsForCashView(date)
     .reduce((sum, payment) => sum + (method ? paymentAmountForMethods(payment, [method]) : Number(payment.amount || 0)), 0);
@@ -2603,7 +2613,7 @@ function renderPayments() {
       ${isAdmin() ? "<th>Accion</th>" : ""}
     `;
   }
-  $("#paymentsTable").innerHTML = paymentsForCashView(cashDate)
+  $("#paymentsTable").innerHTML = visiblePaymentsForCashView(cashDate)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((payment) => {
@@ -3109,7 +3119,7 @@ function renderExpenses(cashDate = cashViewDate()) {
       ${isAdmin() ? "<th>Accion</th>" : ""}
     `;
   }
-  const rows = expensesForCashView(cashDate).filter(expenseAffectsDaily).map((expense) => `<tr>
+  const rows = visibleExpensesForCashView(cashDate).filter(expenseAffectsDaily).map((expense) => `<tr>
     <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
     <td>${escapeHtml(expense.method)}</td>
     <td>${escapeHtml(expense.source)}</td>
@@ -3129,7 +3139,7 @@ function renderExpenses(cashDate = cashViewDate()) {
     `;
   }
   if (generalExpensesTable) {
-    const generalRows = expensesForCashView(cashDate)
+    const generalRows = visibleExpensesForCashView(cashDate)
       .filter((expense) => expense.source === "CAJA_GENERAL")
       .map((expense) => `<tr>
         <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
@@ -5183,6 +5193,13 @@ function bindEvents() {
       return;
     }
     const cashDate = todayISO();
+    const sessionForDate = state.cashSessions.find((session) => session.date === cashDate);
+    if (sessionForDate) {
+      alert(`La caja de ${formatDate(cashDate)} ya fue registrada. Para revisar sus pagos, selecciona esa fecha en Fecha de caja.`);
+      selectedCashViewDate = cashDate;
+      render();
+      return;
+    }
     const openingCash = Number(pettyCashAmount(cashDate) || 0);
     if (openingCash > generalCashBalances().cash) {
       alert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
@@ -5408,7 +5425,7 @@ function bindEvents() {
   $("#exportTreatmentsBtn").addEventListener("click", () => exportCsv("tratamientos.csv", state.treatments));
   $("#exportPaymentsBtn").addEventListener("click", () => {
     const cashDate = cashViewDate();
-    exportCsv(`pagos-${cashDate}.csv`, paymentsForCashView(cashDate).map((payment) => ({
+    exportCsv(`pagos-${cashDate}.csv`, visiblePaymentsForCashView(cashDate).map((payment) => ({
       fecha: payment.date || cashDate,
       paciente: patientById(payment.patientId)?.name || "",
       metodo: payment.method,
