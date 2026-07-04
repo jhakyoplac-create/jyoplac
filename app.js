@@ -1274,6 +1274,37 @@ function visibleExpensesForCashView(date) {
   return state.expenses.filter((expense) => dates.includes(expense.date));
 }
 
+function visibleIncomeForCashView(date, method = null) {
+  return visiblePaymentsForCashView(date)
+    .reduce((sum, payment) => sum + (method ? paymentAmountForMethods(payment, [method]) : Number(payment.amount || 0)), 0);
+}
+
+function visibleIncomeByMethodsForCashView(date, methods) {
+  return visiblePaymentsForCashView(date)
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, methods), 0);
+}
+
+function visibleExpenseByMethodsForCashView(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return visibleExpensesForCashView(date)
+    .filter((expense) => expenseAffectsDaily(expense) && normalized.includes(String(expense.method || "").toUpperCase()))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function visibleCashAffectingExpenseTotalForView(date) {
+  return visibleExpensesForCashView(date)
+    .filter((expense) => expenseAffectsDaily(expense))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function hasOnlyClosedVisibleCashMovements(date) {
+  const pendingIncome = cents(incomeForCashView(date));
+  const pendingExpenses = cents(cashAffectingExpenseTotalForView(date));
+  const visibleIncome = cents(visibleIncomeForCashView(date));
+  const visibleExpenses = cents(visibleCashAffectingExpenseTotalForView(date));
+  return pendingIncome === 0 && pendingExpenses === 0 && (visibleIncome !== 0 || visibleExpenses !== 0);
+}
+
 function incomeForCashView(date, method = null) {
   return paymentsForCashView(date)
     .reduce((sum, payment) => sum + (method ? paymentAmountForMethods(payment, [method]) : Number(payment.amount || 0)), 0);
@@ -3078,14 +3109,14 @@ function renderCashBox(cashDate = cashViewDate()) {
   const openingInput = $("#openingCash");
   if (!session && openingInput && document.activeElement !== openingInput) openingInput.value = suggestedOpening || "";
   const opening = Number(session?.openingCash ?? openingInput?.value ?? suggestedOpening ?? 0);
-  const income = incomeForCashView(cashDate);
-  const expenses = cashAffectingExpenseTotalForView(cashDate);
-  const cashIncome = incomeByMethodsForCashView(cashDate, ["EFECTIVO"]);
-  const walletIncome = incomeByMethodsForCashView(cashDate, ["YAPE", "PLIN"]);
-  const bankIncome = incomeByMethodsForCashView(cashDate, ["TARJETA", "TRANSFERENCIA"]);
-  const cashNet = opening + cashIncome - expenseByMethodsForCashView(cashDate, ["EFECTIVO"]);
-  const walletNet = walletIncome - expenseByMethodsForCashView(cashDate, ["YAPE", "PLIN"]);
-  const bankNet = bankIncome - expenseByMethodsForCashView(cashDate, ["TARJETA", "TRANSFERENCIA"]);
+  const income = visibleIncomeForCashView(cashDate);
+  const expenses = visibleCashAffectingExpenseTotalForView(cashDate);
+  const cashIncome = visibleIncomeByMethodsForCashView(cashDate, ["EFECTIVO"]);
+  const walletIncome = visibleIncomeByMethodsForCashView(cashDate, ["YAPE", "PLIN"]);
+  const bankIncome = visibleIncomeByMethodsForCashView(cashDate, ["TARJETA", "TRANSFERENCIA"]);
+  const cashNet = opening + cashIncome - visibleExpenseByMethodsForCashView(cashDate, ["EFECTIVO"]);
+  const walletNet = walletIncome - visibleExpenseByMethodsForCashView(cashDate, ["YAPE", "PLIN"]);
+  const bankNet = bankIncome - visibleExpenseByMethodsForCashView(cashDate, ["TARJETA", "TRANSFERENCIA"]);
   const expected = opening + income - expenses;
   $("#cashStatus").textContent = isOpen ? "ABIERTA" : session?.closedAt ? "CERRADA" : "SIN APERTURA";
   $("#cashOpeningLabel").textContent = money(opening);
@@ -5247,9 +5278,14 @@ function bindEvents() {
       return;
     }
     const incomeTotal = incomeForCashView(cashDate);
-    const expenseTotal = dailyCashAffectingExpenseTotal(cashDate);
+    const expenseTotal = cashAffectingExpenseTotalForView(cashDate);
     const expected = Number(session.openingCash || 0) + incomeTotal - expenseTotal;
-    const closing = Number($("#closingCash").value || 0);
+    const reviewOnlyClose = hasOnlyClosedVisibleCashMovements(cashDate);
+    let closing = Number($("#closingCash").value || 0);
+    if (reviewOnlyClose) {
+      closing = expected;
+      $("#closingCash").value = expected.toFixed(2);
+    }
     const difference = closing - expected;
     if (Math.abs(difference) > 0.009) {
       alert(`No puedes cerrar caja con diferencia. Esperado: ${money(expected)}. Contado: ${money(closing)}. Diferencia: ${money(difference)}. Corrige el efectivo contado hasta que la diferencia sea S/ 0.00.`);
@@ -5286,7 +5322,9 @@ function bindEvents() {
     if (!API_ENABLED) saveState();
     render();
     printDailyClose(cashDate);
-    alert(`Caja cerrada. Diferencia: ${money(session.difference)}`);
+    alert(reviewOnlyClose
+      ? `Caja cerrada sin volver a sumar movimientos ya registrados. Diferencia: ${money(session.difference)}`
+      : `Caja cerrada. Diferencia: ${money(session.difference)}`);
   });
 
   $("#openingCash").addEventListener("input", () => renderCashBox());
