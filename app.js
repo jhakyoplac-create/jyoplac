@@ -1907,14 +1907,6 @@ function setView(view) {
   }[view];
   const cashPeriodButton = $("#openCashPeriodBtn");
   if (cashPeriodButton) cashPeriodButton.hidden = view !== "caja-general";
-  const cashPeriodTitleRange = $("#cashPeriodTitleRange");
-  if (cashPeriodTitleRange) cashPeriodTitleRange.hidden = view !== "caja-general";
-  if (view === "caja-general") {
-    const fromInput = $("#cashTitleRangeFrom");
-    const toInput = $("#cashTitleRangeTo");
-    if (fromInput && !fromInput.value) fromInput.value = todayISO();
-    if (toInput && !toInput.value) toInput.value = todayISO();
-  }
   render();
 }
 
@@ -4285,15 +4277,6 @@ function openCashPeriodDialog() {
   }
 }
 
-function openCashPeriodRangeDialog() {
-  const fromInput = $("#cashTitleRangeFrom");
-  const toInput = $("#cashTitleRangeTo");
-  const from = fromInput?.value || todayISO();
-  const to = toInput?.value || todayISO();
-  setCashPeriodRange(from, to);
-  $("#cashPeriodDialog")?.showModal();
-}
-
 function utilityMovements() {
   return state.expenses
     .filter((expense) => isUtilityContribution(expense) || isUtilityPurchase(expense))
@@ -6336,7 +6319,6 @@ function bindEvents() {
   $("#cashPeriodMonth")?.addEventListener("change", (event) => {
     if (event.target.value) setCashPeriodMonth(event.target.value);
   });
-  $("#cashTitleRangeBtn")?.addEventListener("click", openCashPeriodRangeDialog);
   $("#cashPeriodAllBtn")?.addEventListener("click", () => {
     const dates = allDatesWithCashActivity();
     const monthInput = $("#cashPeriodMonth");
