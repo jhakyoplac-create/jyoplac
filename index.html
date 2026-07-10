@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260710-inventario-sin-limite" />
+    <link rel="stylesheet" href="styles.css?v=20260710-caja-rango-titulo" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -79,6 +79,10 @@
               <span></span>
             </button>
             <input id="cashTitleMonthPicker" class="title-month-picker" type="month" aria-label="Seleccionar mes de caja" />
+            <div id="cashTitleRangeControls" class="title-range-controls" hidden>
+              <label>Desde<input id="cashTitleFrom" type="date" /></label>
+              <label>Hasta<input id="cashTitleTo" type="date" /></label>
+            </div>
           </div>
         </div>
         <div class="top-actions" id="patientTopActions" hidden>
@@ -1130,6 +1134,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260710-inventario-sin-limite"></script>
+    <script src="app.js?v=20260710-caja-rango-titulo"></script>
   </body>
 </html>

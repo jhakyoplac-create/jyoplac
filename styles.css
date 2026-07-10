@@ -178,6 +178,36 @@ textarea {
   width: 1px;
 }
 
+.title-range-controls {
+  display: inline-flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.title-range-controls[hidden] {
+  display: none;
+}
+
+.title-range-controls label {
+  color: var(--muted);
+  display: grid;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 3px;
+}
+
+.title-range-controls input {
+  height: 34px;
+  min-width: 142px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .title-icon-btn span {
   width: 15px;
   height: 15px;

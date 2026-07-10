@@ -1908,6 +1908,8 @@ function setView(view) {
   }[view];
   const cashPeriodButton = $("#openCashPeriodBtn");
   if (cashPeriodButton) cashPeriodButton.hidden = view !== "caja-general";
+  const cashRangeControls = $("#cashTitleRangeControls");
+  if (cashRangeControls) cashRangeControls.hidden = view !== "caja-general";
   render();
 }
 
@@ -4196,10 +4198,35 @@ function cashReportRangeForMonth(month) {
   };
 }
 
+function cashReportRangeForDates(from, to) {
+  let start = from || todayISO();
+  let end = to || start;
+  if (start > end) [start, end] = [end, start];
+  return {
+    from: start,
+    to: end,
+    month: start.slice(0, 7) === end.slice(0, 7) ? start.slice(0, 7) : "",
+    label: `${formatDate(start)} - ${formatDate(end)}`
+  };
+}
+
+function syncCashTitleRangeInputs() {
+  const fromInput = $("#cashTitleFrom");
+  const toInput = $("#cashTitleTo");
+  if (!fromInput || !toInput) return;
+  if (selectedCashReportRange) {
+    fromInput.value = selectedCashReportRange.from;
+    toInput.value = selectedCashReportRange.to;
+    return;
+  }
+  if (!fromInput.value) fromInput.value = cashBalanceStartDate();
+  if (!toInput.value) toInput.value = todayISO();
+}
+
 function openCashPeriodDialog() {
   const month = todayISO().slice(0, 7);
   const picker = $("#cashTitleMonthPicker");
-  if (picker) picker.value = selectedCashReportRange?.month || "";
+  if (picker) picker.value = selectedCashReportRange?.month || month;
   picker?.focus();
   if (!picker?.showPicker) {
     openCashPeriodForMonth(month);
@@ -4214,6 +4241,25 @@ function openCashPeriodDialog() {
 
 function openCashPeriodForMonth(month) {
   selectedCashReportRange = cashReportRangeForMonth(month);
+  syncCashTitleRangeInputs();
+  const picker = $("#cashTitleMonthPicker");
+  if (picker) picker.value = month;
+  const summaryFrom = $("#generalSummaryFrom");
+  const summaryTo = $("#generalSummaryTo");
+  if (summaryFrom) summaryFrom.value = selectedCashReportRange.from;
+  if (summaryTo) summaryTo.value = selectedCashReportRange.to;
+  renderGeneralCash();
+}
+
+function openCashPeriodForDateRange(from, to) {
+  selectedCashReportRange = cashReportRangeForDates(from, to);
+  syncCashTitleRangeInputs();
+  const picker = $("#cashTitleMonthPicker");
+  if (picker) picker.value = selectedCashReportRange.month || "";
+  const summaryFrom = $("#generalSummaryFrom");
+  const summaryTo = $("#generalSummaryTo");
+  if (summaryFrom) summaryFrom.value = selectedCashReportRange.from;
+  if (summaryTo) summaryTo.value = selectedCashReportRange.to;
   renderGeneralCash();
 }
 
@@ -4248,6 +4294,7 @@ function renderUtilityMovements() {
 
 function renderGeneralCash() {
   const cashDate = todayISO();
+  syncCashTitleRangeInputs();
   const balanceOptions = selectedCashReportRange
     ? { from: selectedCashReportRange.from, to: selectedCashReportRange.to }
     : {};
@@ -6284,6 +6331,13 @@ function bindEvents() {
   };
   $("#cashTitleMonthPicker")?.addEventListener("input", applyCashTitleMonth);
   $("#cashTitleMonthPicker")?.addEventListener("change", applyCashTitleMonth);
+  const applyCashTitleRange = () => {
+    const from = $("#cashTitleFrom")?.value;
+    const to = $("#cashTitleTo")?.value;
+    if (from && to) openCashPeriodForDateRange(from, to);
+  };
+  $("#cashTitleFrom")?.addEventListener("change", applyCashTitleRange);
+  $("#cashTitleTo")?.addEventListener("change", applyCashTitleRange);
   $("#exportUtilityBtn")?.addEventListener("click", () => {
     exportCsv("movimientos-utilidad.csv", utilityMovements().map((item) => ({
       fecha: item.date,
