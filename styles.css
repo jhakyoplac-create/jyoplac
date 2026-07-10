@@ -1123,6 +1123,10 @@ tr.followup-pending td:first-child {
   line-height: 1.22;
 }
 
+.income-breakdown-panel table.daily-income-table {
+  min-width: 1520px;
+}
+
 #dailyIncomeBreakdownReport {
   max-height: 310px;
   overflow: auto;

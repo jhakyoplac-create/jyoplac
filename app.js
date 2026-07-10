@@ -1310,6 +1310,26 @@ function expenseByMethodsForDate(date, methods) {
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 }
 
+function operationalExpenseByMethodsForDate(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return expensesForDate(date)
+    .filter((expense) =>
+      expenseAffectsDaily(expense) &&
+      normalized.includes(String(expense.method || "").toUpperCase())
+    )
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function generalCashExpenseByMethodsForDate(date, methods) {
+  const normalized = methods.map((method) => method.toUpperCase());
+  return expensesForDate(date)
+    .filter((expense) =>
+      isGeneralCashExpense(expense) &&
+      normalized.includes(String(expense.method || "").toUpperCase())
+    )
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
 function totalExpenseByMethodsForDate(date, methods) {
   const normalized = methods.map((method) => method.toUpperCase());
   return expensesForDate(date)
@@ -3822,8 +3842,22 @@ function dailyIncomeBreakdownRows(month) {
     const operationalExpenses = dailyExpenseTotal(date);
     const generalExpenses = dailyGeneralExpenseTotal(date);
     const utilityTransfer = utilityContributionTotalForDate(date);
+    const operationalExpenseMethods = {
+      cash: operationalExpenseByMethodsForDate(date, ["EFECTIVO"]),
+      yape: operationalExpenseByMethodsForDate(date, ["YAPE"]),
+      plin: operationalExpenseByMethodsForDate(date, ["PLIN"]),
+      transfer: operationalExpenseByMethodsForDate(date, ["TRANSFERENCIA"]),
+      card: operationalExpenseByMethodsForDate(date, ["TARJETA"])
+    };
+    const generalExpenseMethods = {
+      cash: generalCashExpenseByMethodsForDate(date, ["EFECTIVO"]),
+      yape: generalCashExpenseByMethodsForDate(date, ["YAPE"]),
+      plin: generalCashExpenseByMethodsForDate(date, ["PLIN"]),
+      transfer: generalCashExpenseByMethodsForDate(date, ["TRANSFERENCIA"]),
+      card: generalCashExpenseByMethodsForDate(date, ["TARJETA"])
+    };
     const net = gross - operationalExpenses - generalExpenses - utilityTransfer;
-    return { date, gross, cash, yape, plin, transfer, card, operationalExpenses, generalExpenses, utilityTransfer, net };
+    return { date, gross, cash, yape, plin, transfer, card, operationalExpenses, generalExpenses, utilityTransfer, operationalExpenseMethods, generalExpenseMethods, net };
   });
 }
 
@@ -3838,12 +3872,22 @@ function renderDailyIncomeBreakdown(month) {
       <td>${money(row.transfer)}</td>
       <td>${money(row.card)}</td>
       <td>${money(row.operationalExpenses)}</td>
+      <td>${money(row.operationalExpenseMethods.cash)}</td>
+      <td>${money(row.operationalExpenseMethods.yape)}</td>
+      <td>${money(row.operationalExpenseMethods.plin)}</td>
+      <td>${money(row.operationalExpenseMethods.transfer)}</td>
+      <td>${money(row.operationalExpenseMethods.card)}</td>
       <td>${money(row.generalExpenses)}</td>
+      <td>${money(row.generalExpenseMethods.cash)}</td>
+      <td>${money(row.generalExpenseMethods.yape)}</td>
+      <td>${money(row.generalExpenseMethods.plin)}</td>
+      <td>${money(row.generalExpenseMethods.transfer)}</td>
+      <td>${money(row.generalExpenseMethods.card)}</td>
       <td>${money(row.utilityTransfer)}</td>
       <td><strong>${money(row.net)}</strong></td>
     </tr>`;
   }).join("");
-  $("#dailyIncomeBreakdownReport").innerHTML = `<table><thead><tr><th>Fecha</th><th>Bruto</th><th>Efectivo</th><th>Yape</th><th>Plin</th><th>Transfer.</th><th>Tarjeta</th><th>Egresos oper.</th><th>Egresos caja gral.</th><th>A utilidad</th><th>Neto</th></tr></thead><tbody>${rows || `<tr><td colspan="11">Sin ingresos registrados este mes.</td></tr>`}</tbody></table>`;
+  $("#dailyIncomeBreakdownReport").innerHTML = `<table class="daily-income-table"><thead><tr><th>Fecha</th><th>Bruto</th><th>Efectivo</th><th>Yape</th><th>Plin</th><th>Transfer.</th><th>Tarjeta</th><th>Egresos oper.</th><th>Op. efectivo</th><th>Op. yape</th><th>Op. plin</th><th>Op. transfer.</th><th>Op. tarjeta</th><th>Egresos caja gral.</th><th>Caja efectivo</th><th>Caja yape</th><th>Caja plin</th><th>Caja transfer.</th><th>Caja tarjeta</th><th>A utilidad</th><th>Neto</th></tr></thead><tbody>${rows || `<tr><td colspan="21">Sin ingresos registrados este mes.</td></tr>`}</tbody></table>`;
 }
 
 function renderReports() {
@@ -6208,7 +6252,17 @@ function bindEvents() {
         transferencia: row.transfer,
         tarjeta: row.card,
         egresos_operativos: row.operationalExpenses,
+        egresos_operativos_efectivo: row.operationalExpenseMethods.cash,
+        egresos_operativos_yape: row.operationalExpenseMethods.yape,
+        egresos_operativos_plin: row.operationalExpenseMethods.plin,
+        egresos_operativos_transferencia: row.operationalExpenseMethods.transfer,
+        egresos_operativos_tarjeta: row.operationalExpenseMethods.card,
         egresos_caja_general: row.generalExpenses,
+        egresos_caja_general_efectivo: row.generalExpenseMethods.cash,
+        egresos_caja_general_yape: row.generalExpenseMethods.yape,
+        egresos_caja_general_plin: row.generalExpenseMethods.plin,
+        egresos_caja_general_transferencia: row.generalExpenseMethods.transfer,
+        egresos_caja_general_tarjeta: row.generalExpenseMethods.card,
         a_utilidad: row.utilityTransfer,
         neto: row.net
       })),
@@ -6245,7 +6299,17 @@ function bindEvents() {
       transferencia: row.transfer,
       tarjeta: row.card,
       egresos_operativos: row.operationalExpenses,
+      egresos_operativos_efectivo: row.operationalExpenseMethods.cash,
+      egresos_operativos_yape: row.operationalExpenseMethods.yape,
+      egresos_operativos_plin: row.operationalExpenseMethods.plin,
+      egresos_operativos_transferencia: row.operationalExpenseMethods.transfer,
+      egresos_operativos_tarjeta: row.operationalExpenseMethods.card,
       egresos_caja_general: row.generalExpenses,
+      egresos_caja_general_efectivo: row.generalExpenseMethods.cash,
+      egresos_caja_general_yape: row.generalExpenseMethods.yape,
+      egresos_caja_general_plin: row.generalExpenseMethods.plin,
+      egresos_caja_general_transferencia: row.generalExpenseMethods.transfer,
+      egresos_caja_general_tarjeta: row.generalExpenseMethods.card,
       a_utilidad: row.utilityTransfer,
       neto: row.net
     }));
