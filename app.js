@@ -1907,6 +1907,14 @@ function setView(view) {
   }[view];
   const cashPeriodButton = $("#openCashPeriodBtn");
   if (cashPeriodButton) cashPeriodButton.hidden = view !== "caja-general";
+  const cashPeriodTitleRange = $("#cashPeriodTitleRange");
+  if (cashPeriodTitleRange) cashPeriodTitleRange.hidden = view !== "caja-general";
+  if (view === "caja-general") {
+    const fromInput = $("#cashTitleRangeFrom");
+    const toInput = $("#cashTitleRangeTo");
+    if (fromInput && !fromInput.value) fromInput.value = todayISO();
+    if (toInput && !toInput.value) toInput.value = todayISO();
+  }
   render();
 }
 
@@ -4240,8 +4248,7 @@ function cashPeriodTotals(rows) {
 
 function renderCashPeriodDialog() {
   const summary = $("#cashPeriodSummary");
-  const table = $("#cashPeriodTable");
-  if (!summary || !table) return;
+  if (!summary) return;
   const { from, to } = cashPeriodRange();
   const rows = cashPeriodRows(from, to);
   const totals = cashPeriodTotals(rows);
@@ -4262,16 +4269,6 @@ function renderCashPeriodDialog() {
     ${card("Neto del rango", money(totals.net))}
     ${card("Estimado con saldos iniciales", money(estimatedCash + estimatedBank))}
   `;
-  table.innerHTML = rows.map((row) => `<tr>
-    <td>${formatDate(row.date)}</td>
-    <td>${money(row.cashIncome)}</td>
-    <td>${money(row.walletIncome)}</td>
-    <td>${money(row.cashExpenses)}</td>
-    <td>${money(row.walletExpenses)}</td>
-    <td>${money(row.pettyCash)}</td>
-    <td>${money(row.utilityOut)}</td>
-    <td><strong>${money(row.net)}</strong></td>
-  </tr>`).join("") || `<tr><td colspan="8">No hay movimientos en el rango seleccionado.</td></tr>`;
 }
 
 function openCashPeriodDialog() {
@@ -4279,6 +4276,21 @@ function openCashPeriodDialog() {
   const monthInput = $("#cashPeriodMonth");
   if (monthInput) monthInput.value = month;
   setCashPeriodMonth(month);
+  $("#cashPeriodDialog")?.showModal();
+  monthInput?.focus();
+  try {
+    monthInput?.showPicker?.();
+  } catch (error) {
+    // Algunos navegadores no permiten abrir el selector programaticamente.
+  }
+}
+
+function openCashPeriodRangeDialog() {
+  const fromInput = $("#cashTitleRangeFrom");
+  const toInput = $("#cashTitleRangeTo");
+  const from = fromInput?.value || todayISO();
+  const to = toInput?.value || todayISO();
+  setCashPeriodRange(from, to);
   $("#cashPeriodDialog")?.showModal();
 }
 
@@ -6324,6 +6336,7 @@ function bindEvents() {
   $("#cashPeriodMonth")?.addEventListener("change", (event) => {
     if (event.target.value) setCashPeriodMonth(event.target.value);
   });
+  $("#cashTitleRangeBtn")?.addEventListener("click", openCashPeriodRangeDialog);
   $("#cashPeriodAllBtn")?.addEventListener("click", () => {
     const dates = allDatesWithCashActivity();
     const monthInput = $("#cashPeriodMonth");
