@@ -170,6 +170,14 @@ textarea {
   display: none;
 }
 
+.title-month-picker {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+
 .title-icon-btn span {
   width: 15px;
   height: 15px;

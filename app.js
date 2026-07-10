@@ -4265,16 +4265,25 @@ function renderCashPeriodDialog() {
 
 function openCashPeriodDialog() {
   const month = todayISO().slice(0, 7);
+  const picker = $("#cashTitleMonthPicker");
+  if (picker) picker.value = month;
+  picker?.focus();
+  if (!picker?.showPicker) {
+    openCashPeriodForMonth(month);
+    return;
+  }
+  try {
+    picker.showPicker();
+  } catch (error) {
+    openCashPeriodForMonth(month);
+  }
+}
+
+function openCashPeriodForMonth(month) {
   const monthInput = $("#cashPeriodMonth");
   if (monthInput) monthInput.value = month;
   setCashPeriodMonth(month);
   $("#cashPeriodDialog")?.showModal();
-  monthInput?.focus();
-  try {
-    monthInput?.showPicker?.();
-  } catch (error) {
-    // Algunos navegadores no permiten abrir el selector programaticamente.
-  }
 }
 
 function utilityMovements() {
@@ -6316,6 +6325,9 @@ function bindEvents() {
     exportCsv("caja-general.csv", rows);
   });
   $("#openCashPeriodBtn")?.addEventListener("click", openCashPeriodDialog);
+  $("#cashTitleMonthPicker")?.addEventListener("change", (event) => {
+    if (event.target.value) openCashPeriodForMonth(event.target.value);
+  });
   $("#cashPeriodMonth")?.addEventListener("change", (event) => {
     if (event.target.value) setCashPeriodMonth(event.target.value);
   });
