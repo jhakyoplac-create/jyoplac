@@ -148,6 +148,52 @@ textarea {
   font-size: 13px;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-icon-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.title-icon-btn span {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  position: relative;
+}
+
+.title-icon-btn span::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 3px;
+  border-top: 2px solid currentColor;
+}
+
+.title-icon-btn span::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: -5px;
+  height: 4px;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+}
+
 .nav {
   display: grid;
   gap: 6px;
@@ -1403,6 +1449,49 @@ dialog::backdrop {
 #generalBalanceDetailDialog {
   width: min(1180px, calc(100vw - 24px));
   max-height: min(84vh, 760px);
+}
+
+#cashPeriodDialog {
+  width: min(1180px, calc(100vw - 24px));
+  max-height: min(86vh, 780px);
+}
+
+.cash-period-modal .compact-filters {
+  align-items: end;
+}
+
+.period-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.period-summary-grid span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6fcfd;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.period-summary-grid strong {
+  display: block;
+  color: var(--ink);
+  font-size: 18px;
+  margin-top: 3px;
+}
+
+.period-detail-table {
+  min-width: 980px;
+  font-size: 12px;
+}
+
+.period-detail-table th,
+.period-detail-table td {
+  padding: 9px 10px;
+  white-space: nowrap;
 }
 
 .balance-detail-summary {

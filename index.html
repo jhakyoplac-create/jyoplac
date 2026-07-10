@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260710-egresos-metodo" />
+    <link rel="stylesheet" href="styles.css?v=20260710-cierre-rango" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -73,7 +73,12 @@
       <header class="topbar">
         <div>
           <p class="eyebrow" id="todayLabel"></p>
-          <h1 id="viewTitle">Dashboard</h1>
+          <div class="title-row">
+            <h1 id="viewTitle">Dashboard</h1>
+            <button id="openCashPeriodBtn" class="title-icon-btn" type="button" aria-label="Ver cierre por mes" hidden>
+              <span></span>
+            </button>
+          </div>
         </div>
         <div class="top-actions" id="patientTopActions" hidden>
           <input id="globalSearch" class="search" type="search" placeholder="Buscar por nombre o DNI" />
@@ -1081,6 +1086,42 @@
       </div>
     </dialog>
 
+    <dialog id="cashPeriodDialog">
+      <div class="form modal-form wide-modal cash-period-modal">
+        <div class="panel-head">
+          <h2>Cierre por mes o rango</h2>
+          <button class="icon" data-close-dialog="cashPeriodDialog" type="button" aria-label="Cerrar">x</button>
+        </div>
+        <div class="inline-filters compact-filters">
+          <button class="ghost" id="cashPeriodCurrentMonthBtn" type="button">Mes actual</button>
+          <button class="ghost" id="cashPeriodPreviousMonthBtn" type="button">Mes anterior</button>
+          <button class="ghost" id="cashPeriodAllBtn" type="button">Todo</button>
+          <label>Desde<input id="cashPeriodFrom" type="date" /></label>
+          <label>Hasta<input id="cashPeriodTo" type="date" /></label>
+          <button class="primary" id="cashPeriodApplyBtn" type="button">Ver</button>
+          <button class="ghost" id="cashPeriodCsvBtn" type="button">CSV</button>
+        </div>
+        <div id="cashPeriodSummary" class="period-summary-grid"></div>
+        <div class="table-wrap">
+          <table class="period-detail-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Efectivo</th>
+                <th>Billeteras/bancos</th>
+                <th>Egresos efectivo</th>
+                <th>Egresos billeteras</th>
+                <th>Caja chica</th>
+                <th>A utilidad</th>
+                <th>Neto</th>
+              </tr>
+            </thead>
+            <tbody id="cashPeriodTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
     <dialog id="receiptPromptDialog">
       <div class="form modal-form alert-dialog">
         <div class="panel-head">
@@ -1124,6 +1165,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260710-egresos-metodo"></script>
+    <script src="app.js?v=20260710-cierre-rango"></script>
   </body>
 </html>

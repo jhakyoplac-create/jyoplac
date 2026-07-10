@@ -1905,6 +1905,8 @@ function setView(view) {
     campanas: "Campañas",
     configuracion: "Configuración"
   }[view];
+  const cashPeriodButton = $("#openCashPeriodBtn");
+  if (cashPeriodButton) cashPeriodButton.hidden = view !== "caja-general";
   render();
 }
 
@@ -4159,6 +4161,112 @@ function generalSummaryDates() {
     .reverse();
 }
 
+function monthStart(month = todayISO().slice(0, 7)) {
+  return `${month}-01`;
+}
+
+function monthEnd(month = todayISO().slice(0, 7)) {
+  const [year, value] = month.split("-").map(Number);
+  const date = new Date(year, value, 0);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function cashPeriodRange() {
+  const from = $("#cashPeriodFrom")?.value || monthStart();
+  const to = $("#cashPeriodTo")?.value || todayISO();
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
+function setCashPeriodRange(from, to) {
+  const fromInput = $("#cashPeriodFrom");
+  const toInput = $("#cashPeriodTo");
+  if (fromInput) fromInput.value = from;
+  if (toInput) toInput.value = to;
+  renderCashPeriodDialog();
+}
+
+function cashPeriodRows(from, to) {
+  return allDatesWithCashActivity()
+    .filter((date) => date >= from && date <= to)
+    .sort()
+    .map((date) => {
+      const cashIncome = incomeForDate(date, "EFECTIVO");
+      const walletIncome =
+        incomeForDate(date, "YAPE") +
+        incomeForDate(date, "PLIN") +
+        incomeForDate(date, "TRANSFERENCIA") +
+        incomeForDate(date, "TARJETA");
+      const cashExpenses =
+        cashBoxDetailExpenseByMethodsForDate(date, ["EFECTIVO"]) +
+        utilityContributionByMethodsForDate(date, ["EFECTIVO"]);
+      const walletExpenses =
+        cashBoxDetailExpenseByMethodsForDate(date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"]) +
+        utilityContributionByMethodsForDate(date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"]);
+      const pettyCash = pettyCashDeliveredForDate(date);
+      const utilityOut = utilityContributionTotalForDate(date);
+      const net = cashIncome + walletIncome - cashExpenses - walletExpenses - pettyCash;
+      return { date, cashIncome, walletIncome, cashExpenses, walletExpenses, pettyCash, utilityOut, net };
+    })
+    .filter((row) =>
+      row.cashIncome ||
+      row.walletIncome ||
+      row.cashExpenses ||
+      row.walletExpenses ||
+      row.pettyCash ||
+      row.utilityOut
+    );
+}
+
+function cashPeriodTotals(rows) {
+  return rows.reduce((totals, row) => {
+    totals.cashIncome += row.cashIncome;
+    totals.walletIncome += row.walletIncome;
+    totals.cashExpenses += row.cashExpenses;
+    totals.walletExpenses += row.walletExpenses;
+    totals.pettyCash += row.pettyCash;
+    totals.utilityOut += row.utilityOut;
+    totals.net += row.net;
+    return totals;
+  }, { cashIncome: 0, walletIncome: 0, cashExpenses: 0, walletExpenses: 0, pettyCash: 0, utilityOut: 0, net: 0 });
+}
+
+function renderCashPeriodDialog() {
+  const summary = $("#cashPeriodSummary");
+  const table = $("#cashPeriodTable");
+  if (!summary || !table) return;
+  const { from, to } = cashPeriodRange();
+  const rows = cashPeriodRows(from, to);
+  const totals = cashPeriodTotals(rows);
+  const estimatedCash = Number(state.config.generalCashOpening || 0) + totals.cashIncome - totals.cashExpenses - totals.pettyCash;
+  const estimatedBank = Number(state.config.generalBankOpening || 0) + totals.walletIncome - totals.walletExpenses;
+  summary.innerHTML = `
+    <span>Rango<strong>${formatDate(from)} - ${formatDate(to)}</strong></span>
+    <span>Ingresos efectivo<strong>${money(totals.cashIncome)}</strong></span>
+    <span>Ingresos billeteras/bancos<strong>${money(totals.walletIncome)}</strong></span>
+    <span>Egresos efectivo<strong>${money(totals.cashExpenses + totals.pettyCash)}</strong></span>
+    <span>Egresos billeteras/bancos<strong>${money(totals.walletExpenses)}</strong></span>
+    <span>A utilidad<strong>${money(totals.utilityOut)}</strong></span>
+    <span>Neto del rango<strong>${money(totals.net)}</strong></span>
+    <span>Estimado con saldos iniciales<strong>${money(estimatedCash + estimatedBank)}</strong></span>
+  `;
+  table.innerHTML = rows.map((row) => `<tr>
+    <td>${formatDate(row.date)}</td>
+    <td>${money(row.cashIncome)}</td>
+    <td>${money(row.walletIncome)}</td>
+    <td>${money(row.cashExpenses)}</td>
+    <td>${money(row.walletExpenses)}</td>
+    <td>${money(row.pettyCash)}</td>
+    <td>${money(row.utilityOut)}</td>
+    <td><strong>${money(row.net)}</strong></td>
+  </tr>`).join("") || `<tr><td colspan="8">No hay movimientos en el rango seleccionado.</td></tr>`;
+}
+
+function openCashPeriodDialog() {
+  const month = todayISO().slice(0, 7);
+  setCashPeriodRange(monthStart(month), todayISO());
+  $("#cashPeriodDialog")?.showModal();
+}
+
 function utilityMovements() {
   return state.expenses
     .filter((expense) => isUtilityContribution(expense) || isUtilityPurchase(expense))
@@ -6186,6 +6294,47 @@ function bindEvents() {
       neto: incomeForDate(date) - dailyExpenseTotal(date) - dailyGeneralExpenseTotal(date) - utilityContributionTotalForDate(date)
     }));
     exportCsv("caja-general.csv", rows);
+  });
+  $("#openCashPeriodBtn")?.addEventListener("click", openCashPeriodDialog);
+  $("#cashPeriodCurrentMonthBtn")?.addEventListener("click", () => {
+    const month = todayISO().slice(0, 7);
+    setCashPeriodRange(monthStart(month), todayISO());
+  });
+  $("#cashPeriodPreviousMonthBtn")?.addEventListener("click", () => {
+    const month = previousMonth(todayISO().slice(0, 7));
+    setCashPeriodRange(monthStart(month), monthEnd(month));
+  });
+  $("#cashPeriodAllBtn")?.addEventListener("click", () => {
+    const dates = allDatesWithCashActivity();
+    setCashPeriodRange(dates[0] || todayISO(), todayISO());
+  });
+  $("#cashPeriodApplyBtn")?.addEventListener("click", renderCashPeriodDialog);
+  $("#cashPeriodFrom")?.addEventListener("change", renderCashPeriodDialog);
+  $("#cashPeriodTo")?.addEventListener("change", renderCashPeriodDialog);
+  $("#cashPeriodCsvBtn")?.addEventListener("click", () => {
+    const { from, to } = cashPeriodRange();
+    const rows = cashPeriodRows(from, to).map((row) => ({
+      fecha: row.date,
+      ingresos_efectivo: row.cashIncome,
+      ingresos_billeteras_bancos: row.walletIncome,
+      egresos_efectivo: row.cashExpenses,
+      egresos_billeteras_bancos: row.walletExpenses,
+      caja_chica: row.pettyCash,
+      a_utilidad: row.utilityOut,
+      neto: row.net
+    }));
+    const totals = cashPeriodTotals(cashPeriodRows(from, to));
+    rows.push({
+      fecha: "TOTAL",
+      ingresos_efectivo: totals.cashIncome,
+      ingresos_billeteras_bancos: totals.walletIncome,
+      egresos_efectivo: totals.cashExpenses,
+      egresos_billeteras_bancos: totals.walletExpenses,
+      caja_chica: totals.pettyCash,
+      a_utilidad: totals.utilityOut,
+      neto: totals.net
+    });
+    exportCsv(`cierre-caja-general-${from}-${to}.csv`, rows);
   });
   $("#exportUtilityBtn")?.addEventListener("click", () => {
     exportCsv("movimientos-utilidad.csv", utilityMovements().map((item) => ({
