@@ -4199,7 +4199,7 @@ function cashReportRangeForMonth(month) {
 function openCashPeriodDialog() {
   const month = todayISO().slice(0, 7);
   const picker = $("#cashTitleMonthPicker");
-  if (picker) picker.value = month;
+  if (picker) picker.value = selectedCashReportRange?.month || "";
   picker?.focus();
   if (!picker?.showPicker) {
     openCashPeriodForMonth(month);
@@ -6255,9 +6255,11 @@ function bindEvents() {
     exportCsv("caja-general.csv", rows);
   });
   $("#openCashPeriodBtn")?.addEventListener("click", openCashPeriodDialog);
-  $("#cashTitleMonthPicker")?.addEventListener("change", (event) => {
+  const applyCashTitleMonth = (event) => {
     if (event.target.value) openCashPeriodForMonth(event.target.value);
-  });
+  };
+  $("#cashTitleMonthPicker")?.addEventListener("input", applyCashTitleMonth);
+  $("#cashTitleMonthPicker")?.addEventListener("change", applyCashTitleMonth);
   $("#exportUtilityBtn")?.addEventListener("click", () => {
     exportCsv("movimientos-utilidad.csv", utilityMovements().map((item) => ({
       fecha: item.date,
