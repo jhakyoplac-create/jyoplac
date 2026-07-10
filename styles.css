@@ -237,24 +237,25 @@ textarea {
 }
 
 .payment-patient-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
-  gap: 8px;
-  align-items: end;
+  position: relative;
+  display: block;
 }
 
 .payment-patient-row label {
-  min-width: 0;
+  width: 100%;
 }
 
 .product-picker-button {
-  width: 44px;
-  height: 44px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 38px;
+  height: 38px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: linear-gradient(135deg, #e9fbff, #e2fbe8);
   color: #00759a;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
 }
 
