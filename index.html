@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260710-cierre-rango" />
+    <link rel="stylesheet" href="styles.css?v=20260710-cierre-mensual" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -1093,11 +1093,10 @@
           <button class="icon" data-close-dialog="cashPeriodDialog" type="button" aria-label="Cerrar">x</button>
         </div>
         <div class="inline-filters compact-filters">
-          <button class="ghost" id="cashPeriodCurrentMonthBtn" type="button">Mes actual</button>
-          <button class="ghost" id="cashPeriodPreviousMonthBtn" type="button">Mes anterior</button>
-          <button class="ghost" id="cashPeriodAllBtn" type="button">Todo</button>
+          <label>Mes<input id="cashPeriodMonth" type="month" /></label>
           <label>Desde<input id="cashPeriodFrom" type="date" /></label>
           <label>Hasta<input id="cashPeriodTo" type="date" /></label>
+          <button class="ghost" id="cashPeriodAllBtn" type="button">Todo</button>
           <button class="primary" id="cashPeriodApplyBtn" type="button">Ver</button>
           <button class="ghost" id="cashPeriodCsvBtn" type="button">CSV</button>
         </div>
@@ -1165,6 +1164,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260710-cierre-rango"></script>
+    <script src="app.js?v=20260710-cierre-mensual"></script>
   </body>
 </html>

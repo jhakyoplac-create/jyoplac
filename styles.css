@@ -166,6 +166,10 @@ textarea {
   color: var(--accent);
 }
 
+.title-icon-btn[hidden] {
+  display: none;
+}
+
 .title-icon-btn span {
   width: 15px;
   height: 15px;
@@ -1460,6 +1464,10 @@ dialog::backdrop {
   align-items: end;
 }
 
+.cash-period-modal .compact-filters input {
+  background: #fff;
+}
+
 .period-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1468,12 +1476,18 @@ dialog::backdrop {
 }
 
 .period-summary-grid span {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f6fcfd;
   padding: 10px 12px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.period-summary-card .kpi-detail-btn {
+  top: 8px;
+  right: 8px;
 }
 
 .period-summary-grid strong {
