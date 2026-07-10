@@ -337,6 +337,15 @@ textarea {
   align-self: start;
 }
 
+.inventory-products-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.inventory-products-scroll table {
+  min-width: 720px;
+}
+
 .product-sale-modal {
   width: min(720px, calc(100vw - 32px));
   max-height: 82vh;

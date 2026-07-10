@@ -5660,6 +5660,8 @@ function bindEvents() {
     event.preventDefault();
     if (!canManageInventory()) return;
     const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton?.disabled) return;
     const data = formData(form);
     const product = {
       id: data.id || uid("prod"),
@@ -5674,16 +5676,38 @@ function bindEvents() {
       alert("Completa nombre, precio y stock del producto.");
       return;
     }
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Guardando...";
+    }
     try {
       await saveInventoryProductApi(product);
     } catch (error) {
-      alert(error.message);
+      alert(error.message || "No se pudo guardar el producto.");
       return;
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar producto";
+      }
     }
     if (!API_ENABLED) upsert(state.inventoryProducts, product);
     if (!API_ENABLED) saveState();
     form.reset();
+    if (form.id) form.id.value = "";
     render();
+  });
+
+  $("#inventoryProductForm")?.addEventListener("reset", (event) => {
+    const form = event.currentTarget;
+    setTimeout(() => {
+      if (form.id) form.id.value = "";
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar producto";
+      }
+    }, 0);
   });
 
   $("#inventoryMovementForm")?.addEventListener("submit", async (event) => {
