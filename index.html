@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260709-citas-tildes" />
+    <link rel="stylesheet" href="styles.css?v=20260710-inventario-productos" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -43,6 +43,7 @@
         <button class="nav-item" data-view="historial">Historial clínico</button>
         <button class="nav-item" data-view="odontograma">Odontograma</button>
         <button class="nav-item" data-view="tratamientos">Tratamientos</button>
+        <button class="nav-item" data-view="inventario">Inventario</button>
         <button class="nav-item" data-view="pagos">Pagos y caja</button>
         <button class="nav-item" data-view="comprobantes">Comprobantes</button>
         <button class="nav-item" data-view="caja-general">Caja general</button>
@@ -277,7 +278,11 @@
             </div>
             <p class="notice" id="cashLockedMessage">Primero abre la caja del dia para registrar pagos o egresos.</p>
             <input type="hidden" name="id" />
-            <label>Paciente<select name="patientId" required></select></label>
+            <div class="payment-patient-row">
+              <label>Paciente<select name="patientId" required></select></label>
+              <button class="icon product-picker-button" id="openProductSaleBtn" type="button" title="Agregar producto">+</button>
+            </div>
+            <div id="paymentProductSummary" class="product-sale-summary" hidden></div>
             <label>Atencion pendiente<select name="historyId"></select></label>
             <button type="button" class="ghost danger-btn admin-only-action" id="clearHistoryDebtBtn" hidden>Quitar deuda</button>
             <label>Saldo a pagar<input name="amountDue" type="number" readonly /></label>
@@ -780,6 +785,87 @@
         </div>
       </section>
 
+      <section id="inventario" class="view">
+        <div class="content-grid form-and-list inventory-layout">
+          <form class="panel form inventory-form" id="inventoryProductForm">
+            <div class="panel-head">
+              <h2>Producto</h2>
+              <button type="reset" class="ghost">Limpiar</button>
+            </div>
+            <input type="hidden" name="id" />
+            <label>Nombre del producto<input name="name" placeholder="Cepillo dental, hilo dental..." required /></label>
+            <div class="settings-grid">
+              <label>Precio venta S/<input name="price" type="number" min="0" step="0.01" required /></label>
+              <label>Stock inicial<input name="stock" type="number" min="0" step="1" required /></label>
+              <label>Stock minimo<input name="minStock" type="number" min="0" step="1" /></label>
+              <label>Unidad<input name="unit" placeholder="Unidad" /></label>
+            </div>
+            <button class="primary" type="submit">Guardar producto</button>
+          </form>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Productos en stock</h2>
+              <button class="ghost" id="exportInventoryBtn">CSV</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Stock</th>
+                    <th>Precio</th>
+                    <th>Minimo</th>
+                    <th>Accion</th>
+                  </tr>
+                </thead>
+                <tbody id="inventoryProductsTable"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <form class="panel form inventory-form" id="inventoryMovementForm">
+            <div class="panel-head">
+              <h2>Entrada / salida</h2>
+              <button type="reset" class="ghost">Limpiar</button>
+            </div>
+            <label>Producto<select name="productId" required></select></label>
+            <div class="settings-grid">
+              <label>Movimiento<select name="type" required>
+                <option value="ENTRADA">Entrada</option>
+                <option value="SALIDA">Salida</option>
+                <option value="AJUSTE">Ajuste</option>
+              </select></label>
+              <label>Cantidad<input name="quantity" type="number" min="0.01" step="1" required /></label>
+              <label>Costo / precio S/<input name="unitPrice" type="number" min="0" step="0.01" /></label>
+            </div>
+            <label>Detalle<textarea name="detail" rows="3" placeholder="Compra, perdida, ajuste de conteo..."></textarea></label>
+            <button class="primary" type="submit">Guardar movimiento</button>
+          </form>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Movimientos de inventario</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Producto</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Total</th>
+                    <th>Detalle</th>
+                  </tr>
+                </thead>
+                <tbody id="inventoryMovementsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section id="configuracion" class="view">
         <form class="panel form wide" id="configForm">
           <div class="panel-head">
@@ -843,6 +929,24 @@
         </div>
       </section>
     </main>
+
+    <dialog id="productSaleDialog">
+      <form method="dialog" class="form modal-form product-sale-modal" id="productSaleForm">
+        <div class="panel-head">
+          <h2>Agregar productos</h2>
+          <button class="icon" data-close-dialog="productSaleDialog" type="button" aria-label="Cerrar">x</button>
+        </div>
+        <div class="product-sale-toolbar">
+          <span id="productSaleModalSummary">Selecciona productos en stock.</span>
+          <button class="ghost danger-btn" id="clearProductSaleBtn" type="button">Quitar todo</button>
+        </div>
+        <div id="productSaleList" class="product-sale-list"></div>
+        <div class="product-sale-footer">
+          <strong id="productSaleTotal">Total S/ 0</strong>
+          <button class="primary" id="saveProductSaleBtn" type="button">Guardar productos</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="appointmentDialog">
       <form method="dialog" class="form modal-form" id="appointmentForm">
@@ -1020,6 +1124,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260709-citas-pagos"></script>
+    <script src="app.js?v=20260710-inventario-productos"></script>
   </body>
 </html>

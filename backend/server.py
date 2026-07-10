@@ -209,6 +209,7 @@ def migrate_db(conn):
     ensure_column(conn, "payments", "card_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "payments", "transfer_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "payments", "appointment_id", "TEXT")
+    ensure_column(conn, "payments", "product_total", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
     ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
@@ -243,6 +244,37 @@ def migrate_db(conn):
         """
     )
     ensure_column(conn, "electronic_receipts", "customer_address", "TEXT")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS inventory_products (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          unit TEXT,
+          price REAL NOT NULL DEFAULT 0,
+          stock REAL NOT NULL DEFAULT 0,
+          min_stock REAL NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS inventory_movements (
+          id TEXT PRIMARY KEY,
+          product_id TEXT NOT NULL,
+          date TEXT NOT NULL,
+          type TEXT NOT NULL,
+          quantity REAL NOT NULL DEFAULT 0,
+          unit_price REAL NOT NULL DEFAULT 0,
+          total REAL NOT NULL DEFAULT 0,
+          detail TEXT,
+          payment_id TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
 
 
 def purge_old_audit_events(conn):
@@ -410,6 +442,65 @@ def list_audit_events():
         ]
 
 
+def inventory_snapshot(conn):
+    return {
+        "inventoryProducts": [row_to_dict(row) for row in conn.execute("SELECT * FROM inventory_products ORDER BY name ASC").fetchall()],
+        "inventoryMovements": [
+            row_to_dict(row)
+            for row in conn.execute("SELECT * FROM inventory_movements ORDER BY date DESC, created_at DESC").fetchall()
+        ],
+    }
+
+
+def reverse_payment_inventory(conn, payment_id):
+    rows = conn.execute(
+        "SELECT product_id, quantity FROM inventory_movements WHERE payment_id = ? AND type = 'VENTA'",
+        (payment_id,),
+    ).fetchall()
+    for row in rows:
+        conn.execute(
+            "UPDATE inventory_products SET stock = stock + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (float(row["quantity"] or 0), row["product_id"]),
+        )
+    conn.execute("DELETE FROM inventory_movements WHERE payment_id = ? AND type = 'VENTA'", (payment_id,))
+
+
+def apply_payment_inventory(conn, payment_id, payment_date, product_items):
+    reverse_payment_inventory(conn, payment_id)
+    for item in product_items or []:
+        product_id = str(item.get("productId") or item.get("product_id") or "").strip()
+        quantity = float(item.get("quantity") or 0)
+        if not product_id or quantity <= 0:
+            continue
+        product = conn.execute("SELECT * FROM inventory_products WHERE id = ? AND active = 1", (product_id,)).fetchone()
+        if not product:
+            raise ValueError("Producto de inventario no encontrado.")
+        if float(product["stock"] or 0) < quantity:
+            raise ValueError(f"Stock insuficiente para {product['name']}.")
+        unit_price = float(item.get("price") or item.get("unitPrice") or product["price"] or 0)
+        total = quantity * unit_price
+        conn.execute(
+            "UPDATE inventory_products SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (quantity, product_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO inventory_movements (id, product_id, date, type, quantity, unit_price, total, detail, payment_id)
+            VALUES (?, ?, ?, 'VENTA', ?, ?, ?, ?, ?)
+            """,
+            (
+                now_id("mov"),
+                product_id,
+                payment_date,
+                quantity,
+                unit_price,
+                total,
+                f"Venta en pago {payment_id}",
+                payment_id,
+            ),
+        )
+
+
 def open_cash_date(conn):
     row = conn.execute(
         "SELECT date FROM cash_sessions WHERE closed_at IS NULL ORDER BY opened_at ASC LIMIT 1"
@@ -482,6 +573,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "payments": list_table("payments", "date DESC, created_at DESC"),
                 "electronicReceipts": list_table("electronic_receipts", "issue_date DESC, created_at DESC"),
                 "expenses": list_table("expenses", "date DESC, created_at DESC"),
+                "inventoryProducts": list_table("inventory_products", "name ASC"),
+                "inventoryMovements": list_table("inventory_movements", "date DESC, created_at DESC"),
                 "cashSessions": list_table("cash_sessions", "date DESC"),
                 "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
                 "auditEvents": list_audit_events(),
@@ -504,6 +597,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"electronicReceipts": list_table("electronic_receipts", "issue_date DESC, created_at DESC")})
         if parsed.path == "/api/expenses":
             return send_json(self, {"expenses": list_table("expenses", "date DESC, created_at DESC")})
+        if parsed.path == "/api/inventory-products":
+            return send_json(self, {"inventoryProducts": list_table("inventory_products", "name ASC")})
+        if parsed.path == "/api/inventory-movements":
+            return send_json(self, {"inventoryMovements": list_table("inventory_movements", "date DESC, created_at DESC")})
         if parsed.path == "/api/cash-sessions":
             return send_json(self, {"cashSessions": list_table("cash_sessions", "date DESC")})
         if parsed.path == "/api/users":
@@ -956,6 +1053,86 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 ).fetchone()
             return send_json(self, {"ok": True, "id": row["id"] if row else item_id})
 
+        if parsed.path == "/api/inventory-products":
+            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("prod")
+            name = re.sub(r"\s+", " ", str(data.get("name") or "").strip()).upper()
+            if not name:
+                return send_json(self, {"error": "Ingresa el nombre del producto."}, 400)
+            price = float(data.get("price") or 0)
+            stock = float(data.get("stock") or 0)
+            min_stock = float(data.get("minStock") or data.get("min_stock") or 0)
+            if price < 0 or stock < 0 or min_stock < 0:
+                return send_json(self, {"error": "Precio y stock no pueden ser negativos."}, 400)
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO inventory_products (id, name, unit, price, stock, min_stock, active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      name=excluded.name, unit=excluded.unit, price=excluded.price,
+                      stock=excluded.stock, min_stock=excluded.min_stock,
+                      active=excluded.active, updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (
+                        item_id,
+                        name,
+                        str(data.get("unit") or "Unidad").strip() or "Unidad",
+                        price,
+                        stock,
+                        min_stock,
+                        1 if data.get("active", True) else 0,
+                    ),
+                )
+                snapshot = inventory_snapshot(conn)
+            return send_json(self, {"ok": True, "id": item_id, **snapshot})
+
+        if parsed.path == "/api/inventory-movements":
+            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id") or now_id("mov")
+            product_id = str(data.get("productId") or data.get("product_id") or "").strip()
+            movement_type = str(data.get("type") or "").strip().upper()
+            quantity = float(data.get("quantity") or 0)
+            if movement_type not in {"ENTRADA", "SALIDA", "AJUSTE"}:
+                return send_json(self, {"error": "Movimiento de inventario no valido."}, 400)
+            if quantity <= 0:
+                return send_json(self, {"error": "La cantidad debe ser mayor a cero."}, 400)
+            with db() as conn:
+                product = conn.execute("SELECT * FROM inventory_products WHERE id = ? AND active = 1", (product_id,)).fetchone()
+                if not product:
+                    return send_json(self, {"error": "Producto no encontrado."}, 404)
+                signed_qty = quantity if movement_type == "ENTRADA" else -quantity
+                if movement_type in {"SALIDA", "AJUSTE"} and float(product["stock"] or 0) < quantity:
+                    return send_json(self, {"error": "No hay stock suficiente."}, 400)
+                unit_price = float(data.get("unitPrice") or data.get("unit_price") or product["price"] or 0)
+                conn.execute(
+                    "UPDATE inventory_products SET stock = stock + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (signed_qty, product_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO inventory_movements (id, product_id, date, type, quantity, unit_price, total, detail, payment_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        item_id,
+                        product_id,
+                        data.get("date") or today_lima(),
+                        movement_type,
+                        quantity,
+                        unit_price,
+                        quantity * unit_price,
+                        str(data.get("detail") or "").strip(),
+                        data.get("paymentId") or None,
+                    ),
+                )
+                snapshot = inventory_snapshot(conn)
+            return send_json(self, {"ok": True, "id": item_id, **snapshot})
+
         if parsed.path == "/api/payments":
             if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
                 return
@@ -971,11 +1148,15 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         row = conn.execute("SELECT id FROM payments WHERE id = ?", (item_id,)).fetchone()
                         if not row:
                             return send_json(self, {"error": "Pago no encontrado."}, 404)
+                        reverse_payment_inventory(conn, item_id)
                         conn.execute("DELETE FROM payments WHERE id = ?", (item_id,))
-                    return send_json(self, {"ok": True, "id": item_id})
+                        snapshot = inventory_snapshot(conn)
+                    return send_json(self, {"ok": True, "id": item_id, **snapshot})
                 item_id = data.get("id") or now_id("pay")
                 amount = float(data.get("amount") or 0)
                 method = str(data.get("method") or "").upper()
+                product_items = data.get("productItems") if isinstance(data.get("productItems"), list) else []
+                products_total = sum(float(item.get("quantity") or 0) * float(item.get("price") or item.get("unitPrice") or 0) for item in product_items)
                 split = {
                     "cash_amount": float(data.get("cashAmount") or 0),
                     "yape_amount": float(data.get("yapeAmount") or 0),
@@ -1028,11 +1209,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         if not history:
                             return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
                         paid = conn.execute(
-                            "SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
+                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0)), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
                             (history_id, item_id),
                         ).fetchone()["total"]
                         due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
-                        if amount <= 0 or amount > due:
+                        care_amount = amount - products_total
+                        if amount <= 0 or care_amount <= 0 or care_amount > due:
                             return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
                     elif data.get("appointmentId"):
                         appointment = conn.execute(
@@ -1045,8 +1227,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             return send_json(self, {"error": "No se puede cobrar una cita cancelada, no asistida o reprogramada."}, 400)
                         if amount <= 0:
                             return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
+                    elif product_items:
+                        if amount <= 0:
+                            return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
                     else:
-                        return send_json(self, {"error": "Selecciona una atencion pendiente o una cita del dia."}, 400)
+                        return send_json(self, {"error": "Selecciona una atencion pendiente, una cita del dia o un producto."}, 400)
                     receipt_value = data.get("receipt", "")
                     if data.get("appointmentId") and not str(receipt_value or "").strip():
                         appointment_service = conn.execute(
@@ -1054,17 +1239,30 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             (data.get("appointmentId"),),
                         ).fetchone()
                         receipt_value = "Cita del dia: " + str(appointment_service["service"] if appointment_service else "Servicio")
+                    if product_items and "Productos:" not in str(receipt_value or ""):
+                        product_labels = []
+                        for item in product_items:
+                            product = conn.execute(
+                                "SELECT name FROM inventory_products WHERE id = ?",
+                                (str(item.get("productId") or item.get("product_id") or ""),),
+                            ).fetchone()
+                            if product:
+                                product_labels.append(f"{float(item.get('quantity') or 0):g} {product['name']}")
+                        if product_labels:
+                            receipt_value = (str(receipt_value or "").strip() + " | " if str(receipt_value or "").strip() else "") + "Productos: " + ", ".join(product_labels)
                     conn.execute(
                         """
                         INSERT INTO payments (
-                          id, patient_id, history_id, date, amount, cash_received,
+                          id, patient_id, history_id, appointment_id, date, amount, product_total, cash_received,
                           change_amount, cash_amount, yape_amount, plin_amount,
                           card_amount, transfer_amount, method, receipt, closed
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           patient_id=excluded.patient_id, history_id=excluded.history_id,
+                          appointment_id=excluded.appointment_id,
                           date=excluded.date, amount=excluded.amount,
+                          product_total=excluded.product_total,
                           cash_received=excluded.cash_received,
                           change_amount=excluded.change_amount,
                           cash_amount=excluded.cash_amount,
@@ -1079,8 +1277,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             item_id,
                             data["patientId"],
                             history_id or None,
+                            data.get("appointmentId") or None,
                             payment_date,
                             amount,
+                            products_total,
                             cash_received,
                             max(0, cash_received - cash_portion),
                             split["cash_amount"],
@@ -1098,7 +1298,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             "UPDATE appointments SET status = 'ATENDIDA' WHERE id = ?",
                             (data.get("appointmentId"),),
                         )
-                return send_json(self, {"ok": True, "id": item_id})
+                    apply_payment_inventory(conn, item_id, payment_date, product_items)
+                    snapshot = inventory_snapshot(conn)
+                return send_json(self, {"ok": True, "id": item_id, **snapshot})
             except Exception as exc:
                 return send_json(self, {"error": f"No se pudo guardar el pago: {exc}"}, 500)
 

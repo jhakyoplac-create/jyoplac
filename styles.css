@@ -236,6 +236,120 @@ textarea {
   color: #006b88;
 }
 
+.payment-patient-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: end;
+}
+
+.payment-patient-row label {
+  min-width: 0;
+}
+
+.product-picker-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, #e9fbff, #e2fbe8);
+  color: #00759a;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.product-sale-summary {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f4fdff;
+  color: var(--ink);
+}
+
+.product-sale-summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.inventory-layout .panel,
+.inventory-form {
+  align-self: start;
+}
+
+.product-sale-modal {
+  width: min(760px, calc(100vw - 28px));
+  max-height: 86vh;
+  overflow: auto;
+}
+
+.product-sale-toolbar,
+.product-sale-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-sale-toolbar {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.product-sale-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.product-sale-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.product-sale-card.selected {
+  border-color: var(--blue);
+  background: linear-gradient(135deg, #eff9ff, #f0fff8);
+}
+
+.product-sale-card strong,
+.product-sale-card span {
+  display: block;
+}
+
+.product-sale-card span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.qty-stepper {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  gap: 6px;
+}
+
+.qty-stepper button,
+.qty-stepper input {
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fdff;
+  text-align: center;
+  font-weight: 800;
+}
+
+.qty-stepper button {
+  color: #00759a;
+  cursor: pointer;
+}
+
 .app {
   min-width: 0;
   padding: 24px 28px 32px;

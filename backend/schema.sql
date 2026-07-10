@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS payments (
   appointment_id TEXT,
   date TEXT NOT NULL,
   amount REAL NOT NULL,
+  product_total REAL NOT NULL DEFAULT 0,
   cash_received REAL NOT NULL DEFAULT 0,
   change_amount REAL NOT NULL DEFAULT 0,
   cash_amount REAL NOT NULL DEFAULT 0,
@@ -161,6 +162,33 @@ CREATE TABLE IF NOT EXISTS expenses (
   type TEXT,
   closed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS inventory_products (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  unit TEXT,
+  price REAL NOT NULL DEFAULT 0,
+  stock REAL NOT NULL DEFAULT 0,
+  min_stock REAL NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id TEXT PRIMARY KEY,
+  product_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  type TEXT NOT NULL,
+  quantity REAL NOT NULL DEFAULT 0,
+  unit_price REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  detail TEXT,
+  payment_id TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (product_id) REFERENCES inventory_products(id) ON DELETE CASCADE,
+  FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS cash_sessions (

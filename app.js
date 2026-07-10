@@ -106,6 +106,8 @@ const seedData = {
   cashSessions: [],
   dailyClosures: [],
   expenses: [],
+  inventoryProducts: [],
+  inventoryMovements: [],
   pettyCashAllocations: [],
   auditEvents: [],
   users: [
@@ -139,6 +141,7 @@ let lastSavedPatientId = "";
 let patientEditingId = "";
 let expandedPatientInfoId = "";
 let selectedCashViewDate = "";
+let selectedProductSaleItems = [];
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -195,7 +198,7 @@ function loadState() {
     const base = structuredClone(seedData);
     const parsed = JSON.parse(saved);
     const merged = { ...base, ...parsed, config: { ...base.config, ...(parsed.config || {}) } };
-    for (const key of ["services", "patients", "appointments", "treatments", "payments", "electronicReceipts", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "pettyCashAllocations", "auditEvents", "users"]) {
+    for (const key of ["services", "patients", "appointments", "treatments", "payments", "electronicReceipts", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "inventoryProducts", "inventoryMovements", "pettyCashAllocations", "auditEvents", "users"]) {
       if (!Array.isArray(merged[key])) merged[key] = base[key];
     }
     return normalizeState(merged);
@@ -233,6 +236,8 @@ function normalizeState(data) {
   data.config.enableAgendaPayments = String(data.config.enableAgendaPayments).toLowerCase() !== "false";
   if (!Array.isArray(data.users) || !data.users.length) data.users = structuredClone(seedData.users);
   if (!Array.isArray(data.electronicReceipts)) data.electronicReceipts = [];
+  if (!Array.isArray(data.inventoryProducts)) data.inventoryProducts = [];
+  if (!Array.isArray(data.inventoryMovements)) data.inventoryMovements = [];
   if (!Array.isArray(data.pettyCashAllocations)) data.pettyCashAllocations = [];
   if (!Array.isArray(data.auditEvents)) data.auditEvents = [];
   data.auditEvents = data.auditEvents.filter((event) => event.eventDate === todayISO());
@@ -391,6 +396,7 @@ function mapApiPayment(row) {
     appointmentId: row.appointment_id || row.appointmentId || "",
     date: row.date,
     amount: Number(row.amount || 0),
+    productAmount: Number(row.product_total ?? row.productAmount ?? 0),
     cashReceived: Number(row.cash_received ?? row.cashReceived ?? 0),
     change: Number(row.change_amount ?? row.change ?? 0),
     method: row.method,
@@ -425,6 +431,35 @@ function mapApiElectronicReceipt(row) {
     igv: Number(row.igv || 0),
     status: row.status || "BORRADOR",
     notes: row.notes || "",
+    createdAt: row.created_at || row.createdAt || ""
+  };
+}
+
+function mapApiInventoryProduct(row) {
+  return {
+    id: row.id,
+    name: row.name || "",
+    unit: row.unit || "Unidad",
+    price: Number(row.price || 0),
+    stock: Number(row.stock || 0),
+    minStock: Number(row.min_stock ?? row.minStock ?? 0),
+    active: row.active !== 0 && row.active !== false,
+    createdAt: row.created_at || row.createdAt || "",
+    updatedAt: row.updated_at || row.updatedAt || ""
+  };
+}
+
+function mapApiInventoryMovement(row) {
+  return {
+    id: row.id,
+    productId: row.product_id || row.productId || "",
+    date: row.date || "",
+    type: row.type || "",
+    quantity: Number(row.quantity || 0),
+    unitPrice: Number(row.unit_price ?? row.unitPrice ?? 0),
+    total: Number(row.total || 0),
+    detail: row.detail || "",
+    paymentId: row.payment_id || row.paymentId || "",
     createdAt: row.created_at || row.createdAt || ""
   };
 }
@@ -521,6 +556,8 @@ function applyApiBootstrap(payload) {
   state.payments = (payload.payments || []).map(mapApiPayment);
   state.electronicReceipts = (payload.electronicReceipts || []).map(mapApiElectronicReceipt);
   state.expenses = (payload.expenses || []).map(mapApiExpense);
+  state.inventoryProducts = (payload.inventoryProducts || []).map(mapApiInventoryProduct);
+  state.inventoryMovements = (payload.inventoryMovements || []).map(mapApiInventoryMovement);
   state.cashSessions = (payload.cashSessions || []).map(mapApiCashSession);
   state.pettyCashAllocations = (payload.pettyCashAllocations || []).map(mapApiPettyCash);
   state.auditEvents = (payload.auditEvents || []).map(mapApiAuditEvent);
@@ -668,6 +705,7 @@ async function savePaymentApi(payment) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/payments", { method: "POST", body: JSON.stringify(payment) });
   if (result.id) payment.id = result.id;
+  applyInventoryApiPayload(result);
 }
 
 async function saveElectronicReceiptApi(receipt) {
@@ -678,7 +716,27 @@ async function saveElectronicReceiptApi(receipt) {
 
 async function deletePaymentApi(id) {
   if (!API_ENABLED || !apiToken) return;
-  await apiFetch("/api/payments", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+  const result = await apiFetch("/api/payments", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+  applyInventoryApiPayload(result);
+}
+
+function applyInventoryApiPayload(result) {
+  if (Array.isArray(result?.inventoryProducts)) state.inventoryProducts = result.inventoryProducts.map(mapApiInventoryProduct);
+  if (Array.isArray(result?.inventoryMovements)) state.inventoryMovements = result.inventoryMovements.map(mapApiInventoryMovement);
+}
+
+async function saveInventoryProductApi(product) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/inventory-products", { method: "POST", body: JSON.stringify(product) });
+  if (result.id) product.id = result.id;
+  applyInventoryApiPayload(result);
+}
+
+async function saveInventoryMovementApi(movement) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/inventory-movements", { method: "POST", body: JSON.stringify(movement) });
+  if (result.id) movement.id = result.id;
+  applyInventoryApiPayload(result);
 }
 
 async function saveExpenseApi(expense) {
@@ -748,6 +806,8 @@ function blankStateFromCurrent() {
     treatments: [],
     payments: [],
     electronicReceipts: [],
+    inventoryProducts: [],
+    inventoryMovements: [],
     clinicalHistory: [],
     odontogram: [],
     cashSessions: [],
@@ -930,6 +990,38 @@ function serviceByName(name) {
   return state.services.find((service) => service.name === name);
 }
 
+function inventoryProductById(id) {
+  return state.inventoryProducts.find((product) => product.id === id);
+}
+
+function activeInventoryProducts() {
+  return state.inventoryProducts
+    .filter((product) => product.active !== false)
+    .slice()
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "es"));
+}
+
+function paymentProductTotal() {
+  return selectedProductSaleItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.price || 0), 0);
+}
+
+function productSaleDescription(items = selectedProductSaleItems) {
+  return items
+    .filter((item) => Number(item.quantity || 0) > 0)
+    .map((item) => `${Number(item.quantity || 0)} ${item.name}`)
+    .join(", ");
+}
+
+function buildPaymentReceiptText(receipt, appointment, productItems = []) {
+  const parts = [];
+  const receiptText = String(receipt || "").trim();
+  if (receiptText) parts.push(receiptText);
+  else if (appointment) parts.push(`Cita del dia: ${appointment.service || "Servicio"}`);
+  const products = productSaleDescription(productItems);
+  if (products) parts.push(`Productos: ${products}`);
+  return parts.join(" | ");
+}
+
 function treatmentById(id) {
   return state.treatments.find((treatment) => treatment.id === id);
 }
@@ -1031,7 +1123,9 @@ function historyById(id) {
 }
 
 function historyPaid(historyId) {
-  return state.payments.filter((payment) => payment.historyId === historyId).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  return state.payments
+    .filter((payment) => payment.historyId === historyId)
+    .reduce((sum, payment) => sum + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0)), 0);
 }
 
 function historyBalance(historyId) {
@@ -1579,13 +1673,21 @@ function fillPaymentPatientSelect(select, selected = "") {
       const patient = patientById(appointment.patientId);
       return `<option value="appt:${escapeHtml(appointment.id)}">${agendaTimeLabel(appointment.time)} - ${escapeHtml(patient?.name || "Paciente")} - ${escapeHtml(appointment.service || "")}</option>`;
     });
+  const usedIds = new Set([...patients.map((patient) => patient.id), ...agendaPaymentAppointments().map((appointment) => appointment.patientId)]);
+  const otherOptions = state.patients
+    .filter((patient) => !usedIds.has(patient.id))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni || "")}</option>`);
   const groups = [];
   if (debtOptions.length) groups.push(`<optgroup label="Atenciones pendientes">${debtOptions.join("")}</optgroup>`);
   if (agendaOptions.length) groups.push(`<optgroup label="Citas del dia">${agendaOptions.join("")}</optgroup>`);
+  if (otherOptions.length) groups.push(`<optgroup label="Otros pacientes">${otherOptions.join("")}</optgroup>`);
   select.innerHTML = groups.length ? groups.join("") : `<option value="">Sin pacientes pendientes</option>`;
   if (selected && paymentSelectionExists(selected)) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
   else if (agendaOptions.length) select.value = agendaPaymentAppointments()[0]?.id ? `appt:${agendaPaymentAppointments()[0].id}` : "";
+  else if (otherOptions.length) select.value = state.patients.slice().sort((a, b) => a.name.localeCompare(b.name))[0]?.id || "";
 }
 
 function agendaPaymentAppointments() {
@@ -1654,9 +1756,9 @@ const roleLabels = {
 };
 
 const roleViews = {
-  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
-  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
-  RECEPCION: ["dashboard", "pacientes", "agenda", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
+  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
+  RECEPCION: ["dashboard", "pacientes", "agenda", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -1714,6 +1816,10 @@ function canManageCash() {
   return ["ADMIN", "RECEPCION"].includes(currentUser()?.role);
 }
 
+function canManageInventory() {
+  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
+}
+
 function canCreatePatients() {
   return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
 }
@@ -1768,6 +1874,7 @@ function setView(view) {
     historial: "Historial clínico dental",
     odontograma: "Odontograma",
     tratamientos: "Tratamientos",
+    inventario: "Inventario",
     pagos: "Pagos y caja",
     comprobantes: "Comprobantes electrónicos",
     "caja-general": "Caja general",
@@ -1810,6 +1917,9 @@ function renderActiveView() {
       break;
     case "tratamientos":
       renderTreatments();
+      break;
+    case "inventario":
+      renderInventory();
       break;
     case "pagos":
       renderPayments();
@@ -1854,6 +1964,7 @@ function renderFullApp() {
   renderClinicalHistory();
   renderOdontogram();
   renderTreatments();
+  renderInventory();
   renderPayments();
   renderElectronicReceipts();
   renderGeneralCash();
@@ -1898,6 +2009,7 @@ function hydrateForms() {
   fillSelect($("#doctorFilter"), ["Todos los doctores", ...state.config.doctors], $("#doctorFilter").value);
   fillSelect($("#unitFilter"), ["Todas las unidades", ...state.config.units], $("#unitFilter").value);
   renderTreatmentPaymentOptions();
+  fillInventoryProductSelects();
   toggleMixedPaymentFields();
 }
 
@@ -1915,7 +2027,11 @@ function renderTreatmentPaymentOptions() {
     if (form?.amountDue) form.amountDue.value = amount || 0;
     if (form?.date) form.date.value = appointment.date || operatingDate();
     if (form?.amount && (!Number(form.amount.value || 0) || form.dataset.paymentMode !== "agenda")) form.amount.value = amount || "";
-    if (form) form.dataset.paymentMode = "agenda";
+    if (form) {
+      form.dataset.paymentMode = "agenda";
+      form.dataset.basePaymentAmount = Number(form.amount?.value || 0);
+      applyProductTotalToPaymentForm();
+    }
     const clearDebtBtn = $("#clearHistoryDebtBtn");
     if (clearDebtBtn) clearDebtBtn.hidden = true;
     updatePaymentChange();
@@ -1933,21 +2049,153 @@ function renderTreatmentPaymentOptions() {
   updatePaymentDue();
 }
 
+function renderInventory() {
+  fillInventoryProductSelects();
+  const productRows = $("#inventoryProductsTable");
+  const movementRows = $("#inventoryMovementsTable");
+  if (!productRows || !movementRows) return;
+  const products = activeInventoryProducts();
+  productRows.innerHTML = products.map((product) => {
+    const lowStock = Number(product.stock || 0) <= Number(product.minStock || 0) && Number(product.minStock || 0) > 0;
+    return `<tr>
+      <td><strong>${escapeHtml(product.name)}</strong><br><span class="muted">${escapeHtml(product.unit || "Unidad")}</span></td>
+      <td><span class="status ${lowStock ? "danger" : ""}">${Number(product.stock || 0)}</span></td>
+      <td>${money(product.price)}</td>
+      <td>${Number(product.minStock || 0)}</td>
+      <td class="row-actions"><button class="small-btn" data-edit-product="${product.id}">Editar</button></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5">Aun no hay productos registrados.</td></tr>`;
+
+  const movements = state.inventoryMovements.slice().sort((a, b) => `${b.date || ""}${b.createdAt || ""}`.localeCompare(`${a.date || ""}${a.createdAt || ""}`));
+  movementRows.innerHTML = movements.slice(0, 80).map((movement) => {
+    const product = inventoryProductById(movement.productId);
+    return `<tr>
+      <td>${formatDate(movement.date)}</td>
+      <td>${escapeHtml(product?.name || "Producto")}</td>
+      <td><span class="status ${movement.type === "SALIDA" || movement.type === "VENTA" ? "danger" : ""}">${escapeHtml(movement.type)}</span></td>
+      <td>${Number(movement.quantity || 0)}</td>
+      <td>${money(movement.total)}</td>
+      <td>${escapeHtml(movement.detail || "")}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6">Sin movimientos de inventario.</td></tr>`;
+}
+
 function updatePaymentDue() {
   const form = $("#paymentForm");
   if (!form) return;
   if (appointmentFromPaymentSelection(form.patientId.value)) {
     form.amount.readOnly = false;
+    form.dataset.basePaymentAmount = Number(form.amount.value || 0);
+    applyProductTotalToPaymentForm();
     updatePaymentChange();
     return;
   }
   const due = historyBalance(form.historyId.value);
   form.amountDue.value = due || 0;
   form.amount.value = due || "";
+  form.dataset.basePaymentAmount = Number(form.amount.value || 0);
   form.amount.readOnly = true;
   const clearDebtBtn = $("#clearHistoryDebtBtn");
   if (clearDebtBtn) clearDebtBtn.hidden = !isAdmin() || !form.historyId.value || due <= 0;
+  applyProductTotalToPaymentForm();
   updatePaymentChange();
+}
+
+function applyProductTotalToPaymentForm() {
+  const form = $("#paymentForm");
+  if (!form) return;
+  const base = Number(form.dataset.basePaymentAmount || form.amount?.value || 0);
+  const productTotal = paymentProductTotal();
+  const total = base + productTotal;
+  if (form.amount) form.amount.value = total ? cents(total) / 100 : "";
+  renderPaymentProductSummary();
+  updatePaymentChange();
+}
+
+function renderPaymentProductSummary() {
+  const summary = $("#paymentProductSummary");
+  if (!summary) return;
+  if (!selectedProductSaleItems.length) {
+    summary.hidden = true;
+    summary.innerHTML = "";
+    return;
+  }
+  summary.hidden = false;
+  summary.innerHTML = `
+    <strong>Productos: ${money(paymentProductTotal())}</strong>
+    <span>${escapeHtml(productSaleDescription())}</span>
+    <button type="button" class="inline-edit-btn" id="removePaymentProductsBtn">Quitar</button>
+  `;
+}
+
+function fillInventoryProductSelects() {
+  const products = activeInventoryProducts();
+  const options = products.map((product) => `${product.name} - stock ${Number(product.stock || 0)}`);
+  const values = products.map((product) => product.id);
+  $$('#inventoryMovementForm select[name="productId"]').forEach((select) => {
+    const selected = select.value;
+    select.innerHTML = values.map((value, index) => `<option value="${value}">${escapeHtml(options[index])}</option>`).join("");
+    if (selected && values.includes(selected)) select.value = selected;
+  });
+}
+
+function openProductSaleDialog() {
+  const dialog = $("#productSaleDialog");
+  if (!dialog) return;
+  renderProductSaleDialog();
+  dialog.showModal();
+}
+
+function productSaleItemById(productId) {
+  return selectedProductSaleItems.find((item) => item.productId === productId);
+}
+
+function setProductSaleQuantity(productId, quantity) {
+  const product = inventoryProductById(productId);
+  if (!product) return;
+  const normalizedQty = Math.max(0, Math.min(Number(product.stock || 0), Number(quantity || 0)));
+  const existing = productSaleItemById(productId);
+  if (normalizedQty <= 0) {
+    selectedProductSaleItems = selectedProductSaleItems.filter((item) => item.productId !== productId);
+  } else if (existing) {
+    existing.quantity = normalizedQty;
+    existing.price = Number(product.price || 0);
+    existing.name = product.name;
+  } else {
+    selectedProductSaleItems.push({
+      productId,
+      name: product.name,
+      quantity: normalizedQty,
+      price: Number(product.price || 0)
+    });
+  }
+  renderProductSaleDialog();
+  applyProductTotalToPaymentForm();
+}
+
+function renderProductSaleDialog() {
+  const list = $("#productSaleList");
+  const total = $("#productSaleTotal");
+  const summary = $("#productSaleModalSummary");
+  if (!list || !total) return;
+  const products = activeInventoryProducts().filter((product) => Number(product.stock || 0) > 0);
+  list.innerHTML = products.map((product) => {
+    const selected = productSaleItemById(product.id);
+    const qty = Number(selected?.quantity || 0);
+    return `<article class="product-sale-card ${qty ? "selected" : ""}">
+      <div>
+        <strong>${escapeHtml(product.name)}</strong>
+        <span>${money(product.price)} · Stock ${Number(product.stock || 0)}</span>
+      </div>
+      <div class="qty-stepper">
+        <button type="button" data-product-step="${product.id}" data-step="-1">-</button>
+        <input type="number" min="0" max="${Number(product.stock || 0)}" step="1" value="${qty}" data-product-qty="${product.id}" />
+        <button type="button" data-product-step="${product.id}" data-step="1">+</button>
+      </div>
+    </article>`;
+  }).join("") || `<p class="muted">No hay productos con stock disponible.</p>`;
+  total.textContent = `Total ${money(paymentProductTotal())}`;
+  if (summary) summary.textContent = selectedProductSaleItems.length ? productSaleDescription() : "Selecciona productos en stock.";
 }
 
 async function clearSelectedHistoryDebt() {
@@ -3010,6 +3258,8 @@ async function completePendingPayment(receiptValues = null) {
   const finishPaymentUi = () => {
     if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
     form.reset();
+    selectedProductSaleItems = [];
+    renderPaymentProductSummary();
     form.date.value = operatingDate();
     pendingPaymentContext = null;
     $("#receiptPromptDialog")?.close("ok");
@@ -3019,6 +3269,27 @@ async function completePendingPayment(receiptValues = null) {
   };
   const applyPaymentLocally = () => {
     upsert(state.payments, payment);
+    if (!API_ENABLED && Array.isArray(payment.productItems)) {
+      state.inventoryMovements = state.inventoryMovements.filter((movement) => movement.paymentId !== payment.id);
+      payment.productItems.forEach((item) => {
+        const product = inventoryProductById(item.productId);
+        if (!product) return;
+        const quantity = Number(item.quantity || 0);
+        product.stock = Math.max(0, Number(product.stock || 0) - quantity);
+        state.inventoryMovements.unshift({
+          id: uid("mov"),
+          productId: product.id,
+          date: payment.date,
+          type: "VENTA",
+          quantity,
+          unitPrice: Number(item.price || product.price || 0),
+          total: quantity * Number(item.price || product.price || 0),
+          detail: `Venta en pago ${payment.id}`,
+          paymentId: payment.id,
+          createdAt: new Date().toISOString()
+        });
+      });
+    }
     if (appointment) {
       appointment.status = "ATENDIDA";
       addLocalAuditEvent(
@@ -3035,6 +3306,7 @@ async function completePendingPayment(receiptValues = null) {
   }
   try {
     await savePaymentApi(payment);
+    if (optimisticSave) render();
     if (receiptValues) {
       const receipt = buildElectronicReceiptFromPayment(payment, receiptValues);
       if (receipt) {
@@ -5102,6 +5374,33 @@ function bindEvents() {
   $("#openMixedPaymentBtn")?.addEventListener("click", openMixedPaymentDialog);
   $("#saveMixedPaymentBtn")?.addEventListener("click", applyMixedPaymentDialog);
   $("#mixedPaymentForm")?.addEventListener("input", updateMixedPaymentDialogSummary);
+  $("#openProductSaleBtn")?.addEventListener("click", openProductSaleDialog);
+  $("#paymentProductSummary")?.addEventListener("click", (event) => {
+    if (!event.target.closest("#removePaymentProductsBtn")) return;
+    selectedProductSaleItems = [];
+    applyProductTotalToPaymentForm();
+  });
+  $("#productSaleList")?.addEventListener("click", (event) => {
+    const stepButton = event.target.closest("[data-product-step]");
+    if (!stepButton) return;
+    const productId = stepButton.dataset.productStep;
+    const current = Number(productSaleItemById(productId)?.quantity || 0);
+    setProductSaleQuantity(productId, current + Number(stepButton.dataset.step || 0));
+  });
+  $("#productSaleList")?.addEventListener("change", (event) => {
+    const input = event.target.closest("[data-product-qty]");
+    if (!input) return;
+    setProductSaleQuantity(input.dataset.productQty, Number(input.value || 0));
+  });
+  $("#clearProductSaleBtn")?.addEventListener("click", () => {
+    selectedProductSaleItems = [];
+    renderProductSaleDialog();
+    applyProductTotalToPaymentForm();
+  });
+  $("#saveProductSaleBtn")?.addEventListener("click", () => {
+    applyProductTotalToPaymentForm();
+    $("#productSaleDialog")?.close("ok");
+  });
   $("#savePaymentOnlyBtn")?.addEventListener("click", () => completePendingPayment(null));
   $("#openReceiptIssueBtn")?.addEventListener("click", () => {
     $("#receiptPromptDialog")?.close("emitir");
@@ -5175,8 +5474,11 @@ function bindEvents() {
     const paymentPatientId = patientIdFromPaymentSelection(data.patientId);
     const due = appointment ? 0 : historyBalance(data.historyId);
     const amount = Number(data.amount || 0);
-    if (!appointment && !data.historyId) {
-      alert("Selecciona una atencion pendiente para registrar el pago.");
+    const productsTotal = paymentProductTotal();
+    const hasProducts = productsTotal > 0 && selectedProductSaleItems.length > 0;
+    const careAmount = Math.max(0, amount - productsTotal);
+    if (!appointment && !data.historyId && !hasProducts) {
+      alert("Selecciona una atencion pendiente, una cita del dia o agrega un producto.");
       restorePaymentButton();
       return;
     }
@@ -5198,7 +5500,7 @@ function bindEvents() {
       }
       return;
     }
-    if (amount <= 0 || (!appointment && amount > due)) {
+    if (amount <= 0 || (!appointment && data.historyId && (careAmount <= 0 || careAmount > due))) {
       alert(appointment ? "El monto debe ser mayor a cero." : "El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
       restorePaymentButton();
       return;
@@ -5219,13 +5521,113 @@ function bindEvents() {
       appointmentId: appointment?.id || "",
       date: cashDate,
       amount,
+      productAmount: productsTotal,
       cashReceived,
       change: Math.max(0, cashReceived - cashPortion),
       method: String(data.method || "").toUpperCase(),
       ...split,
-      receipt: appointment && !String(data.receipt || "").trim() ? `Cita del dia: ${appointment.service || "Servicio"}` : data.receipt
+      productItems: selectedProductSaleItems.map((item) => ({
+        productId: item.productId,
+        name: item.name,
+        quantity: Number(item.quantity || 0),
+        price: Number(item.price || 0)
+      })),
+      receipt: buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems)
     };
     openPaymentReceiptPrompt({ payment, form, restorePaymentButton });
+  });
+  $("#paymentForm")?.addEventListener("reset", () => {
+    selectedProductSaleItems = [];
+    setTimeout(() => {
+      renderPaymentProductSummary();
+      const form = $("#paymentForm");
+      if (form) form.dataset.basePaymentAmount = "";
+    }, 0);
+  });
+
+  $("#inventoryProductForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!canManageInventory()) return;
+    const form = event.currentTarget;
+    const data = formData(form);
+    const product = {
+      id: data.id || uid("prod"),
+      name: String(data.name || "").trim().toUpperCase(),
+      unit: String(data.unit || "Unidad").trim() || "Unidad",
+      price: Number(data.price || 0),
+      stock: Number(data.stock || 0),
+      minStock: Number(data.minStock || 0),
+      active: true
+    };
+    if (!product.name || product.price < 0 || product.stock < 0) {
+      alert("Completa nombre, precio y stock del producto.");
+      return;
+    }
+    try {
+      await saveInventoryProductApi(product);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    if (!API_ENABLED) upsert(state.inventoryProducts, product);
+    if (!API_ENABLED) saveState();
+    form.reset();
+    render();
+  });
+
+  $("#inventoryMovementForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!canManageInventory()) return;
+    const form = event.currentTarget;
+    const data = formData(form);
+    const product = inventoryProductById(data.productId);
+    const quantity = Number(data.quantity || 0);
+    if (!product || quantity <= 0) {
+      alert("Selecciona producto y cantidad.");
+      return;
+    }
+    const movement = {
+      id: uid("mov"),
+      productId: product.id,
+      date: todayISO(),
+      type: data.type,
+      quantity,
+      unitPrice: Number(data.unitPrice || product.price || 0),
+      total: quantity * Number(data.unitPrice || product.price || 0),
+      detail: String(data.detail || "").trim()
+    };
+    if (["SALIDA", "VENTA"].includes(movement.type) && quantity > Number(product.stock || 0)) {
+      alert("No hay stock suficiente para registrar la salida.");
+      return;
+    }
+    try {
+      await saveInventoryMovementApi(movement);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    if (!API_ENABLED) {
+      const signedQty = movement.type === "ENTRADA" ? quantity : -quantity;
+      product.stock = Number(product.stock || 0) + signedQty;
+      state.inventoryMovements.unshift(movement);
+      saveState();
+    }
+    form.reset();
+    render();
+  });
+  $("#inventoryProductsTable")?.addEventListener("click", (event) => {
+    const edit = event.target.closest("[data-edit-product]");
+    if (!edit) return;
+    const product = inventoryProductById(edit.dataset.editProduct);
+    const form = $("#inventoryProductForm");
+    if (!product || !form) return;
+    form.id.value = product.id;
+    form.name.value = product.name;
+    form.price.value = product.price;
+    form.stock.value = product.stock;
+    form.minStock.value = product.minStock || 0;
+    form.unit.value = product.unit || "Unidad";
+    form.name.focus();
   });
 
   $("#openCashBtn").addEventListener("click", async () => {
