@@ -859,7 +859,7 @@ function appointmentDayPhrase(date) {
   if (Number.isNaN(target.getTime())) return `el ${formatDate(date)}`;
   const diffDays = Math.round((target - today) / 86400000);
   const label = reminderDateLabel(date);
-  return diffDays === 1 ? `manana ${label}` : `el ${label}`;
+  return diffDays === 1 ? `mañana ${label}` : `el ${label}`;
 }
 
 function appointmentReminderMessage(appointment, patient) {
@@ -884,7 +884,7 @@ function ageFromBirthDate(birthDate, referenceDate = todayISO()) {
 
 function patientAgeText(patient, referenceDate = todayISO()) {
   const age = ageFromBirthDate(patient?.birthDate, referenceDate);
-  return age === null ? "" : `${age} anos`;
+  return age === null ? "" : `${age} años`;
 }
 
 function validISODate(value) {
@@ -1399,9 +1399,9 @@ function appointmentStatusText(status) {
   const labels = {
     RESERVADA: "Reservada",
     CONFIRMADA: "Confirmada",
-    EN_ATENCION: "En atencion",
+    EN_ATENCION: "En atención",
     ATENDIDA: "Atendida",
-    NO_ASISTIO: "No asistio",
+    NO_ASISTIO: "No asistió",
     CANCELADA: "Cancelada",
     REPROGRAMADA: "Reprogramada"
   };
@@ -1468,9 +1468,9 @@ function patientAppointmentSummary(patientId) {
   const last = appointments.slice().reverse()[0];
   if (last) {
     const status = String(last.status || "").toUpperCase();
-    const detail = `Ultima: ${formatDate(last.date)}${last.time ? ` | ${agendaTimeLabel(last.time)}` : ""}`;
+    const detail = `Última: ${formatDate(last.date)}${last.time ? ` | ${agendaTimeLabel(last.time)}` : ""}`;
     if (status === "CANCELADA") return { className: "cancelled", title: "Cita cancelada", detail };
-    if (status === "NO_ASISTIO") return { className: "missed", title: "No asistio", detail };
+    if (status === "NO_ASISTIO") return { className: "missed", title: "No asistió", detail };
     if (status === "REPROGRAMADA") return { className: "rescheduled", title: "Reprogramada", detail };
   }
   return { className: "none", title: "No citado", detail: "Sin cita futura registrada" };
@@ -1488,21 +1488,30 @@ function appointmentDetailText(appointment) {
   return `${formatDate(appointment.date)}${appointment.time ? ` | ${agendaTimeLabel(appointment.time)}` : ""}${appointment.unit ? ` | ${appointment.unit}` : ""}${appointment.doctor ? ` | Dr(a). ${appointment.doctor}` : ""}`;
 }
 
+function appointmentPaymentSummary(appointment) {
+  const payments = state.payments.filter((payment) => String(payment.appointmentId || "") === String(appointment.id || ""));
+  const total = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  if (!payments.length || cents(total) === 0) return "";
+  const methods = [...new Set(payments.map((payment) => String(payment.method || "").trim()).filter(Boolean))].join(", ");
+  return methods ? `${money(total)} | ${methods}` : money(total);
+}
+
 function renderPatientAppointmentDetail(patientId) {
   const patient = patientById(patientId);
   const summary = patientAppointmentSummary(patientId);
   const appointments = state.appointments
     .filter((appointment) => String(appointment.patientId) === String(patientId))
     .slice()
-    .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
-  const futureAppointments = appointments.filter((appointment) => appointment.date >= todayISO()).slice(0, 4);
-  const lastAppointmentItem = appointments.slice().reverse()[0];
-  const items = futureAppointments.length ? futureAppointments : (lastAppointmentItem ? [lastAppointmentItem] : []);
-  const list = items.map((appointment) => {
+    .sort((a, b) => appointmentSortKey(b).localeCompare(appointmentSortKey(a)));
+  const list = appointments.map((appointment) => {
     const status = appointmentStatusText(appointment.status);
     const comment = appointment.notes || appointment.note || appointment.followUpComment || "";
+    const paymentText = appointmentPaymentSummary(appointment);
     return `<div class="patient-appointment-item">
-      <strong>${escapeHtml(status)}</strong>
+      <div class="patient-appointment-item-head">
+        <strong>${escapeHtml(status)}</strong>
+        ${paymentText ? `<strong class="patient-appointment-payment">${escapeHtml(paymentText)}</strong>` : ""}
+      </div>
       <span>${escapeHtml(appointmentDetailText(appointment))}</span>
       <span>${escapeHtml(appointment.service || patient?.mainTreatment || "Consulta")}</span>
       ${comment ? `<span class="muted">${escapeHtml(comment)}</span>` : ""}
@@ -1750,18 +1759,18 @@ function setView(view) {
     dashboard: "Dashboard",
     agenda: "Agenda diaria",
     pacientes: "Registrar paciente",
-    historial: "Historial clinico dental",
+    historial: "Historial clínico dental",
     odontograma: "Odontograma",
     tratamientos: "Tratamientos",
     pagos: "Pagos y caja",
-    comprobantes: "Comprobantes electronicos",
+    comprobantes: "Comprobantes electrónicos",
     "caja-general": "Caja general",
     "cuentas-cobrar": "Cuentas por cobrar",
-    panel: "Panel para doctores y recepcion",
+    panel: "Panel para doctores y recepción",
     recordatorios: "Recordatorios de citas",
     reportes: "Reportes diarios y mensuales",
-    campanas: "Campanas",
-    configuracion: "Configuracion"
+    campanas: "Campañas",
+    configuracion: "Configuración"
   }[view];
   render();
 }
@@ -2409,7 +2418,7 @@ function renderAgenda() {
     });
     rows.push(`<div class="agenda-row" style="grid-template-columns: 50px repeat(${units.length}, minmax(0, 1fr));"><div class="time-cell">${agendaTimeLabel(time)}</div>${slots.join("")}</div>`);
   });
-  $("#agendaBoard").innerHTML = rows.join("") || `<div class="appointment-card"><strong>No se pudo construir la agenda.</strong><p class="muted">Revisa horario de inicio, fin e intervalo en Configuracion.</p></div>`;
+  $("#agendaBoard").innerHTML = rows.join("") || `<div class="appointment-card"><strong>No se pudo construir la agenda.</strong><p class="muted">Revisa horario de inicio, fin e intervalo en Configuración.</p></div>`;
 }
 
 function renderPatients() {
@@ -2434,7 +2443,7 @@ function renderPatients() {
       const ageText = patientAgeText(patient);
       const highlight = patient.id === lastSavedPatientId ? "row-highlight" : "";
       const expanded = showAppointmentDetails && expandedPatientInfoId === patient.id;
-      const detailButton = showAppointmentDetails ? `<button class="small-btn" data-toggle-patient-info="${patient.id}">${expanded ? "Ocultar cita" : "Ver cita"}</button>` : "";
+      const detailButton = showAppointmentDetails ? `<button class="small-btn" data-toggle-patient-info="${patient.id}">${expanded ? "Ocultar citas" : "Ver citas"}</button>` : "";
       const mainRow = `<tr class="${highlight}" data-patient-row="${patient.id}">
         <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
         <td>${escapeHtml(patient.phone)}${patient.birthDate ? `<br><span class="muted">${formatDate(patient.birthDate)}${ageText ? ` | ${ageText}` : ""}</span>` : ""}</td>
@@ -3280,7 +3289,7 @@ function renderReminders() {
       <p class="muted">${escapeHtml(appointment.service)} | ${escapeHtml(appointment.doctor)}</p>
       <button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>
     </article>`;
-  }).join("") || `<p class="muted">No hay recordatorios pendientes para hoy, manana o pasado manana.</p>`;
+  }).join("") || `<p class="muted">No hay recordatorios pendientes para hoy, mañana o pasado mañana.</p>`;
 }
 
 function monthLabel(month) {
@@ -3475,7 +3484,7 @@ function renderReceptionNewPatientsWidget(month) {
   container.insertAdjacentHTML("beforeend", `
     <div class="reception-new-card">
       <div>
-        <span>Pacientes nuevos por recepcion</span>
+        <span>Pacientes nuevos por recepción</span>
         <strong>${patients.length}</strong>
         <small>${monthLabel(month)}</small>
       </div>
@@ -3489,7 +3498,7 @@ function renderReceptionPatientsModal(month = $("#reportMonth")?.value || todayI
   const body = $("#receptionPatientsBody");
   if (!title || !body) return;
   const patients = receptionNewPatientsForMonth(month);
-  title.textContent = `Pacientes nuevos de recepcion | ${monthLabel(month)}`;
+  title.textContent = `Pacientes nuevos de recepción | ${monthLabel(month)}`;
   body.innerHTML = patients.map((patient) => `
     <tr>
       <td>${formatDate(patient.createdAt)}</td>
@@ -3498,7 +3507,7 @@ function renderReceptionPatientsModal(month = $("#reportMonth")?.value || todayI
       <td>${escapeHtml(patient.phone)}</td>
       <td class="row-actions">${isAdmin() ? `<button class="small-btn danger-btn" data-hide-reception-patient="${patient.id}">Ocultar</button>` : ""}</td>
     </tr>
-  `).join("") || `<tr><td colspan="5">No hay pacientes nuevos registrados por recepcion este mes.</td></tr>`;
+  `).join("") || `<tr><td colspan="5">No hay pacientes nuevos registrados por recepción este mes.</td></tr>`;
 }
 
 function openReceptionPatientsModal() {
@@ -4168,11 +4177,11 @@ function bindEvents() {
         return;
       }
       const patient = patientById(hideReceptionPatient.dataset.hideReceptionPatient);
-      if (!patient || !confirm(`Quitar a ${patient.name} solo de la lista de pacientes nuevos de recepcion? No se eliminara su ficha, citas, historial, odontograma ni pagos.`)) return;
+      if (!patient || !confirm(`Quitar a ${patient.name} solo de la lista de pacientes nuevos de recepción? No se eliminará su ficha, citas, historial, odontograma ni pagos.`)) return;
       try {
         await hideReceptionNewPatientApi(patient.id);
         patient.hideFromReceptionNew = true;
-        addLocalAuditEvent("PATIENT_RECEPTION_NEW_HIDDEN", `Oculto de nuevos recepcion: ${patient.name} (${patient.dni})`, patient.id);
+        addLocalAuditEvent("PATIENT_RECEPTION_NEW_HIDDEN", `Ocultó de nuevos recepción: ${patient.name} (${patient.dni})`, patient.id);
         if (!API_ENABLED) saveState();
       } catch (error) {
         alert(error.message);
@@ -4917,7 +4926,7 @@ function bindEvents() {
     event.preventDefault();
     if (historySaving) return;
     if (!canManageClinical()) {
-      alert("Tu usuario no tiene permiso para guardar historial clinico.");
+      alert("Tu usuario no tiene permiso para guardar historial clínico.");
       return;
     }
     const form = event.currentTarget;
@@ -5778,7 +5787,7 @@ function bindEvents() {
       { seccion: "RESUMEN", indicador: "Compras con utilidad", mes: month, monto: -metrics.utilityPurchases },
       { seccion: "RESUMEN", indicador: "Pagos a terceros", mes: month, monto: -metrics.staffExpenses },
       { seccion: "RESUMEN", indicador: "Pacientes nuevos", mes: month, cantidad: metrics.newPatients.length },
-      { seccion: "RESUMEN", indicador: "Pacientes nuevos recepcion", mes: month, cantidad: metrics.receptionNewPatients.length },
+      { seccion: "RESUMEN", indicador: "Pacientes nuevos recepción", mes: month, cantidad: metrics.receptionNewPatients.length },
       { seccion: "RESUMEN", indicador: "Pacientes antiguos", mes: month, cantidad: metrics.oldPatients },
       { seccion: "RESUMEN", indicador: "Pacientes inactivos", mes: month, cantidad: metrics.inactivePatients },
       ...dailyIncomeBreakdownRows(month).map((row) => ({

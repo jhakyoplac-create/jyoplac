@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260702-pagos-rapidos" />
+    <link rel="stylesheet" href="styles.css?v=20260709-citas-tildes" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -40,7 +40,7 @@
         <button class="nav-item active" data-view="dashboard">Dashboard</button>
         <button class="nav-item" data-view="pacientes">Registrar paciente</button>
         <button class="nav-item" data-view="agenda">Agenda</button>
-        <button class="nav-item" data-view="historial">Historial clinico</button>
+        <button class="nav-item" data-view="historial">Historial clínico</button>
         <button class="nav-item" data-view="odontograma">Odontograma</button>
         <button class="nav-item" data-view="tratamientos">Tratamientos</button>
         <button class="nav-item" data-view="pagos">Pagos y caja</button>
@@ -48,11 +48,11 @@
         <button class="nav-item" data-view="caja-general">Caja general</button>
         <button class="nav-item" data-view="cuentas-cobrar">Cuentas por cobrar</button>
         <button class="nav-item" data-view="seguimiento-citas">Seguimiento citas</button>
-        <button class="nav-item" data-view="panel">Panel recepcion</button>
+        <button class="nav-item" data-view="panel">Panel recepción</button>
         <button class="nav-item" data-view="recordatorios">Recordatorios</button>
         <button class="nav-item" data-view="reportes">Reportes</button>
-        <button class="nav-item" data-view="campanas">Campanas</button>
-        <button class="nav-item" data-view="configuracion">Configuracion</button>
+        <button class="nav-item" data-view="campanas">Campañas</button>
+        <button class="nav-item" data-view="configuracion">Configuración</button>
       </nav>
       <div class="sidebar-footer">
         <div class="session-box">
@@ -111,7 +111,7 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Alertas</h2>
-              <button class="link" data-go="campanas">Campanas</button>
+              <button class="link" data-go="campanas">Campañas</button>
             </div>
             <div id="alertsList" class="stack"></div>
           </section>
@@ -257,7 +257,7 @@
 
           <section class="panel">
             <div class="panel-head">
-              <h2>Seguimiento clinico</h2>
+              <h2>Seguimiento clínico</h2>
               <button class="ghost" id="exportTreatmentsBtn">CSV</button>
             </div>
             <div id="treatmentsList" class="stack"></div>
@@ -655,7 +655,7 @@
             <strong id="panelDone">0</strong>
           </article>
           <article class="kpi">
-            <span>No asistio</span>
+            <span>No asistió</span>
             <strong id="panelMissed">0</strong>
           </article>
         </div>
@@ -711,7 +711,7 @@
             <strong id="reportNewPatients">0</strong>
           </article>
           <article class="kpi">
-            <span>Nuevos recepcion</span>
+            <span>Nuevos recepción</span>
             <strong id="reportReceptionNewPatients">0</strong>
           </article>
           <article class="kpi">
@@ -783,7 +783,7 @@
       <section id="configuracion" class="view">
         <form class="panel form wide" id="configForm">
           <div class="panel-head">
-            <h2>Configuracion del consultorio</h2>
+            <h2>Configuración del consultorio</h2>
             <div class="top-actions">
               <button class="ghost" id="resetDataBtn" type="button">Restaurar datos iniciales</button>
               <button class="ghost" id="blankDataBtn" type="button">Empezar desde cero</button>
@@ -941,7 +941,7 @@
     <dialog id="receptionPatientsDialog">
       <div class="form modal-form wide-modal">
         <div class="panel-head">
-          <h2 id="receptionPatientsTitle">Pacientes nuevos de recepcion</h2>
+          <h2 id="receptionPatientsTitle">Pacientes nuevos de recepción</h2>
           <button class="icon" data-close-dialog="receptionPatientsDialog" type="button" aria-label="Cerrar">x</button>
         </div>
         <div class="table-wrap">
@@ -1020,6 +1020,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260704-caja-totales-visibles"></script>
+    <script src="app.js?v=20260709-citas-tildes"></script>
   </body>
 </html>
