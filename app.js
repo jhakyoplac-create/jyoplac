@@ -142,6 +142,7 @@ let patientEditingId = "";
 let expandedPatientInfoId = "";
 let selectedCashViewDate = "";
 let selectedProductSaleItems = [];
+let selectedCashReportRange = null;
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -3998,11 +3999,21 @@ function cashBalancePeriodLabel() {
   return `${formatDate(cashBalanceStartDate())} - ${formatDate(todayISO())}`;
 }
 
-function generalCashBalances() {
-  const balancePayments = state.payments.filter(isFromCashBalancePeriod);
-  const balanceExpenses = state.expenses.filter(isFromCashBalancePeriod);
+function generalCashBalances(options = {}) {
+  const fromDate = options.from || cashBalanceStartDate();
+  const toDate = options.to || todayISO();
+  const inRange = (item) => {
+    const date = String(item?.date || "");
+    return date >= fromDate && date <= toDate;
+  };
+  const balancePayments = state.payments.filter(inRange);
+  const balanceExpenses = state.expenses.filter(inRange);
   const allUtilityMovements = state.expenses.filter((expense) => isUtilityContribution(expense) || isUtilityPurchase(expense));
-  const pettyCash = pettyCashDeliveredTotal(null, cashBalanceStartDate());
+  const pettyCashDates = [...new Set([
+    ...state.pettyCashAllocations.map((item) => item.date),
+    ...state.cashSessions.map((session) => session.date)
+  ])].filter((date) => String(date || "") >= fromDate && String(date || "") <= toDate);
+  const pettyCash = pettyCashDates.reduce((sum, date) => sum + pettyCashDeliveredForDate(date), 0);
   const cashIncome = balancePayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["EFECTIVO"]), 0);
   const walletIncome = balancePayments
@@ -4047,7 +4058,9 @@ function generalCashBalances() {
     transferExpenses,
     utilityContributions,
     utilityPurchases,
-    pettyCash
+    pettyCash,
+    fromDate,
+    toDate
   };
 }
 
@@ -4062,7 +4075,7 @@ function openGeneralBalanceDetail(type, options = {}) {
   const fromDate = options.from || cashBalanceStartDate();
   const toDate = options.to || todayISO();
   const periodLabel = options.label || `${formatDate(fromDate)} - ${formatDate(toDate)}`;
-  const balances = generalCashBalances();
+  const balances = generalCashBalances({ from: fromDate, to: toDate });
   if (isUtility) {
     const movements = utilityMovements();
     const totalContributions = movements.filter(isUtilityContribution).reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -4172,95 +4185,15 @@ function monthEnd(month = todayISO().slice(0, 7)) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function cashPeriodRange() {
-  const from = $("#cashPeriodFrom")?.value || monthStart();
-  const to = $("#cashPeriodTo")?.value || todayISO();
-  return from <= to ? { from, to } : { from: to, to: from };
-}
-
-function setCashPeriodRange(from, to) {
-  const fromInput = $("#cashPeriodFrom");
-  const toInput = $("#cashPeriodTo");
-  const monthInput = $("#cashPeriodMonth");
-  if (fromInput) fromInput.value = from;
-  if (toInput) toInput.value = to;
-  if (monthInput && from.slice(0, 7) === to.slice(0, 7)) monthInput.value = from.slice(0, 7);
-  renderCashPeriodDialog();
-}
-
-function setCashPeriodMonth(month) {
-  const end = month === todayISO().slice(0, 7) ? todayISO() : monthEnd(month);
-  setCashPeriodRange(monthStart(month), end);
-}
-
-function cashPeriodRows(from, to) {
-  return allDatesWithCashActivity()
-    .filter((date) => date >= from && date <= to)
-    .sort()
-    .map((date) => {
-      const cashIncome = incomeForDate(date, "EFECTIVO");
-      const walletIncome =
-        incomeForDate(date, "YAPE") +
-        incomeForDate(date, "PLIN") +
-        incomeForDate(date, "TRANSFERENCIA") +
-        incomeForDate(date, "TARJETA");
-      const cashExpenses =
-        cashBoxDetailExpenseByMethodsForDate(date, ["EFECTIVO"]) +
-        utilityContributionByMethodsForDate(date, ["EFECTIVO"]);
-      const walletExpenses =
-        cashBoxDetailExpenseByMethodsForDate(date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"]) +
-        utilityContributionByMethodsForDate(date, ["YAPE", "PLIN", "TRANSFERENCIA", "TARJETA"]);
-      const pettyCash = pettyCashDeliveredForDate(date);
-      const utilityOut = utilityContributionTotalForDate(date);
-      const net = cashIncome + walletIncome - cashExpenses - walletExpenses - pettyCash;
-      return { date, cashIncome, walletIncome, cashExpenses, walletExpenses, pettyCash, utilityOut, net };
-    })
-    .filter((row) =>
-      row.cashIncome ||
-      row.walletIncome ||
-      row.cashExpenses ||
-      row.walletExpenses ||
-      row.pettyCash ||
-      row.utilityOut
-    );
-}
-
-function cashPeriodTotals(rows) {
-  return rows.reduce((totals, row) => {
-    totals.cashIncome += row.cashIncome;
-    totals.walletIncome += row.walletIncome;
-    totals.cashExpenses += row.cashExpenses;
-    totals.walletExpenses += row.walletExpenses;
-    totals.pettyCash += row.pettyCash;
-    totals.utilityOut += row.utilityOut;
-    totals.net += row.net;
-    return totals;
-  }, { cashIncome: 0, walletIncome: 0, cashExpenses: 0, walletExpenses: 0, pettyCash: 0, utilityOut: 0, net: 0 });
-}
-
-function renderCashPeriodDialog() {
-  const summary = $("#cashPeriodSummary");
-  if (!summary) return;
-  const { from, to } = cashPeriodRange();
-  const rows = cashPeriodRows(from, to);
-  const totals = cashPeriodTotals(rows);
-  const estimatedCash = Number(state.config.generalCashOpening || 0) + totals.cashIncome - totals.cashExpenses - totals.pettyCash;
-  const estimatedBank = Number(state.config.generalBankOpening || 0) + totals.walletIncome - totals.walletExpenses;
-  const card = (label, value, type = "") => `
-    <span class="period-summary-card">
-      ${type ? `<button class="kpi-detail-btn" data-open-period-detail="${type}" type="button" aria-label="Ver detalle de ${label}"></button>` : ""}
-      ${label}<strong>${value}</strong>
-    </span>`;
-  summary.innerHTML = `
-    ${card("Rango", `${formatDate(from)} - ${formatDate(to)}`)}
-    ${card("Ingresos efectivo", money(totals.cashIncome), "cash")}
-    ${card("Ingresos billeteras/bancos", money(totals.walletIncome), "bank")}
-    ${card("Egresos efectivo", money(totals.cashExpenses + totals.pettyCash))}
-    ${card("Egresos billeteras/bancos", money(totals.walletExpenses))}
-    ${card("A utilidad", money(totals.utilityOut))}
-    ${card("Neto del rango", money(totals.net))}
-    ${card("Estimado con saldos iniciales", money(estimatedCash + estimatedBank))}
-  `;
+function cashReportRangeForMonth(month) {
+  const from = monthStart(month);
+  const to = month === todayISO().slice(0, 7) ? todayISO() : monthEnd(month);
+  return {
+    from,
+    to,
+    month,
+    label: `${formatDate(from)} - ${formatDate(to)}`
+  };
 }
 
 function openCashPeriodDialog() {
@@ -4280,10 +4213,8 @@ function openCashPeriodDialog() {
 }
 
 function openCashPeriodForMonth(month) {
-  const monthInput = $("#cashPeriodMonth");
-  if (monthInput) monthInput.value = month;
-  setCashPeriodMonth(month);
-  $("#cashPeriodDialog")?.showModal();
+  selectedCashReportRange = cashReportRangeForMonth(month);
+  renderGeneralCash();
 }
 
 function utilityMovements() {
@@ -4317,7 +4248,10 @@ function renderUtilityMovements() {
 
 function renderGeneralCash() {
   const cashDate = todayISO();
-  const balances = generalCashBalances();
+  const balanceOptions = selectedCashReportRange
+    ? { from: selectedCashReportRange.from, to: selectedCashReportRange.to }
+    : {};
+  const balances = generalCashBalances(balanceOptions);
   $("#generalCashBalance").textContent = money(balances.cash);
   $("#generalBankBalance").textContent = money(balances.bank);
   $("#generalWalletBalance").textContent = money(balances.wallet);
@@ -4606,17 +4540,13 @@ function bindEvents() {
   document.addEventListener("click", async (event) => {
     const generalDetail = event.target.closest("[data-open-general-detail]");
     if (generalDetail) {
-      openGeneralBalanceDetail(generalDetail.dataset.openGeneralDetail);
-      return;
-    }
-    const periodDetail = event.target.closest("[data-open-period-detail]");
-    if (periodDetail) {
-      const { from, to } = cashPeriodRange();
-      openGeneralBalanceDetail(periodDetail.dataset.openPeriodDetail, {
-        from,
-        to,
-        label: `${formatDate(from)} - ${formatDate(to)}`
-      });
+      const detailType = generalDetail.dataset.openGeneralDetail;
+      const useSelectedRange = selectedCashReportRange && ["cash", "bank"].includes(detailType);
+      openGeneralBalanceDetail(detailType, useSelectedRange ? {
+        from: selectedCashReportRange.from,
+        to: selectedCashReportRange.to,
+        label: selectedCashReportRange.label
+      } : {});
       return;
     }
     const printReceipt = event.target.closest("[data-print-receipt]");
@@ -6327,43 +6257,6 @@ function bindEvents() {
   $("#openCashPeriodBtn")?.addEventListener("click", openCashPeriodDialog);
   $("#cashTitleMonthPicker")?.addEventListener("change", (event) => {
     if (event.target.value) openCashPeriodForMonth(event.target.value);
-  });
-  $("#cashPeriodMonth")?.addEventListener("change", (event) => {
-    if (event.target.value) setCashPeriodMonth(event.target.value);
-  });
-  $("#cashPeriodAllBtn")?.addEventListener("click", () => {
-    const dates = allDatesWithCashActivity();
-    const monthInput = $("#cashPeriodMonth");
-    if (monthInput) monthInput.value = "";
-    setCashPeriodRange(dates[0] || todayISO(), todayISO());
-  });
-  $("#cashPeriodApplyBtn")?.addEventListener("click", renderCashPeriodDialog);
-  $("#cashPeriodFrom")?.addEventListener("change", renderCashPeriodDialog);
-  $("#cashPeriodTo")?.addEventListener("change", renderCashPeriodDialog);
-  $("#cashPeriodCsvBtn")?.addEventListener("click", () => {
-    const { from, to } = cashPeriodRange();
-    const rows = cashPeriodRows(from, to).map((row) => ({
-      fecha: row.date,
-      ingresos_efectivo: row.cashIncome,
-      ingresos_billeteras_bancos: row.walletIncome,
-      egresos_efectivo: row.cashExpenses,
-      egresos_billeteras_bancos: row.walletExpenses,
-      caja_chica: row.pettyCash,
-      a_utilidad: row.utilityOut,
-      neto: row.net
-    }));
-    const totals = cashPeriodTotals(cashPeriodRows(from, to));
-    rows.push({
-      fecha: "TOTAL",
-      ingresos_efectivo: totals.cashIncome,
-      ingresos_billeteras_bancos: totals.walletIncome,
-      egresos_efectivo: totals.cashExpenses,
-      egresos_billeteras_bancos: totals.walletExpenses,
-      caja_chica: totals.pettyCash,
-      a_utilidad: totals.utilityOut,
-      neto: totals.net
-    });
-    exportCsv(`cierre-caja-general-${from}-${to}.csv`, rows);
   });
   $("#exportUtilityBtn")?.addEventListener("click", () => {
     exportCsv("movimientos-utilidad.csv", utilityMovements().map((item) => ({

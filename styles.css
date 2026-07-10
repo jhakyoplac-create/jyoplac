@@ -1463,52 +1463,6 @@ dialog::backdrop {
   max-height: min(84vh, 760px);
 }
 
-#cashPeriodDialog {
-  width: min(1180px, calc(100vw - 24px));
-  max-height: min(86vh, 780px);
-}
-
-.cash-period-modal .compact-filters {
-  align-items: end;
-}
-
-.cash-period-modal .compact-filters input {
-  background: #fff;
-}
-
-.cash-period-modal input[hidden] {
-  display: none;
-}
-
-.period-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.period-summary-grid span {
-  position: relative;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f6fcfd;
-  padding: 10px 12px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.period-summary-card .kpi-detail-btn {
-  top: 8px;
-  right: 8px;
-}
-
-.period-summary-grid strong {
-  display: block;
-  color: var(--ink);
-  font-size: 18px;
-  margin-top: 3px;
-}
-
 .period-detail-table {
   min-width: 980px;
   font-size: 12px;

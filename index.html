@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260710-calendario-nativo-caja" />
+    <link rel="stylesheet" href="styles.css?v=20260710-caja-mes-tarjetas" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -1087,22 +1087,6 @@
       </div>
     </dialog>
 
-    <dialog id="cashPeriodDialog">
-      <div class="form modal-form wide-modal cash-period-modal">
-        <div class="panel-head">
-          <h2>Reporte de caja</h2>
-          <button class="icon" data-close-dialog="cashPeriodDialog" type="button" aria-label="Cerrar">x</button>
-        </div>
-        <div class="inline-filters compact-filters">
-          <label>Mes<input id="cashPeriodMonth" type="month" /></label>
-          <input id="cashPeriodFrom" type="date" hidden />
-          <input id="cashPeriodTo" type="date" hidden />
-          <button class="ghost" id="cashPeriodCsvBtn" type="button">CSV</button>
-        </div>
-        <div id="cashPeriodSummary" class="period-summary-grid"></div>
-      </div>
-    </dialog>
-
     <dialog id="receiptPromptDialog">
       <div class="form modal-form alert-dialog">
         <div class="panel-head">
@@ -1146,6 +1130,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260710-calendario-nativo-caja"></script>
+    <script src="app.js?v=20260710-caja-mes-tarjetas"></script>
   </body>
 </html>
