@@ -4194,6 +4194,7 @@ function cashReportRangeForMonth(month) {
     from,
     to,
     month,
+    mode: "month",
     label: `${formatDate(from)} - ${formatDate(to)}`
   };
 }
@@ -4206,6 +4207,7 @@ function cashReportRangeForDates(from, to) {
     from: start,
     to: end,
     month: start.slice(0, 7) === end.slice(0, 7) ? start.slice(0, 7) : "",
+    mode: "range",
     label: `${formatDate(start)} - ${formatDate(end)}`
   };
 }
@@ -4214,13 +4216,13 @@ function syncCashTitleRangeInputs() {
   const fromInput = $("#cashTitleFrom");
   const toInput = $("#cashTitleTo");
   if (!fromInput || !toInput) return;
-  if (selectedCashReportRange) {
+  if (selectedCashReportRange?.mode === "range") {
     fromInput.value = selectedCashReportRange.from;
     toInput.value = selectedCashReportRange.to;
     return;
   }
-  if (!fromInput.value) fromInput.value = cashBalanceStartDate();
-  if (!toInput.value) toInput.value = todayISO();
+  fromInput.value = "";
+  toInput.value = "";
 }
 
 function openCashPeriodDialog() {
