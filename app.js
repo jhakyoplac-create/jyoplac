@@ -1489,7 +1489,13 @@ function appointmentDetailText(appointment) {
 }
 
 function appointmentPaymentSummary(appointment) {
-  const payments = state.payments.filter((payment) => String(payment.appointmentId || "") === String(appointment.id || ""));
+  const payments = state.payments.filter((payment) => {
+    if (String(payment.appointmentId || "") === String(appointment.id || "")) return true;
+    if (payment.appointmentId) return false;
+    return String(payment.patientId || "") === String(appointment.patientId || "")
+      && payment.date === appointment.date
+      && isAgendaPayment(payment);
+  });
   const total = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   if (!payments.length || cents(total) === 0) return "";
   const methods = [...new Set(payments.map((payment) => String(payment.method || "").trim()).filter(Boolean))].join(", ");
