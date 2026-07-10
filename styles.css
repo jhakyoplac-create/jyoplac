@@ -247,7 +247,7 @@ textarea {
 
 .product-picker-button {
   position: absolute;
-  top: 0;
+  top: -8px;
   right: 0;
   width: 38px;
   height: 38px;
