@@ -58,6 +58,9 @@ def normalize_role(role):
         "RECEPCIÓN": "RECEPCION",
         "RECEPCION": "RECEPCION",
         "DOCTORA": "DOCTOR",
+        "DOCTOR TRABAJADOR": "DOCTOR_TRABAJADOR",
+        "DOCTORA TRABAJADORA": "DOCTOR_TRABAJADOR",
+        "DOCTOR_TRABAJADOR": "DOCTOR_TRABAJADOR",
     }
     return aliases.get(value, value)
 
@@ -114,7 +117,7 @@ def read_token(token):
 
 def session_seconds_for_role(role, remember_device=False):
     role = normalize_role(role)
-    if remember_device and role == "DOCTOR":
+    if remember_device and role in {"DOCTOR", "DOCTOR_TRABAJADOR"}:
         return max(SESSION_SECONDS, DOCTOR_SESSION_SECONDS)
     return SESSION_SECONDS
 
@@ -681,7 +684,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/patients":
-            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             if data.get("hideReceptionNew"):
@@ -772,7 +775,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/appointments":
-            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             if data.get("delete"):
@@ -875,7 +878,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/clinical-history":
-            if not require_role(self, {"ADMIN", "DOCTOR"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("hist")
@@ -949,7 +952,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/receivables":
-            user = require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"})
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
             if not user:
                 return
             data = read_json(self)
@@ -998,7 +1001,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/treatments":
-            if not require_role(self, {"ADMIN", "DOCTOR"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("t")
@@ -1054,7 +1057,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": row["id"] if row else item_id})
 
         if parsed.path == "/api/inventory-products":
-            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("prod")
@@ -1090,7 +1093,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id, **snapshot})
 
         if parsed.path == "/api/inventory-movements":
-            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("mov")
@@ -1134,7 +1137,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id, **snapshot})
 
         if parsed.path == "/api/payments":
-            if not require_role(self, {"ADMIN", "DOCTOR", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             try:
                 data = read_json(self)
@@ -1305,7 +1308,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"error": f"No se pudo guardar el pago: {exc}"}, 500)
 
         if parsed.path == "/api/electronic-receipts":
-            if not require_role(self, {"ADMIN", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("cpe")
@@ -1388,7 +1391,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/expenses":
-            if not require_role(self, {"ADMIN", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             if data.get("delete"):
@@ -1509,7 +1512,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/cash/open":
-            if not require_role(self, {"ADMIN", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             date = data.get("date")
@@ -1545,7 +1548,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/cash/close":
-            if not require_role(self, {"ADMIN", "RECEPCION"}):
+            if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             date = data.get("date")

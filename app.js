@@ -261,7 +261,7 @@ function normalizeState(data) {
     name: String(user.name || user.username || `Usuario ${index + 1}`).trim(),
     username: String(user.username || "").trim(),
     password: String(user.password || ""),
-    role: ["ADMIN", "DOCTOR", "RECEPCION"].includes(user.role) ? user.role : "RECEPCION",
+    role: ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(user.role) ? user.role : "RECEPCION",
     active: user.active !== false
   })).filter((user) => user.username);
   return data;
@@ -1797,12 +1797,14 @@ function escapeHtml(value) {
 const roleLabels = {
   ADMIN: "Administrador",
   DOCTOR: "Doctor",
+  DOCTOR_TRABAJADOR: "Doctor trabajador",
   RECEPCION: "Recepcion"
 };
 
 const roleViews = {
   ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
   DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
+  DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
   RECEPCION: ["dashboard", "pacientes", "agenda", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
@@ -1838,11 +1840,11 @@ function addLocalAuditEvent(action, detail, patientId = "") {
 }
 
 function canManageAppointments() {
-  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageClinical() {
-  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR"].includes(currentUser()?.role);
 }
 
 function canEditReceivableAmount() {
@@ -1850,23 +1852,23 @@ function canEditReceivableAmount() {
 }
 
 function canManagePayments() {
-  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageExpenses() {
-  return ["ADMIN", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageCash() {
-  return ["ADMIN", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageInventory() {
-  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canCreatePatients() {
-  return ["ADMIN", "DOCTOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canDeletePatients() {
