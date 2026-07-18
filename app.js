@@ -36,6 +36,7 @@ const seedData = {
     generalCashOpening: 9000,
     generalBankOpening: 10000,
     generalUtilityOpening: 0,
+    monthlyOpenings: {},
     enableAgendaPayments: true,
     servicesCustomized: false
   },
@@ -234,6 +235,19 @@ function normalizeState(data) {
   data.config.generalCashOpening = Number(data.config.generalCashOpening ?? defaults.generalCashOpening);
   data.config.generalBankOpening = Number(data.config.generalBankOpening ?? defaults.generalBankOpening);
   data.config.generalUtilityOpening = Number(data.config.generalUtilityOpening ?? defaults.generalUtilityOpening ?? 0);
+  if (!data.config.monthlyOpenings || typeof data.config.monthlyOpenings !== "object" || Array.isArray(data.config.monthlyOpenings)) {
+    data.config.monthlyOpenings = {};
+  }
+  if (!data.config.monthlyOpenings["2026-06"]) {
+    data.config.monthlyOpenings["2026-06"] = {
+      cash: Number(data.config.generalCashOpening || 0),
+      bank: Number(data.config.generalBankOpening || 0)
+    };
+  }
+  data.config.monthlyOpenings = Object.fromEntries(Object.entries(data.config.monthlyOpenings).map(([month, opening]) => [month, {
+    cash: Number(opening?.cash || 0),
+    bank: Number(opening?.bank || 0)
+  }]));
   data.config.enableAgendaPayments = String(data.config.enableAgendaPayments).toLowerCase() !== "false";
   if (!Array.isArray(data.users) || !data.users.length) data.users = structuredClone(seedData.users);
   if (!Array.isArray(data.electronicReceipts)) data.electronicReceipts = [];
@@ -569,6 +583,15 @@ function applyApiBootstrap(payload) {
     state.config.generalCashOpening = Number(payload.config.generalCashOpening ?? state.config.generalCashOpening);
     state.config.generalBankOpening = Number(payload.config.generalBankOpening ?? state.config.generalBankOpening);
     state.config.generalUtilityOpening = Number(payload.config.generalUtilityOpening ?? state.config.generalUtilityOpening);
+    if (payload.config.monthlyOpenings !== undefined) {
+      try {
+        state.config.monthlyOpenings = typeof payload.config.monthlyOpenings === "string"
+          ? JSON.parse(payload.config.monthlyOpenings)
+          : payload.config.monthlyOpenings;
+      } catch {
+        state.config.monthlyOpenings = state.config.monthlyOpenings || {};
+      }
+    }
     state.config.clinicName = payload.config.clinicName || state.config.clinicName;
     state.config.start = payload.config.start || state.config.start;
     state.config.end = payload.config.end || state.config.end;
@@ -590,6 +613,7 @@ function applyApiBootstrap(payload) {
       state = normalizeState(state);
     }
   }
+  state = normalizeState(state);
   rememberApiUser(payload.user || apiUser);
   apiBootstrapped = true;
   render();
@@ -4001,9 +4025,48 @@ function cashBalancePeriodLabel() {
   return `${formatDate(cashBalanceStartDate())} - ${formatDate(todayISO())}`;
 }
 
+function nextMonth(month) {
+  const [year, value] = String(month || todayISO().slice(0, 7)).split("-").map(Number);
+  const date = new Date(year, value, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthKeysInRange(fromDate, toDate) {
+  const months = [];
+  let month = String(fromDate || todayISO()).slice(0, 7);
+  const lastMonth = String(toDate || fromDate || todayISO()).slice(0, 7);
+  while (month <= lastMonth) {
+    months.push(month);
+    month = nextMonth(month);
+  }
+  return months;
+}
+
+function monthlyOpening(month) {
+  const opening = state.config.monthlyOpenings?.[month] || {};
+  return {
+    cash: Number(opening.cash || 0),
+    bank: Number(opening.bank || 0)
+  };
+}
+
+function monthlyOpeningForRange(fromDate, toDate) {
+  return monthKeysInRange(fromDate, toDate).reduce((total, month) => {
+    const opening = monthlyOpening(month);
+    total.cash += opening.cash;
+    total.bank += opening.bank;
+    return total;
+  }, { cash: 0, bank: 0 });
+}
+
+function openingMonthForForm() {
+  return selectedCashReportRange?.month || todayISO().slice(0, 7);
+}
+
 function generalCashBalances(options = {}) {
   const fromDate = options.from || cashBalanceStartDate();
   const toDate = options.to || todayISO();
+  const opening = monthlyOpeningForRange(fromDate, toDate);
   const inRange = (item) => {
     const date = String(item?.date || "");
     return date >= fromDate && date <= toDate;
@@ -4037,8 +4100,8 @@ function generalCashBalances(options = {}) {
   const utilityPurchases = allUtilityMovements
     .filter(isUtilityPurchase)
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const cash = Number(state.config.generalCashOpening || 0) + cashIncome - cashExpenses - pettyCash;
-  const wallet = Number(state.config.generalBankOpening || 0) + walletIncome - walletExpenses;
+  const cash = opening.cash + cashIncome - cashExpenses - pettyCash;
+  const wallet = opening.bank + walletIncome - walletExpenses;
   const transfer = transferIncome - transferExpenses;
   const bank = wallet + transfer;
   const utility = Number(state.config.generalUtilityOpening || 0) + utilityContributions - utilityPurchases;
@@ -4049,8 +4112,8 @@ function generalCashBalances(options = {}) {
     transfer,
     utility,
     total: cash + bank,
-    cashOpening: Number(state.config.generalCashOpening || 0),
-    bankOpening: Number(state.config.generalBankOpening || 0),
+    cashOpening: opening.cash,
+    bankOpening: opening.bank,
     utilityOpening: Number(state.config.generalUtilityOpening || 0),
     cashIncome,
     walletIncome,
@@ -4310,12 +4373,16 @@ function renderGeneralCash() {
   $("#generalTodayIncome").textContent = money(todayIncome());
   const form = $("#generalCashForm");
   if (form && (!document.activeElement || !form.contains(document.activeElement))) {
-    form.cash.value = state.config.generalCashOpening;
-    form.bank.value = state.config.generalBankOpening;
+    const openingMonth = openingMonthForForm();
+    const opening = monthlyOpening(openingMonth);
+    form.openingMonth.value = openingMonth;
+    form.cash.value = opening.cash;
+    form.bank.value = opening.bank;
     form.utility.value = state.config.generalUtilityOpening || "";
     form.pettyCash.value = pettyCashAmount(cashDate) || "";
   }
   if (form) {
+    form.openingMonth.disabled = !isAdmin();
     form.cash.readOnly = !isAdmin();
     form.bank.readOnly = !isAdmin();
     form.utility.readOnly = !isAdmin();
@@ -6091,11 +6158,22 @@ function bindEvents() {
     const data = formData(event.currentTarget);
     const configUpdates = {};
     if (isAdmin()) {
-      state.config.generalCashOpening = Number(data.cash || 0);
-      state.config.generalBankOpening = Number(data.bank || 0);
+      const openingMonth = data.openingMonth || todayISO().slice(0, 7);
+      state.config.monthlyOpenings = {
+        ...(state.config.monthlyOpenings || {}),
+        [openingMonth]: {
+          cash: Number(data.cash || 0),
+          bank: Number(data.bank || 0)
+        }
+      };
+      if (openingMonth === "2026-06") {
+        state.config.generalCashOpening = Number(data.cash || 0);
+        state.config.generalBankOpening = Number(data.bank || 0);
+        configUpdates.generalCashOpening = state.config.generalCashOpening;
+        configUpdates.generalBankOpening = state.config.generalBankOpening;
+      }
       state.config.generalUtilityOpening = Number(data.utility || 0);
-      configUpdates.generalCashOpening = state.config.generalCashOpening;
-      configUpdates.generalBankOpening = state.config.generalBankOpening;
+      configUpdates.monthlyOpenings = state.config.monthlyOpenings;
       configUpdates.generalUtilityOpening = state.config.generalUtilityOpening;
     }
     const pettyAmount = Number(data.pettyCash || 0);
@@ -6112,6 +6190,12 @@ function bindEvents() {
     if (session) session.openingCash = pettyAmount;
     if (!API_ENABLED) saveState();
     render();
+  });
+  $("#generalCashForm").openingMonth?.addEventListener("change", (event) => {
+    const form = event.currentTarget.form;
+    const opening = monthlyOpening(event.currentTarget.value || todayISO().slice(0, 7));
+    form.cash.value = opening.cash;
+    form.bank.value = opening.bank;
   });
   $("#suggestUtilityTransferBtn")?.addEventListener("click", () => {
     const form = $("#utilityForm");

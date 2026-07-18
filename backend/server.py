@@ -1466,6 +1466,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 values["generalBankOpening"] = data["generalBankOpening"]
             if "generalUtilityOpening" in data:
                 values["generalUtilityOpening"] = data["generalUtilityOpening"]
+            if "monthlyOpenings" in data:
+                values["monthlyOpenings"] = data["monthlyOpenings"]
             if "clinicName" in data:
                 values["clinicName"] = data["clinicName"]
             for key in ["start", "end", "interval", "inactiveDays", "enableAgendaPayments", "whatsapp", "doctors", "units"]:

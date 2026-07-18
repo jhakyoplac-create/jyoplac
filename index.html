@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260710-caja-rango-blanco" />
+    <link rel="stylesheet" href="styles.css?v=20260717-saldos-mensuales" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -466,11 +466,12 @@
         <div class="content-grid general-layout">
           <form class="panel form" id="generalCashForm">
             <div class="panel-head">
-              <h2>Saldos iniciales</h2>
+              <h2>Saldos iniciales del mes</h2>
             </div>
+            <label>Mes de saldo<input name="openingMonth" type="month" /></label>
             <label>Efectivo general S/<input name="cash" type="number" min="0" step="0.01" /></label>
             <label>Yape/Plin/Tarjeta/Transferencia S/<input name="bank" type="number" min="0" step="0.01" /></label>
-            <label>Utilidad inicial S/<input name="utility" type="number" min="0" step="0.01" /></label>
+            <label>Utilidad inicial general S/<input name="utility" type="number" min="0" step="0.01" /></label>
             <label>Salida caja chica del dia S/<input name="pettyCash" type="number" min="0" step="0.01" /></label>
             <button class="primary" type="submit">Guardar saldos</button>
           </form>
@@ -1134,6 +1135,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260710-caja-rango-blanco"></script>
+    <script src="app.js?v=20260717-saldos-mensuales"></script>
   </body>
 </html>
