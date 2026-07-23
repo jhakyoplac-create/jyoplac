@@ -141,6 +141,7 @@ let forcedPaymentHistoryId = "";
 let lastSavedPatientId = "";
 let patientEditingId = "";
 let expandedPatientInfoId = "";
+const patientAppointmentHistoryLoaded = new Set();
 let selectedCashViewDate = "";
 let selectedProductSaleItems = [];
 let selectedCashReportRange = null;
@@ -641,6 +642,14 @@ function replaceDateRange(list, items, from, to) {
   ];
 }
 
+function replacePatientAppointments(list, items, patientId) {
+  const incoming = items.map((item) => ({ ...item }));
+  return [
+    ...list.filter((item) => String(item.patientId || "") !== String(patientId || "")),
+    ...incoming
+  ];
+}
+
 function queryRange(from, to) {
   const params = new URLSearchParams();
   params.set("from", from);
@@ -680,6 +689,23 @@ async function refreshRangeThenRender(from, to, renderFn = render) {
     renderFn();
   } catch {
     // El refresco por rango es una mejora de velocidad; no debe bloquear la pantalla.
+  }
+}
+
+async function refreshPatientAppointmentsApi(patientId) {
+  if (!API_ENABLED || !apiToken || apiRefreshing || !patientId || patientAppointmentHistoryLoaded.has(patientId)) return;
+  apiRefreshing = true;
+  try {
+    const result = await apiFetch(`/api/appointments?patientId=${encodeURIComponent(patientId)}`);
+    if (Array.isArray(result.appointments)) {
+      state.appointments = replacePatientAppointments(state.appointments, result.appointments.map(mapApiAppointment), patientId);
+      patientAppointmentHistoryLoaded.add(patientId);
+      renderPatients();
+    }
+  } catch {
+    // Si falla la carga puntual, se mantiene la informacion ya visible.
+  } finally {
+    apiRefreshing = false;
   }
 }
 
@@ -5294,8 +5320,11 @@ function bindEvents() {
     const pay = event.target.closest("[data-pay-patient]");
     const del = event.target.closest("[data-delete-patient]");
     if (toggleInfo) {
-      expandedPatientInfoId = expandedPatientInfoId === toggleInfo.dataset.togglePatientInfo ? "" : toggleInfo.dataset.togglePatientInfo;
+      const patientId = toggleInfo.dataset.togglePatientInfo;
+      const opening = expandedPatientInfoId !== patientId;
+      expandedPatientInfoId = opening ? patientId : "";
       renderPatients();
+      if (opening) await refreshPatientAppointmentsApi(patientId);
       return;
     }
     if (edit) {

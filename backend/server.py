@@ -56,6 +56,13 @@ def today_lima():
     return date.today().isoformat()
 
 
+def add_days_iso(value, days):
+    try:
+        return date.fromordinal(date.fromisoformat(value).toordinal() + days).isoformat()
+    except Exception:
+        return value
+
+
 def normalize_role(role):
     value = str(role or "").strip().upper()
     aliases = {
@@ -481,6 +488,52 @@ def list_table_by_date(table, order="date DESC, created_at DESC", date_column="d
         ]
 
 
+def list_appointments(params=None):
+    params = params or {}
+    single_date = (params.get("date") or [""])[0]
+    date_from = (params.get("from") or [""])[0]
+    date_to = (params.get("to") or [""])[0]
+    patient_id = str((params.get("patientId") or params.get("patient_id") or [""])[0]).strip()
+    clauses = []
+    values = []
+    if valid_iso_date(single_date):
+        clauses.append("date = ?")
+        values.append(single_date)
+    elif valid_iso_date(date_from) and valid_iso_date(date_to):
+        clauses.append("date BETWEEN ? AND ?")
+        values.extend([date_from, date_to])
+    if patient_id:
+        clauses.append("patient_id = ?")
+        values.append(patient_id)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with db() as conn:
+        return [
+            row_to_dict(row)
+            for row in conn.execute(f"SELECT * FROM appointments {where} ORDER BY date DESC, time DESC", values).fetchall()
+        ]
+
+
+def list_bootstrap_appointments():
+    today = today_lima()
+    next_days = add_days_iso(today, 2)
+    with db() as conn:
+        return [
+            row_to_dict(row)
+            for row in conn.execute(
+                """
+                SELECT * FROM appointments
+                WHERE date BETWEEN ? AND ?
+                   OR (
+                        status IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')
+                        AND COALESCE(follow_up_status, '') <> 'CERRADO'
+                   )
+                ORDER BY date DESC, time DESC
+                """,
+                (today, next_days),
+            ).fetchall()
+        ]
+
+
 def list_users():
     with db() as conn:
         return [
@@ -628,7 +681,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {
                 "user": user,
                 "patients": list_table("patients", "name ASC"),
-                "appointments": list_table("appointments", "date DESC, time DESC"),
+                "appointments": list_bootstrap_appointments(),
                 "clinicalHistory": list_table("clinical_history", "date DESC"),
                 "treatments": list_table("treatments", "created_at DESC"),
                 "odontogram": list_table("odontogram", "patient_id ASC, tooth ASC"),
@@ -646,7 +699,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/patients":
             return send_json(self, {"patients": list_table("patients", "name ASC")})
         if parsed.path == "/api/appointments":
-            return send_json(self, {"appointments": list_table_by_date("appointments", "date DESC, time DESC", "date", params)})
+            return send_json(self, {"appointments": list_appointments(params)})
         if parsed.path == "/api/clinical-history":
             return send_json(self, {"clinicalHistory": list_table("clinical_history", "date DESC, created_at DESC")})
         if parsed.path == "/api/treatments":
