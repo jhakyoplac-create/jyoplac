@@ -740,6 +740,11 @@ async function refreshActiveViewApi() {
   const range = activeViewRefreshRange();
   if (!range) return;
   try {
+    if (currentView === "pagos") {
+      await refreshOperationalRangeApi(range.from, range.to, { rerender: false });
+      renderPayments();
+      return;
+    }
     await refreshOperationalRangeApi(range.from, range.to);
   } catch {
     // El refresco liviano no debe cerrar sesion ni interrumpir el trabajo.
@@ -1296,6 +1301,16 @@ function pendingPatientIds() {
   return [...new Set(pendingCashHistories().map((entry) => entry.patientId))];
 }
 
+function pendingCashDebtForPatient(patientId) {
+  return pendingCashHistories()
+    .filter((entry) => entry.patientId === patientId)
+    .reduce((sum, entry) => sum + historyBalance(entry.id), 0);
+}
+
+function pendingCashDebtTotal() {
+  return pendingCashHistories().reduce((sum, entry) => sum + historyBalance(entry.id), 0);
+}
+
 function cashSessionToday() {
   return activeOpenCashSession();
 }
@@ -1825,7 +1840,7 @@ function fillPaymentPatientSelect(select, selected = "") {
   const patients = state.patients
     .filter((patient) => ids.includes(patient.id))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const debtOptions = patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - deuda ${money(patientDebt(patient.id))}</option>`);
+  const debtOptions = patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - deuda ${money(pendingCashDebtForPatient(patient.id))}</option>`);
   const agendaOptions = agendaPaymentAppointments()
     .map((appointment) => {
       const patient = patientById(appointment.patientId);
@@ -3056,7 +3071,7 @@ function renderPayments() {
   const cashDate = cashViewDate();
   const cashDateInput = $("#cashViewDate");
   if (cashDateInput && document.activeElement !== cashDateInput) cashDateInput.value = cashDate;
-  $("#totalDebt").textContent = money(state.patients.reduce((sum, patient) => sum + patientDebt(patient.id), 0));
+  $("#totalDebt").textContent = money(pendingCashDebtTotal());
   renderCashBox(cashDate);
   renderExpenses(cashDate);
   const paymentsTable = $("#paymentsTable");
