@@ -3487,36 +3487,24 @@ function renderExpenses(cashDate = cashViewDate()) {
       ${isAdmin() ? "<th>Accion</th>" : ""}
     `;
   }
-  const rows = visibleExpensesForCashView(cashDate).filter(expenseAffectsDaily).map((expense) => `<tr>
+  const sourceLabel = (expense) => {
+    if (isUtilityContribution(expense)) return "A utilidad";
+    if (expense.source === "UTILIDAD") return "Utilidad";
+    if (expense.source === "CAJA_GENERAL") return "Caja general";
+    if (expense.source === "CAJA_CHICA") return "Caja chica";
+    if (expense.source === "INGRESO_DEL_DIA") return "Caja del dia";
+    return expense.source || "";
+  };
+  const rows = visibleExpensesForCashView(cashDate)
+    .filter((expense) => expenseAffectsDaily(expense) || expense.source === "CAJA_GENERAL" || expense.source === "UTILIDAD")
+    .map((expense) => `<tr>
     <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
     <td>${escapeHtml(expense.method)}</td>
-    <td>${escapeHtml(expense.source)}</td>
+    <td>${escapeHtml(sourceLabel(expense))}</td>
     <td><strong>${money(expense.amount)}</strong></td>
     ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-expense="${expense.id}">Eliminar</button></td>` : ""}
   </tr>`);
-  expensesTable.innerHTML = rows.join("") || `<tr><td colspan="${isAdmin() ? 5 : 4}">No hay egresos registrados hoy.</td></tr>`;
-
-  const generalExpensesTable = $("#generalExpensesTable");
-  const generalExpensesHeader = generalExpensesTable?.closest("table")?.querySelector("thead tr");
-  if (generalExpensesHeader) {
-    generalExpensesHeader.innerHTML = `
-      <th>Detalle</th>
-      <th>Metodo</th>
-      <th>Monto</th>
-      ${isAdmin() ? "<th>Accion</th>" : ""}
-    `;
-  }
-  if (generalExpensesTable) {
-    const generalRows = visibleExpensesForCashView(cashDate)
-      .filter((expense) => expense.source === "CAJA_GENERAL")
-      .map((expense) => `<tr>
-        <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
-        <td>${escapeHtml(expense.method)}</td>
-        <td><strong>${money(expense.amount)}</strong></td>
-        ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-expense="${expense.id}">Eliminar</button></td>` : ""}
-      </tr>`);
-    generalExpensesTable.innerHTML = generalRows.join("") || `<tr><td colspan="${isAdmin() ? 4 : 3}">No hay egresos de caja general en esta fecha.</td></tr>`;
-  }
+  expensesTable.innerHTML = rows.join("") || `<tr><td colspan="${isAdmin() ? 5 : 4}">No hay egresos registrados en esta fecha.</td></tr>`;
 }
 
 function toggleCashLockedState(isOpen) {
@@ -5259,7 +5247,6 @@ function bindEvents() {
     render();
   };
   $("#expensesTable")?.addEventListener("click", handleExpenseDelete);
-  $("#generalExpensesTable")?.addEventListener("click", handleExpenseDelete);
   $("#utilityMovementsTable")?.addEventListener("click", async (event) => {
     const del = event.target.closest("[data-delete-utility-movement]");
     if (del && isAdmin()) {
