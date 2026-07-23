@@ -673,6 +673,16 @@ async function refreshOperationalRangeApi(from, to, { rerender = true } = {}) {
   }
 }
 
+async function refreshRangeThenRender(from, to, renderFn = render) {
+  if (!from || !to) return;
+  try {
+    await refreshOperationalRangeApi(from, to, { rerender: false });
+    renderFn();
+  } catch {
+    // El refresco por rango es una mejora de velocidad; no debe bloquear la pantalla.
+  }
+}
+
 function activeViewRefreshRange() {
   const today = todayISO();
   if (currentView === "agenda") {
@@ -691,6 +701,11 @@ function activeViewRefreshRange() {
   }
   if (currentView === "caja-general" && selectedCashReportRange?.from && selectedCashReportRange?.to) {
     return { from: selectedCashReportRange.from, to: selectedCashReportRange.to };
+  }
+  if (currentView === "reportes") {
+    const month = $("#reportMonth")?.value || today.slice(0, 7);
+    const compareMonth = $("#compareMonth")?.value || previousMonth(month);
+    return reportRefreshRange(month, compareMonth);
   }
   return null;
 }
@@ -2008,6 +2023,7 @@ function setView(view) {
   const cashRangeControls = $("#cashTitleRangeControls");
   if (cashRangeControls) cashRangeControls.hidden = view !== "caja-general";
   render();
+  refreshActiveViewApi();
 }
 
 function render() {
@@ -3805,6 +3821,20 @@ function monthRangeForReports(referenceMonth) {
   return months;
 }
 
+function reportRefreshRange(month, compareMonth) {
+  const months = [...new Set([...monthRangeForReports(month), compareMonth].filter(Boolean))].sort();
+  const from = monthStart(months[0] || month);
+  const to = monthEnd(months[months.length - 1] || month);
+  return { from, to };
+}
+
+async function refreshReportsRange() {
+  const month = $("#reportMonth")?.value || todayISO().slice(0, 7);
+  const compareMonth = $("#compareMonth")?.value || previousMonth(month);
+  const range = reportRefreshRange(month, compareMonth);
+  await refreshRangeThenRender(range.from, range.to, renderReports);
+}
+
 function monthlyCareData(referenceMonth) {
   return monthRangeForReports(referenceMonth).map((month) => ({
     month,
@@ -4375,6 +4405,7 @@ function openCashPeriodForMonth(month) {
   if (summaryFrom) summaryFrom.value = selectedCashReportRange.from;
   if (summaryTo) summaryTo.value = selectedCashReportRange.to;
   renderGeneralCash();
+  refreshRangeThenRender(selectedCashReportRange.from, selectedCashReportRange.to, renderGeneralCash);
 }
 
 function openCashPeriodForDateRange(from, to) {
@@ -4387,6 +4418,7 @@ function openCashPeriodForDateRange(from, to) {
   if (summaryFrom) summaryFrom.value = selectedCashReportRange.from;
   if (summaryTo) summaryTo.value = selectedCashReportRange.to;
   renderGeneralCash();
+  refreshRangeThenRender(selectedCashReportRange.from, selectedCashReportRange.to, renderGeneralCash);
 }
 
 function utilityMovements() {
@@ -4852,8 +4884,14 @@ function bindEvents() {
     renderAgenda();
     refreshActiveViewApi();
   });
-  on("#reportMonth", "change", renderReports);
-  on("#compareMonth", "change", renderReports);
+  on("#reportMonth", "change", () => {
+    renderReports();
+    refreshReportsRange();
+  });
+  on("#compareMonth", "change", () => {
+    renderReports();
+    refreshReportsRange();
+  });
   on("#historyPatientFilter", "change", renderClinicalHistory);
   on("#odontogramPatientFilter", "change", renderOdontogram);
   on("#doctorFilter", "change", renderAgenda);
