@@ -3428,7 +3428,8 @@ async function completePendingPayment(receiptValues = null) {
     pendingPaymentContext = null;
     $("#receiptPromptDialog")?.close("ok");
     $("#receiptIssueDialog")?.close("ok");
-    render();
+    if (currentView === "pagos") renderPayments();
+    else render();
     restorePaymentButton();
   };
   const applyPaymentLocally = () => {
@@ -3470,7 +3471,6 @@ async function completePendingPayment(receiptValues = null) {
   }
   try {
     await savePaymentApi(payment);
-    if (optimisticSave) render();
     if (receiptValues) {
       const receipt = buildElectronicReceiptFromPayment(payment, receiptValues);
       if (receipt) {
