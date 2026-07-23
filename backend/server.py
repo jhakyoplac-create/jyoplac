@@ -11,6 +11,7 @@ import re
 import secrets
 import socket
 import sqlite3
+import threading
 import time
 import uuid
 
@@ -25,6 +26,11 @@ try:
 except ImportError:
     psycopg = None
     dict_row = None
+
+try:
+    from psycopg_pool import ConnectionPool
+except ImportError:
+    ConnectionPool = None
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -123,15 +129,21 @@ def session_seconds_for_role(role, remember_device=False):
 
 
 class CompatConnection:
-    def __init__(self, conn, postgres=False):
+    def __init__(self, conn, postgres=False, release_cm=None):
         self.conn = conn
         self.postgres = postgres
+        self._release_cm = release_cm
 
     def __enter__(self):
-        self.conn.__enter__()
+        if self._release_cm is not None:
+            self.conn = self._release_cm.__enter__()
+        else:
+            self.conn.__enter__()
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        if self._release_cm is not None:
+            return self._release_cm.__exit__(exc_type, exc, tb)
         return self.conn.__exit__(exc_type, exc, tb)
 
     def execute(self, sql, params=None):
@@ -149,11 +161,33 @@ class CompatConnection:
             self.execute(statement)
 
 
+_pg_pool = None
+_pg_pool_lock = threading.Lock()
+
+
+def get_pg_pool():
+    global _pg_pool
+    if _pg_pool is None:
+        with _pg_pool_lock:
+            if _pg_pool is None:
+                if ConnectionPool is None:
+                    raise RuntimeError("Instala psycopg-pool para usar DATABASE_URL con PostgreSQL.")
+                _pg_pool = ConnectionPool(
+                    DATABASE_URL,
+                    min_size=1,
+                    max_size=10,
+                    kwargs={"row_factory": dict_row},
+                    open=True,
+                )
+    return _pg_pool
+
+
 def db():
     if USE_POSTGRES:
         if psycopg is None:
             raise RuntimeError("Instala psycopg para usar DATABASE_URL con PostgreSQL.")
-        return CompatConnection(psycopg.connect(DATABASE_URL, row_factory=dict_row), postgres=True)
+        pool = get_pg_pool()
+        return CompatConnection(None, postgres=True, release_cm=pool.connection())
     DB_DIR.mkdir(exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
