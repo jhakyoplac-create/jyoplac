@@ -1719,20 +1719,19 @@ function fillPaymentPatientSelect(select, selected = "") {
       return `<option value="appt:${escapeHtml(appointment.id)}">${agendaTimeLabel(appointment.time)} - ${escapeHtml(patient?.name || "Paciente")} - ${escapeHtml(appointment.service || "")}</option>`;
     });
   const usedIds = new Set([...patients.map((patient) => patient.id), ...agendaPaymentAppointments().map((appointment) => appointment.patientId)]);
-  const otherOptions = state.patients
-    .filter((patient) => !usedIds.has(patient.id))
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni || "")}</option>`);
+  const selectedPatient = selected && !String(selected).startsWith("appt:") ? patientById(selected) : null;
+  const selectedOption = selectedPatient && !usedIds.has(selectedPatient.id)
+    ? `<option value="${selectedPatient.id}">${escapeHtml(selectedPatient.name)} - ${escapeHtml(selectedPatient.dni || "")}</option>`
+    : "";
   const groups = [];
+  if (selectedOption) groups.push(`<optgroup label="Paciente seleccionado">${selectedOption}</optgroup>`);
   if (debtOptions.length) groups.push(`<optgroup label="Atenciones pendientes">${debtOptions.join("")}</optgroup>`);
   if (agendaOptions.length) groups.push(`<optgroup label="Citas del dia">${agendaOptions.join("")}</optgroup>`);
-  if (otherOptions.length) groups.push(`<optgroup label="Otros pacientes">${otherOptions.join("")}</optgroup>`);
   select.innerHTML = groups.length ? groups.join("") : `<option value="">Sin pacientes pendientes</option>`;
   if (selected && paymentSelectionExists(selected)) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
   else if (agendaOptions.length) select.value = agendaPaymentAppointments()[0]?.id ? `appt:${agendaPaymentAppointments()[0].id}` : "";
-  else if (otherOptions.length) select.value = state.patients.slice().sort((a, b) => a.name.localeCompare(b.name))[0]?.id || "";
+  else select.value = "";
 }
 
 function agendaPaymentAppointments() {
