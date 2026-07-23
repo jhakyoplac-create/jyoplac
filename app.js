@@ -633,6 +633,78 @@ async function loadFromApi() {
   }
 }
 
+function replaceDateRange(list, items, from, to) {
+  const incoming = items.map((item) => ({ ...item }));
+  return [
+    ...list.filter((item) => item.date < from || item.date > to),
+    ...incoming
+  ];
+}
+
+function queryRange(from, to) {
+  const params = new URLSearchParams();
+  params.set("from", from);
+  params.set("to", to);
+  return params.toString();
+}
+
+async function refreshOperationalRangeApi(from, to, { rerender = true } = {}) {
+  if (!API_ENABLED || !apiToken || apiRefreshing || !from || !to) return;
+  apiRefreshing = true;
+  try {
+    const query = queryRange(from, to);
+    const [appointmentsResult, paymentsResult, expensesResult] = await Promise.all([
+      apiFetch(`/api/appointments?${query}`),
+      apiFetch(`/api/payments?${query}`),
+      apiFetch(`/api/expenses?${query}`)
+    ]);
+    if (Array.isArray(appointmentsResult.appointments)) {
+      state.appointments = replaceDateRange(state.appointments, appointmentsResult.appointments.map(mapApiAppointment), from, to);
+    }
+    if (Array.isArray(paymentsResult.payments)) {
+      state.payments = replaceDateRange(state.payments, paymentsResult.payments.map(mapApiPayment), from, to);
+    }
+    if (Array.isArray(expensesResult.expenses)) {
+      state.expenses = replaceDateRange(state.expenses, expensesResult.expenses.map(mapApiExpense), from, to);
+    }
+    if (rerender) render();
+  } finally {
+    apiRefreshing = false;
+  }
+}
+
+function activeViewRefreshRange() {
+  const today = todayISO();
+  if (currentView === "agenda") {
+    const date = $("#agendaDate")?.value || today;
+    return { from: date, to: date };
+  }
+  if (currentView === "pagos") {
+    const dates = cashOperationDates(cashViewDate()).sort();
+    return { from: dates[0] || today, to: dates[dates.length - 1] || today };
+  }
+  if (currentView === "recordatorios") {
+    return { from: today, to: addDaysISO(today, 2) };
+  }
+  if (currentView === "dashboard" || currentView === "panel") {
+    return { from: today, to: today };
+  }
+  if (currentView === "caja-general" && selectedCashReportRange?.from && selectedCashReportRange?.to) {
+    return { from: selectedCashReportRange.from, to: selectedCashReportRange.to };
+  }
+  return null;
+}
+
+async function refreshActiveViewApi() {
+  const range = activeViewRefreshRange();
+  if (!range) return;
+  try {
+    await refreshOperationalRangeApi(range.from, range.to);
+  } catch {
+    // El refresco liviano no debe cerrar sesion ni interrumpir el trabajo.
+  }
+}
+
 function shouldAutoRefreshApi() {
   if (!API_ENABLED || !apiToken) return false;
   if (document.hidden) return false;
@@ -645,13 +717,13 @@ function shouldAutoRefreshApi() {
 function setupApiAutoRefresh() {
   if (!API_ENABLED) return;
   window.addEventListener("focus", () => {
-    if (shouldAutoRefreshApi()) loadFromApi();
+    if (shouldAutoRefreshApi()) refreshActiveViewApi();
   });
   document.addEventListener("visibilitychange", () => {
-    if (shouldAutoRefreshApi()) loadFromApi();
+    if (shouldAutoRefreshApi()) refreshActiveViewApi();
   });
   setInterval(() => {
-    if (shouldAutoRefreshApi()) loadFromApi();
+    if (shouldAutoRefreshApi()) refreshActiveViewApi();
   }, 30000);
 }
 
@@ -4776,7 +4848,10 @@ function bindEvents() {
     if (currentView === "cuentas-cobrar") renderReceivables();
     else renderPatients();
   });
-  on("#agendaDate", "change", renderAgenda);
+  on("#agendaDate", "change", () => {
+    renderAgenda();
+    refreshActiveViewApi();
+  });
   on("#reportMonth", "change", renderReports);
   on("#compareMonth", "change", renderReports);
   on("#historyPatientFilter", "change", renderClinicalHistory);
@@ -5988,6 +6063,7 @@ function bindEvents() {
   $("#cashViewDate")?.addEventListener("change", (event) => {
     selectedCashViewDate = event.target.value || "";
     renderPayments();
+    refreshActiveViewApi();
   });
 
   $("#saveExpenseBtn").addEventListener("click", async () => {

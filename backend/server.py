@@ -1,7 +1,7 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 import base64
 import hashlib
 import hmac
@@ -457,6 +457,30 @@ def list_table(table, order="created_at DESC"):
         return [row_to_dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()]
 
 
+def valid_iso_date(value):
+    return bool(isinstance(value, str) and re.match(r"^\d{4}-\d{2}-\d{2}$", value))
+
+
+def list_table_by_date(table, order="date DESC, created_at DESC", date_column="date", params=None):
+    params = params or {}
+    single_date = (params.get("date") or [""])[0]
+    date_from = (params.get("from") or [""])[0]
+    date_to = (params.get("to") or [""])[0]
+    values = []
+    where = ""
+    if valid_iso_date(single_date):
+        where = f"WHERE {date_column} = ?"
+        values.append(single_date)
+    elif valid_iso_date(date_from) and valid_iso_date(date_to):
+        where = f"WHERE {date_column} BETWEEN ? AND ?"
+        values.extend([date_from, date_to])
+    with db() as conn:
+        return [
+            row_to_dict(row)
+            for row in conn.execute(f"SELECT * FROM {table} {where} ORDER BY {order}", values).fetchall()
+        ]
+
+
 def list_users():
     with db() as conn:
         return [
@@ -586,6 +610,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
         if not parsed.path.startswith("/api/"):
             return super().do_GET()
 
@@ -621,7 +646,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/patients":
             return send_json(self, {"patients": list_table("patients", "name ASC")})
         if parsed.path == "/api/appointments":
-            return send_json(self, {"appointments": list_table("appointments", "date DESC, time DESC")})
+            return send_json(self, {"appointments": list_table_by_date("appointments", "date DESC, time DESC", "date", params)})
         if parsed.path == "/api/clinical-history":
             return send_json(self, {"clinicalHistory": list_table("clinical_history", "date DESC, created_at DESC")})
         if parsed.path == "/api/treatments":
@@ -629,11 +654,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/odontogram":
             return send_json(self, {"odontogram": list_table("odontogram", "patient_id ASC, tooth ASC")})
         if parsed.path == "/api/payments":
-            return send_json(self, {"payments": list_table("payments", "date DESC, created_at DESC")})
+            return send_json(self, {"payments": list_table_by_date("payments", "date DESC, created_at DESC", "date", params)})
         if parsed.path == "/api/electronic-receipts":
             return send_json(self, {"electronicReceipts": list_table("electronic_receipts", "issue_date DESC, created_at DESC")})
         if parsed.path == "/api/expenses":
-            return send_json(self, {"expenses": list_table("expenses", "date DESC, created_at DESC")})
+            return send_json(self, {"expenses": list_table_by_date("expenses", "date DESC, created_at DESC", "date", params)})
         if parsed.path == "/api/inventory-products":
             return send_json(self, {"inventoryProducts": list_table("inventory_products", "name ASC")})
         if parsed.path == "/api/inventory-movements":
