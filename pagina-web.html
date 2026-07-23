@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0b7f79" />
+    <meta name="theme-color" content="#111827" />
     <meta
       name="description"
-      content="EmpresaFacil crea sistemas web para clinicas dentales, tiendas de abarrotes, salas de billar, ventas, caja e inventario."
+      content="EmpresaFacil desarrolla sistemas web elegantes para clinicas, comercios, salas de billar y negocios que necesitan control operativo."
     />
     <title>EmpresaFacil | Sistemas web para negocios</title>
     <link rel="icon" href="assets/empresa-facil-icon.svg" type="image/svg+xml" />
@@ -15,200 +15,261 @@
   <body>
     <header class="site-header">
       <a class="brand" href="#inicio" aria-label="EmpresaFacil">
-        <img src="assets/empresa-facil-logo.svg" alt="EmpresaFacil" />
+        <span class="brand-symbol">E</span>
+        <span>
+          <strong>EmpresaFacil</strong>
+          <small>Sistemas web a medida</small>
+        </span>
       </a>
       <nav class="site-nav" aria-label="Secciones">
-        <a href="#productos">Productos</a>
-        <a href="#proceso">Proceso</a>
-        <a href="#incluye">Incluye</a>
+        <a href="#soluciones">Soluciones</a>
+        <a href="#metodo">Metodo</a>
         <a href="#contacto">Contacto</a>
       </nav>
-      <a class="header-action" href="#contacto">Pedir demo</a>
+      <a class="nav-button" href="#contacto">Cotizar</a>
     </header>
 
     <main id="inicio">
       <section class="hero">
-        <div class="hero-content">
-          <p class="eyebrow">Software comercial para negocios reales</p>
-          <h1>Sistemas web para vender, controlar y crecer con orden</h1>
-          <p class="hero-text">
-            Creamos soluciones para clinicas dentales, tiendas, salas de billar y negocios que necesitan caja,
-            reportes, inventario, clientes y operaciones claras desde una sola pantalla.
+        <div class="hero-panel">
+          <p class="eyebrow">Software para operar mejor</p>
+          <h1>Programas para controlar tu negocio desde web, celular y tablet.</h1>
+          <p>
+            Vendemos software para gestionar citas, ventas, inventario, caja, mesas, clientes y reportes.
+            El rubro cambia; el objetivo es el mismo: trabajar con mas orden y mejores datos.
           </p>
           <div class="hero-actions">
-            <a class="button primary" href="#contacto">Solicitar cotizacion</a>
-            <button class="button ghost" type="button" data-demo-link="dental">Ver demo rapida</button>
-          </div>
-          <div class="trust-row" aria-label="Beneficios principales">
-            <span>Demo antes de decidir</span>
-            <span>Diseno por rubro</span>
-            <span>Soporte y capacitacion</span>
+            <a class="button primary" href="#contacto">Solicitar propuesta</a>
+            <a class="button secondary" href="#soluciones">Ver soluciones</a>
           </div>
         </div>
-
-        <aside class="lead-card" id="contacto">
-          <div class="lead-card-head">
-            <p class="eyebrow">Atencion personalizada</p>
-            <h2>Completa el formulario y te contactamos</h2>
-          </div>
-          <form id="leadForm" class="lead-form">
-            <input name="name" placeholder="Nombre" required />
-            <input name="email" type="email" placeholder="Email" />
-            <input name="company" placeholder="Empresa o negocio" />
-            <div class="phone-field">
-              <span>PE +51</span>
-              <input name="phone" inputmode="tel" placeholder="Telefono" />
+        <div class="hero-system" aria-label="Vista del software EmpresaFacil">
+          <div class="browser-window">
+            <div class="browser-top"><span></span><span></span><span></span></div>
+            <div class="app-shell">
+              <aside>
+                <strong>EmpresaFacil</strong>
+                <small>Panel central</small>
+                <b></b><b></b><b></b><b></b>
+              </aside>
+              <section>
+                <div class="screen-title">
+                  <span>Resumen operativo</span>
+                  <strong>Hoy</strong>
+                </div>
+                <div class="metrics">
+                  <article><strong>18</strong><span>Citas</span></article>
+                  <article><strong>S/ 1,280</strong><span>Caja</span></article>
+                  <article><strong>42</strong><span>Ventas</span></article>
+                </div>
+                <div class="chart-bars"><i></i><i></i><i></i><i></i><i></i></div>
+                <div class="table-lines"><span></span><span></span><span></span></div>
+              </section>
             </div>
-            <select name="product">
-              <option value="">Que sistema te interesa?</option>
-              <option>App Dental</option>
-              <option>App Abarrotes</option>
-              <option>App Billar</option>
-              <option>Ventas y Caja</option>
-              <option>Sistema a medida</option>
-            </select>
-            <select name="goal">
-              <option value="">Cual es tu principal objetivo?</option>
-              <option>Controlar ventas y caja</option>
-              <option>Ordenar inventario y productos</option>
-              <option>Gestionar citas, mesas o reservas</option>
-              <option>Crear una solucion para vender</option>
-            </select>
-            <input name="website" placeholder="Pagina web, Facebook o negocio" />
-            <button class="form-submit" type="submit">Enviar por WhatsApp</button>
-          </form>
-        </aside>
-
-        <div class="hero-gallery" aria-label="Rubros de EmpresaFacil">
-          <figure class="gallery-main">
-            <img
-              src="https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=1300&q=82"
-              alt="Consultorio dental moderno"
-            />
-            <figcaption>Clinicas dentales</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=82"
-              alt="Tienda de abarrotes con productos"
-            />
-            <figcaption>Abarrotes e inventario</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="https://images.unsplash.com/photo-1611379158953-1a103fbf2ae5?auto=format&fit=crop&w=900&q=82"
-              alt="Mesa de billar en una sala moderna"
-            />
-            <figcaption>Billar y caja</figcaption>
-          </figure>
+          </div>
+          <div class="device tablet-device">
+            <strong>Agenda</strong>
+            <span>09:00 Paciente</span>
+            <span>10:30 Control</span>
+            <span>12:00 Pago</span>
+          </div>
+          <div class="device phone-device">
+            <strong>Caja</strong>
+            <em>S/ 730</em>
+            <span>Activo</span>
+          </div>
         </div>
       </section>
 
-      <section class="products-section" id="productos">
-        <div class="section-heading">
-          <p class="eyebrow">Productos principales</p>
-          <h2>Una pagina que muestra confianza antes de pedir la demo</h2>
+      <section class="intro">
+        <p>
+          EmpresaFacil presenta programas y apps para ordenar el trabajo diario: no vendemos el consultorio, la tienda
+          o la sala de billar; vendemos el sistema que permite gestionarlos mejor.
+        </p>
+      </section>
+
+      <section class="solutions" id="soluciones">
+        <div class="section-head">
+          <p class="eyebrow">Soluciones principales</p>
+          <h2>Tres rubros, una misma idea: control simple.</h2>
         </div>
-        <div class="product-list">
-          <article class="product-card">
-            <img
-              src="https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&w=900&q=82"
-              alt="Odontologa atendiendo en consultorio"
-            />
-            <div>
-              <span class="tag">App Dental</span>
-              <h3>Agenda, pacientes, tratamientos y caja</h3>
-              <p>Una vista ordenada para consultorios que quieren controlar citas, historial, pagos y reportes.</p>
-              <button type="button" data-demo-link="dental">Ver demo</button>
+
+        <article class="solution-row">
+          <div class="software-card dental-ui" aria-label="Pantallas de la App Dental">
+            <div class="software-screen">
+              <div class="screen-header"><strong>App Dental</strong><span>Agenda y pacientes</span></div>
+              <div class="screen-grid">
+                <article><strong>8</strong><span>Citas hoy</span></article>
+                <article><strong>3</strong><span>Pagos</span></article>
+                <article><strong>S/ 420</strong><span>Caja</span></article>
+              </div>
+              <div class="appointment-list">
+                <p><b>09:00</b> Paciente nuevo <em>Confirmado</em></p>
+                <p><b>10:30</b> Control ortodoncia <em>En espera</em></p>
+                <p><b>12:00</b> Tratamiento <em>Pagado</em></p>
+              </div>
             </div>
+            <div class="mobile-preview">
+              <strong>Ficha</strong>
+              <span>Historial</span>
+              <span>Pagos</span>
+            </div>
+          </div>
+          <div class="solution-copy">
+            <span>01 / Clinicas dentales</span>
+            <h3>App Dental</h3>
+            <p>Agenda, pacientes, historial clinico, tratamientos, pagos, caja y reportes en una vista limpia.</p>
+            <ul>
+              <li>Agenda diaria y control de citas.</li>
+              <li>Ficha del paciente e historial.</li>
+              <li>Caja, pagos y resumen del dia.</li>
+            </ul>
+            <button type="button" data-demo-link="dental">Ver resumen</button>
+          </div>
+        </article>
+
+        <article class="solution-row reverse">
+          <div class="software-card store-ui" aria-label="Pantallas de la App Abarrotes">
+            <div class="software-screen">
+              <div class="screen-header"><strong>App Abarrotes</strong><span>Ventas e inventario</span></div>
+              <div class="pos-layout">
+                <div>
+                  <button>Arroz</button>
+                  <button>Aceite</button>
+                  <button>Leche</button>
+                  <button>Fideos</button>
+                </div>
+                <aside>
+                  <strong>Ticket</strong>
+                  <p>Total S/ 29.50</p>
+                  <span>Stock actualizado</span>
+                </aside>
+              </div>
+              <div class="table-lines"><span></span><span></span><span></span></div>
+            </div>
+            <div class="mobile-preview">
+              <strong>Stock</strong>
+              <span>Alertas</span>
+              <span>Cierre</span>
+            </div>
+          </div>
+          <div class="solution-copy">
+            <span>02 / Comercios y minimarkets</span>
+            <h3>App Abarrotes</h3>
+            <p>Ventas rapidas, productos, precios, inventario, proveedores, alertas de stock y cierre de caja.</p>
+            <ul>
+              <li>Registro rapido de ventas.</li>
+              <li>Inventario y productos bajos.</li>
+              <li>Ingresos, egresos y cierre diario.</li>
+            </ul>
+            <button type="button" data-demo-link="abarrotes">Ver resumen</button>
+          </div>
+        </article>
+
+        <article class="solution-row">
+          <div class="software-card billar-ui" aria-label="Pantallas de la App Billar">
+            <div class="software-screen">
+              <div class="screen-header"><strong>App Billar</strong><span>Mesas y consumos</span></div>
+              <div class="pool-grid">
+                <article><strong>M1</strong><span>01:20</span></article>
+                <article><strong>M2</strong><span>Libre</span></article>
+                <article><strong>M3</strong><span>00:45</span></article>
+                <article><strong>M4</strong><span>Libre</span></article>
+              </div>
+              <div class="pool-total">Caja del turno S/ 185.00</div>
+            </div>
+            <div class="mobile-preview">
+              <strong>Tiempo</strong>
+              <span>Consumo</span>
+              <span>Cobro</span>
+            </div>
+          </div>
+          <div class="solution-copy">
+            <span>03 / Salas de billar</span>
+            <h3>App Billar</h3>
+            <p>Mesas, tiempo de juego, consumos, cobro final, caja y reportes para manejar el turno con claridad.</p>
+            <ul>
+              <li>Mesas libres y ocupadas.</li>
+              <li>Tiempo, consumo y cobro.</li>
+              <li>Resumen de caja por turno.</li>
+            </ul>
+            <button type="button" data-demo-link="billar">Ver resumen</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="method" id="metodo">
+        <div class="section-head compact">
+          <p class="eyebrow">Metodo de trabajo</p>
+          <h2>Un proceso claro para vender confianza.</h2>
+        </div>
+        <div class="method-grid">
+          <article>
+            <span>1</span>
+            <h3>Entendemos</h3>
+            <p>Revisamos como atiendes, vendes, cobras y registras informacion.</p>
           </article>
-          <article class="product-card">
-            <img
-              src="https://images.unsplash.com/photo-1579113800032-c38bd7635818?auto=format&fit=crop&w=900&q=82"
-              alt="Productos de tienda y supermercado"
-            />
-            <div>
-              <span class="tag">App Abarrotes</span>
-              <h3>Ventas rapidas, stock y cierre diario</h3>
-              <p>Ideal para bodegas y minimarkets que necesitan vender rapido y saber que productos bajan.</p>
-              <button type="button" data-demo-link="abarrotes">Ver demo</button>
-            </div>
+          <article>
+            <span>2</span>
+            <h3>Proponemos</h3>
+            <p>Mostramos pantallas y flujo antes de construir o personalizar.</p>
           </article>
-          <article class="product-card">
-            <img
-              src="https://images.unsplash.com/photo-1518799175676-a0fed7996acb?auto=format&fit=crop&w=900&q=82"
-              alt="Bolas de billar sobre una mesa"
-            />
-            <div>
-              <span class="tag">App Billar</span>
-              <h3>Mesas, tiempo, consumos y caja</h3>
-              <p>Control para salas de billar: mesas libres, ocupadas, consumo por mesa y cobro final.</p>
-              <button type="button" data-demo-link="billar">Ver demo</button>
-            </div>
+          <article>
+            <span>3</span>
+            <h3>Implementamos</h3>
+            <p>Configuramos usuarios, procesos, reportes, marca y forma de trabajo.</p>
+          </article>
+          <article>
+            <span>4</span>
+            <h3>Acompanamos</h3>
+            <p>Entregamos capacitacion, soporte inicial y mejoras segun necesidad.</p>
           </article>
         </div>
       </section>
 
-      <section class="process-section" id="proceso">
-        <div class="section-heading centered">
-          <p class="eyebrow">Como trabajamos</p>
-          <h2>De una idea a una demo que el cliente puede entender</h2>
-        </div>
-        <div class="process-grid">
-          <article><span>01</span><h3>Diagnostico</h3><p>Revisamos como vende, cobra, atiende y registra informacion el negocio.</p></article>
-          <article><span>02</span><h3>Demo visual</h3><p>Mostramos pantallas simples para que el cliente vea el flujo antes de invertir.</p></article>
-          <article><span>03</span><h3>Personalizacion</h3><p>Ajustamos rubro, logo, datos, usuarios, reportes y reglas de trabajo.</p></article>
-          <article><span>04</span><h3>Entrega</h3><p>Publicamos, capacitamos y dejamos una ruta clara para soporte y mejoras.</p></article>
-        </div>
-      </section>
-
-      <section class="include-section" id="incluye">
-        <div class="include-copy">
-          <p class="eyebrow">Que incluye</p>
-          <h2>Mas que una pagina: una presentacion comercial para vender sistemas</h2>
+      <section class="contact" id="contacto">
+        <div class="contact-copy">
+          <p class="eyebrow">Hablemos</p>
+          <h2>Preparamos una propuesta segun tu negocio.</h2>
           <p>
-            La pagina debe abrir conversacion, no llenar al cliente de texto. Por eso usamos fotos reales, botones de
-            demo, formulario directo a WhatsApp y mensajes cortos para cada rubro.
+            Escribe tus datos y el sistema que te interesa. El mensaje se enviara por WhatsApp para responderte con
+            una demo o una cotizacion.
           </p>
         </div>
-        <div class="include-grid">
-          <article><strong>01</strong><span>Formulario a WhatsApp</span></article>
-          <article><strong>02</strong><span>Demos por producto</span></article>
-          <article><strong>03</strong><span>Fotos por rubro</span></article>
-          <article><strong>04</strong><span>Lista para GitHub Pages o Vercel</span></article>
-        </div>
-      </section>
-
-      <section class="final-cta">
-        <div>
-          <p class="eyebrow">Siguiente paso</p>
-          <h2>Publiquemos sin Netlify y con una ruta mas limpia</h2>
-          <p>Recomiendo GitHub Pages para empezar gratis o Vercel si quieres conectar dominio y actualizar mas facil.</p>
-        </div>
-        <a class="button primary" href="#contacto">Quiero publicarla</a>
+        <form id="leadForm" class="lead-form">
+          <input name="name" placeholder="Nombre" required />
+          <input name="company" placeholder="Empresa o negocio" />
+          <input name="phone" inputmode="tel" placeholder="Telefono o WhatsApp" />
+          <select name="product">
+            <option value="">Sistema de interes</option>
+            <option>App Dental</option>
+            <option>App Abarrotes</option>
+            <option>App Billar</option>
+            <option>Sistema a medida</option>
+          </select>
+          <textarea name="goal" placeholder="Que quieres controlar o mejorar?"></textarea>
+          <button class="button primary" type="submit">Enviar solicitud</button>
+        </form>
       </section>
     </main>
 
     <div class="demo-modal" id="demoModal" aria-hidden="true">
       <div class="demo-backdrop" data-demo-close></div>
       <section class="demo-dialog" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
-        <button class="demo-close" type="button" data-demo-close aria-label="Cerrar demo">Cerrar</button>
-        <div class="demo-media" id="demoMedia"></div>
-        <div class="demo-copy">
-          <p class="eyebrow" id="demoTag">Demo</p>
-          <h2 id="demoTitle">Demo EmpresaFacil</h2>
-          <p id="demoIntro">Vista rapida del sistema.</p>
-          <div class="demo-steps" id="demoSteps"></div>
-          <a class="button primary" id="demoWhatsapp" href="https://wa.me/51930914176" target="_blank" rel="noreferrer">
-            Pedir demo completa
-          </a>
-        </div>
+        <button class="demo-close" type="button" data-demo-close aria-label="Cerrar">Cerrar</button>
+        <p class="eyebrow" id="demoTag">Resumen</p>
+        <h2 id="demoTitle">Sistema</h2>
+        <p id="demoIntro">Vista general.</p>
+        <div class="demo-list" id="demoList"></div>
+        <a class="button primary" id="demoWhatsapp" href="https://wa.me/51930914176" target="_blank" rel="noreferrer">
+          Pedir demo por WhatsApp
+        </a>
       </section>
     </div>
 
     <footer class="footer">
-      <span>EmpresaFacil</span>
-      <span>Sistemas web para negocios con ventas, caja, inventario y reportes.</span>
+      <strong>EmpresaFacil</strong>
+      <span>Sistemas web para negocios que necesitan orden, ventas y control.</span>
     </footer>
 
     <script src="pagina-web.js"></script>
