@@ -823,23 +823,32 @@ function shouldAutoRefreshApi() {
 function shouldFastRefreshCriticalApi() {
   if (!API_ENABLED || !apiToken) return false;
   if (document.hidden) return false;
-  if (!["pagos", "caja-general"].includes(currentView)) return false;
+  if (!["pagos", "caja-general", "agenda"].includes(currentView)) return false;
   if ($("dialog[open]")) return false;
   const active = document.activeElement;
   if (!active) return true;
   return !["INPUT", "TEXTAREA"].includes(active.tagName);
 }
 
+async function refreshPatientsThenRender() {
+  try {
+    await refreshPatientsApi();
+    render();
+  } catch {
+    // Refresco liviano de pacientes; si falla se mantiene la lista ya cargada.
+  }
+}
+
 function setupApiAutoRefresh() {
   if (!API_ENABLED) return;
   window.addEventListener("focus", () => {
-    if (shouldAutoRefreshApi()) refreshActiveViewApi();
+    if (shouldAutoRefreshApi()) { refreshActiveViewApi(); refreshPatientsThenRender(); }
   });
   document.addEventListener("visibilitychange", () => {
-    if (shouldAutoRefreshApi()) refreshActiveViewApi();
+    if (shouldAutoRefreshApi()) { refreshActiveViewApi(); refreshPatientsThenRender(); }
   });
   setInterval(() => {
-    if (shouldAutoRefreshApi()) refreshActiveViewApi();
+    if (shouldAutoRefreshApi()) { refreshActiveViewApi(); refreshPatientsThenRender(); }
   }, 30000);
   setInterval(() => {
     if (shouldFastRefreshCriticalApi()) refreshActiveViewApi();
@@ -2936,7 +2945,7 @@ function renderAgenda() {
         const statusText = appointment.status === "ATENDIDA" ? "ATENDIDO" : appointment.status;
         return `<div class="slot busy status-${appointment.status.toLowerCase()}" data-edit-appointment="${appointment.id}">
           <div class="slot-main">
-            <strong>${escapeHtml(patient?.name || "")}</strong>
+            <strong>${escapeHtml(patient?.name || "Paciente")}</strong>
             <span>${escapeHtml(appointment.service)}</span>
           </div>
           <div class="slot-meta">
@@ -3199,7 +3208,7 @@ function renderPayments() {
       const showChange = paymentCashPortion(payment) > 0;
       return `<tr>
         <td>${formatDate(payment.date || cashDate)}</td>
-        <td>${escapeHtml(patient?.name || "")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
+        <td>${escapeHtml(patient?.name || "Paciente")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
         <td>${escapeHtml(paymentMethodLabel(payment))}</td>
         <td><strong>${money(payment.amount)}</strong>${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}</td>
