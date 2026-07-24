@@ -1878,7 +1878,9 @@ function agendaPaymentAppointments() {
   return state.appointments
     .filter((appointment) => {
       const status = String(appointment.status || "").toUpperCase();
-      return appointment.date === date && !["CANCELADA", "NO_ASISTIO", "REPROGRAMADA", "ATENDIDA"].includes(status);
+      return appointment.date === date
+        && !["CANCELADA", "NO_ASISTIO", "REPROGRAMADA", "ATENDIDA"].includes(status)
+        && !appointmentHasRegisteredPayment(appointment);
     })
     .filter((appointment) => {
       const key = [
@@ -1893,6 +1895,22 @@ function agendaPaymentAppointments() {
       return true;
     })
     .sort((a, b) => `${a.time || ""} ${patientById(a.patientId)?.name || ""}`.localeCompare(`${b.time || ""} ${patientById(b.patientId)?.name || ""}`));
+}
+
+function appointmentHasRegisteredPayment(appointment) {
+  if (!appointment) return false;
+  const patientDateAppointments = state.appointments.filter((item) => (
+    String(item.patientId || "") === String(appointment.patientId || "")
+    && item.date === appointment.date
+  )).length;
+  return state.payments.some((payment) => {
+    if (String(payment.appointmentId || "") === String(appointment.id || "")) return true;
+    if (payment.appointmentId) return false;
+    return patientDateAppointments === 1
+      && String(payment.patientId || "") === String(appointment.patientId || "")
+      && payment.date === appointment.date
+      && isAgendaPayment(payment);
+  });
 }
 
 function appointmentFromPaymentSelection(value) {
@@ -6325,6 +6343,15 @@ function bindEvents() {
     event.preventDefault();
     const data = formData(event.currentTarget);
     const configUpdates = {};
+    const cashDate = operatingDate();
+    const previousMonthlyOpenings = JSON.parse(JSON.stringify(state.config.monthlyOpenings || {}));
+    const previousCashOpening = state.config.generalCashOpening;
+    const previousBankOpening = state.config.generalBankOpening;
+    const previousUtilityOpening = state.config.generalUtilityOpening;
+    const previousPettyAllocation = pettyCashAllocation(cashDate);
+    const previousPettyAmount = previousPettyAllocation ? Number(previousPettyAllocation.amount || 0) : null;
+    const session = cashSessionToday();
+    const previousSessionOpening = session ? session.openingCash : undefined;
     if (isAdmin()) {
       const openingMonth = data.openingMonth || todayISO().slice(0, 7);
       state.config.monthlyOpenings = {
@@ -6345,19 +6372,26 @@ function bindEvents() {
       configUpdates.generalUtilityOpening = state.config.generalUtilityOpening;
     }
     const pettyAmount = Number(data.pettyCash || 0);
-    const cashDate = operatingDate();
+    setPettyCashAllocation(cashDate, pettyAmount);
+    if (session) session.openingCash = pettyAmount;
+    if (!API_ENABLED) saveState();
+    render();
     try {
       await saveConfigApi(configUpdates);
       await savePettyCashApi(cashDate, pettyAmount);
     } catch (error) {
+      state.config.monthlyOpenings = previousMonthlyOpenings;
+      state.config.generalCashOpening = previousCashOpening;
+      state.config.generalBankOpening = previousBankOpening;
+      state.config.generalUtilityOpening = previousUtilityOpening;
+      if (previousPettyAllocation) previousPettyAllocation.amount = previousPettyAmount;
+      else state.pettyCashAllocations = state.pettyCashAllocations.filter((item) => item.date !== cashDate);
+      if (session) session.openingCash = previousSessionOpening;
+      if (!API_ENABLED) saveState();
+      render();
       alert(error.message);
       return;
     }
-    setPettyCashAllocation(cashDate, pettyAmount);
-    const session = cashSessionToday();
-    if (session) session.openingCash = pettyAmount;
-    if (!API_ENABLED) saveState();
-    render();
   });
   $("#generalCashForm").openingMonth?.addEventListener("change", (event) => {
     const form = event.currentTarget.form;
