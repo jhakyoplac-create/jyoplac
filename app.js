@@ -132,6 +132,7 @@ let apiToken = localStorage.getItem(API_TOKEN_KEY) || "";
 let apiUser = loadApiUser();
 let apiBootstrapped = false;
 let apiRefreshing = false;
+let apiCashRefreshing = false;
 let patientSaving = false;
 let historySaving = false;
 let paymentSaving = false;
@@ -620,6 +621,30 @@ function applyApiBootstrap(payload) {
   render();
 }
 
+function applyApiCashState(payload) {
+  if (Array.isArray(payload.cashSessions)) {
+    state.cashSessions = payload.cashSessions.map(mapApiCashSession);
+  }
+  if (Array.isArray(payload.pettyCashAllocations)) {
+    state.pettyCashAllocations = payload.pettyCashAllocations.map(mapApiPettyCash);
+  }
+  if (payload.config) {
+    state.config.generalCashOpening = Number(payload.config.generalCashOpening ?? state.config.generalCashOpening);
+    state.config.generalBankOpening = Number(payload.config.generalBankOpening ?? state.config.generalBankOpening);
+    state.config.generalUtilityOpening = Number(payload.config.generalUtilityOpening ?? state.config.generalUtilityOpening);
+    if (payload.config.monthlyOpenings !== undefined) {
+      try {
+        state.config.monthlyOpenings = typeof payload.config.monthlyOpenings === "string"
+          ? JSON.parse(payload.config.monthlyOpenings)
+          : payload.config.monthlyOpenings;
+      } catch {
+        state.config.monthlyOpenings = state.config.monthlyOpenings || {};
+      }
+    }
+  }
+  state = normalizeState(state);
+}
+
 async function loadFromApi() {
   if (!API_ENABLED || !apiToken || apiRefreshing) return;
   apiRefreshing = true;
@@ -737,6 +762,9 @@ function activeViewRefreshRange() {
   if (currentView === "caja-general" && selectedCashReportRange?.from && selectedCashReportRange?.to) {
     return { from: selectedCashReportRange.from, to: selectedCashReportRange.to };
   }
+  if (currentView === "caja-general") {
+    return { from: today, to: today };
+  }
   if (currentView === "reportes") {
     const month = $("#reportMonth")?.value || today.slice(0, 7);
     const compareMonth = $("#compareMonth")?.value || previousMonth(month);
@@ -745,13 +773,36 @@ function activeViewRefreshRange() {
   return null;
 }
 
+async function refreshCashStateApi({ rerender = true } = {}) {
+  if (!API_ENABLED || !apiToken || apiCashRefreshing) return;
+  apiCashRefreshing = true;
+  try {
+    const payload = await apiFetch("/api/cash-state");
+    applyApiCashState(payload);
+    if (rerender) render();
+  } finally {
+    apiCashRefreshing = false;
+  }
+}
+
 async function refreshActiveViewApi() {
   const range = activeViewRefreshRange();
   if (!range) return;
   try {
     if (currentView === "pagos") {
-      await refreshOperationalRangeApi(range.from, range.to, { rerender: false });
+      await Promise.all([
+        refreshOperationalRangeApi(range.from, range.to, { rerender: false }),
+        refreshCashStateApi({ rerender: false })
+      ]);
       renderPayments();
+      return;
+    }
+    if (currentView === "caja-general") {
+      await Promise.all([
+        refreshOperationalRangeApi(range.from, range.to, { rerender: false }),
+        refreshCashStateApi({ rerender: false })
+      ]);
+      renderGeneralCash();
       return;
     }
     await refreshOperationalRangeApi(range.from, range.to);
@@ -769,6 +820,16 @@ function shouldAutoRefreshApi() {
   return !["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
 }
 
+function shouldFastRefreshCriticalApi() {
+  if (!API_ENABLED || !apiToken) return false;
+  if (document.hidden) return false;
+  if (!["pagos", "caja-general"].includes(currentView)) return false;
+  if ($("dialog[open]")) return false;
+  const active = document.activeElement;
+  if (!active) return true;
+  return !["INPUT", "TEXTAREA"].includes(active.tagName);
+}
+
 function setupApiAutoRefresh() {
   if (!API_ENABLED) return;
   window.addEventListener("focus", () => {
@@ -780,6 +841,9 @@ function setupApiAutoRefresh() {
   setInterval(() => {
     if (shouldAutoRefreshApi()) refreshActiveViewApi();
   }, 30000);
+  setInterval(() => {
+    if (shouldFastRefreshCriticalApi()) refreshActiveViewApi();
+  }, 5000);
 }
 
 async function savePatientApi(patient) {

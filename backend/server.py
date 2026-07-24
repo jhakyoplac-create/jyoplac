@@ -696,6 +696,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "users": list_users() if user["role"] == "ADMIN" else [],
                 "config": app_config(),
             })
+        if parsed.path == "/api/cash-state":
+            return send_json(self, {
+                "cashSessions": list_table("cash_sessions", "date DESC"),
+                "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
+                "config": app_config(),
+            })
         if parsed.path == "/api/patients":
             return send_json(self, {"patients": list_table("patients", "name ASC")})
         if parsed.path == "/api/appointments":
