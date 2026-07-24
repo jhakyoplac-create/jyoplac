@@ -636,18 +636,27 @@ async function loadFromApi() {
 
 function replaceDateRange(list, items, from, to) {
   const incoming = items.map((item) => ({ ...item }));
-  return [
+  return dedupeById([
     ...list.filter((item) => item.date < from || item.date > to),
     ...incoming
-  ];
+  ]);
 }
 
 function replacePatientAppointments(list, items, patientId) {
   const incoming = items.map((item) => ({ ...item }));
-  return [
+  return dedupeById([
     ...list.filter((item) => String(item.patientId || "") !== String(patientId || "")),
     ...incoming
-  ];
+  ]);
+}
+
+function dedupeById(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = item?.id || JSON.stringify(item);
+    map.set(key, item);
+  });
+  return [...map.values()];
 }
 
 function queryRange(from, to) {
@@ -1865,10 +1874,23 @@ function fillPaymentPatientSelect(select, selected = "") {
 function agendaPaymentAppointments() {
   if (state.config.enableAgendaPayments === false) return [];
   const date = operatingDate();
+  const seen = new Set();
   return state.appointments
     .filter((appointment) => {
       const status = String(appointment.status || "").toUpperCase();
       return appointment.date === date && !["CANCELADA", "NO_ASISTIO", "REPROGRAMADA", "ATENDIDA"].includes(status);
+    })
+    .filter((appointment) => {
+      const key = [
+        appointment.patientId || "",
+        appointment.date || "",
+        appointment.time || "",
+        appointment.unit || "",
+        appointment.service || ""
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     })
     .sort((a, b) => `${a.time || ""} ${patientById(a.patientId)?.name || ""}`.localeCompare(`${b.time || ""} ${patientById(b.patientId)?.name || ""}`));
 }
