@@ -185,6 +185,8 @@ def get_pg_pool():
                     max_size=10,
                     kwargs={"row_factory": dict_row},
                     open=True,
+                    check=ConnectionPool.check_connection,
+                    max_idle=120,
                 )
     return _pg_pool
 
