@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260724-pagos-dedupe-citas" />
+    <link rel="stylesheet" href="styles.css?v=20260727-lionapi-dni-ruc" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -149,7 +149,11 @@
               <button type="reset" class="ghost">Limpiar</button>
             </div>
             <input type="hidden" name="id" />
-            <label>DNI<input name="dni" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" required /></label>
+            <div class="lookup-row patient-dni-lookup">
+              <label>DNI<input name="dni" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" required /></label>
+              <button class="ghost lookup-button" id="lookupPatientDniBtn" type="button">Buscar DNI</button>
+            </div>
+            <p class="lookup-hint muted" id="patientDniLookupHint"></p>
             <label>Nombre completo<input name="name" minlength="5" required /></label>
             <div class="inline-fields patient-contact-row">
               <label class="compact-label">Celular<input name="phone" inputmode="numeric" pattern="9[0-9]{8}" minlength="9" maxlength="9" required /></label>
@@ -1120,6 +1124,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260724-sync-caja-rapida"></script>
+    <script src="app.js?v=20260727-lionapi-dni-ruc"></script>
   </body>
 </html>

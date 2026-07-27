@@ -1,7 +1,9 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
+import urllib.error
+import urllib.request
 import base64
 import hashlib
 import hmac
@@ -42,6 +44,10 @@ DOCTOR_SESSION_SECONDS = int(os.environ.get("DOCTOR_SESSION_SECONDS", 60 * 60 * 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
 TOKEN_SECRET = os.environ.get("TOKEN_SECRET") or os.environ.get("ADMIN_PASSWORD", "cm-odontologia-local-secret")
+LIONAPI_KEY = os.environ.get("LIONAPI_KEY", "").strip()
+LIONAPI_BASE_URL = os.environ.get("LIONAPI_BASE_URL", "https://www.softwarelion.pe/api/lion-api/v1").rstrip("/")
+LIONAPI_DNI_URL = os.environ.get("LIONAPI_DNI_URL", f"{LIONAPI_BASE_URL}/dni/{{numero}}")
+LIONAPI_RUC_URL = os.environ.get("LIONAPI_RUC_URL", f"{LIONAPI_BASE_URL}/ruc/{{numero}}")
 
 sessions = {}
 
@@ -461,6 +467,92 @@ def require_role(handler, roles):
     return user
 
 
+def first_value(data, keys):
+    if not isinstance(data, dict):
+        return ""
+    for key in keys:
+        value = data.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def lionapi_url(template, number):
+    safe_number = quote(str(number), safe="")
+    if "{numero}" in template:
+        return template.replace("{numero}", safe_number)
+    separator = "&" if "?" in template else "?"
+    return f"{template}{separator}numero={safe_number}"
+
+
+def lionapi_lookup(kind, number):
+    if not LIONAPI_KEY:
+        return {"error": "LionAPI no configurado. Agrega LIONAPI_KEY en Render."}, 503
+
+    template = LIONAPI_DNI_URL if kind == "dni" else LIONAPI_RUC_URL
+    request = urllib.request.Request(
+        lionapi_url(template, number),
+        headers={
+            "Accept": "application/json",
+            "x-api-key": LIONAPI_KEY,
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            raw_text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        try:
+            error_text = exc.read().decode("utf-8")
+        except Exception:
+            error_text = ""
+        return {"error": f"LionAPI respondió con error {exc.code}.", "detail": error_text[:300]}, 502
+    except Exception:
+        return {"error": "No se pudo consultar LionAPI."}, 502
+
+    try:
+        payload = json.loads(raw_text) if raw_text else {}
+    except json.JSONDecodeError:
+        return {"error": "LionAPI devolvió una respuesta no válida."}, 502
+
+    result = payload.get("result") if isinstance(payload, dict) else None
+    data = result if isinstance(result, dict) else payload
+    if kind == "dni":
+        full_name = first_value(data, [
+            "nombre_completo",
+            "nombreCompleto",
+            "nombres_apellidos",
+            "nombresApellidos",
+            "razonSocial",
+            "razon_social",
+            "nombre",
+            "name",
+        ])
+        if not full_name:
+            names = " ".join(filter(None, [
+                first_value(data, ["nombres", "names"]),
+                first_value(data, ["apellido_paterno", "apellidoPaterno", "paterno"]),
+                first_value(data, ["apellido_materno", "apellidoMaterno", "materno"]),
+            ]))
+            full_name = names.strip()
+        return {
+            "success": bool(full_name),
+            "dni": str(number),
+            "name": full_name.upper(),
+            "raw": payload,
+        }, 200
+
+    legal_name = first_value(data, ["razon_social", "razonSocial", "nombre_o_razon_social", "nombre", "name"])
+    address = first_value(data, ["direccion", "direccion_fiscal", "direccionFiscal", "domicilio_fiscal", "domicilioFiscal"])
+    return {
+        "success": bool(legal_name),
+        "ruc": str(number),
+        "razonSocial": legal_name.upper(),
+        "direccionFiscal": address.upper(),
+        "raw": payload,
+    }, 200
+
+
 def list_table(table, order="created_at DESC"):
     with db() as conn:
         return [row_to_dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()]
@@ -679,6 +771,18 @@ class DentalHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/me":
             return send_json(self, {"user": user})
+        if parsed.path == "/api/external/dni":
+            number = re.sub(r"\D", "", (params.get("numero") or [""])[0])
+            if not re.match(r"^\d{8}$", number):
+                return send_json(self, {"error": "El DNI debe tener 8 dígitos."}, 400)
+            payload, status = lionapi_lookup("dni", number)
+            return send_json(self, payload, status)
+        if parsed.path == "/api/external/ruc":
+            number = re.sub(r"\D", "", (params.get("numero") or [""])[0])
+            if not re.match(r"^\d{11}$", number):
+                return send_json(self, {"error": "El RUC debe tener 11 dígitos."}, 400)
+            payload, status = lionapi_lookup("ruc", number)
+            return send_json(self, payload, status)
         if parsed.path == "/api/bootstrap":
             return send_json(self, {
                 "user": user,

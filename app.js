@@ -307,6 +307,18 @@ async function apiFetch(path, options = {}) {
   return payload;
 }
 
+function onlyDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+async function lookupExternalDni(dni) {
+  return apiFetch(`/api/external/dni?numero=${encodeURIComponent(dni)}`);
+}
+
+async function lookupExternalRuc(ruc) {
+  return apiFetch(`/api/external/ruc?numero=${encodeURIComponent(ruc)}`);
+}
+
 function mapApiPatient(row) {
   return {
     id: row.id,
@@ -3514,19 +3526,39 @@ async function lookupReceiptDocument() {
   const docField = form.elements.namedItem("customerDoc");
   const nameField = form.elements.namedItem("customerName");
   const addressField = form.elements.namedItem("customerAddress");
-  const doc = String(docField.value || "").trim();
+  const doc = onlyDigits(docField.value);
+  docField.value = doc;
   if (type === "BOLETA") {
+    if (!/^\d{8}$/.test(doc)) {
+      if (hint) hint.textContent = "El DNI debe tener 8 dígitos.";
+      return;
+    }
     const patient = state.patients.find((item) => String(item.dni || "").trim() === doc);
     if (patient) {
       nameField.value = patient.name || "";
       if (hint) hint.textContent = "Paciente encontrado en la base interna.";
-    } else if (hint) {
-      hint.textContent = "DNI no encontrado internamente. Completa el nombre manualmente.";
+      return;
+    }
+    if (!API_ENABLED || !apiToken) {
+      if (hint) hint.textContent = "DNI no encontrado internamente. Completa el nombre manualmente.";
+      return;
+    }
+    if (hint) hint.textContent = "Buscando DNI...";
+    try {
+      const payload = await lookupExternalDni(doc);
+      if (payload?.name) {
+        nameField.value = payload.name;
+        if (hint) hint.textContent = "Nombre encontrado por DNI.";
+      } else if (hint) {
+        hint.textContent = "No se encontró el DNI. Completa el nombre manualmente.";
+      }
+    } catch (error) {
+      if (hint) hint.textContent = error.message || "No se pudo consultar DNI. Completa manualmente.";
     }
     return;
   }
   if (!/^\d{11}$/.test(doc)) {
-    if (hint) hint.textContent = "El RUC debe tener 11 digitos.";
+    if (hint) hint.textContent = "El RUC debe tener 11 dígitos.";
     return;
   }
   if (doc === state.config.issuerRuc) {
@@ -3535,7 +3567,78 @@ async function lookupReceiptDocument() {
     if (hint) hint.textContent = "Datos encontrados en la ficha RUC cargada.";
     return;
   }
-  if (hint) hint.textContent = "Consulta SUNAT automatica pendiente de proveedor/API. Completa razon social y direccion fiscal.";
+  if (!API_ENABLED || !apiToken) {
+    if (hint) hint.textContent = "Completa razón social y dirección fiscal manualmente.";
+    return;
+  }
+  if (hint) hint.textContent = "Consultando RUC...";
+  try {
+    const payload = await lookupExternalRuc(doc);
+    if (payload?.razonSocial) nameField.value = payload.razonSocial;
+    if (payload?.direccionFiscal) addressField.value = payload.direccionFiscal;
+    if (hint) {
+      hint.textContent = payload?.razonSocial
+        ? "Datos encontrados por RUC."
+        : "No se encontró el RUC. Completa los datos manualmente.";
+    }
+  } catch (error) {
+    if (hint) hint.textContent = error.message || "No se pudo consultar RUC. Completa manualmente.";
+  }
+}
+
+async function lookupPatientDni() {
+  const form = $("#patientForm");
+  const hint = $("#patientDniLookupHint");
+  const button = $("#lookupPatientDniBtn");
+  if (!form) return;
+  const dniField = form.elements.namedItem("dni");
+  const nameField = form.elements.namedItem("name");
+  const phoneField = form.elements.namedItem("phone");
+  const birthDateField = form.elements.namedItem("birthDate");
+  const doctorField = form.elements.namedItem("doctor");
+  const treatmentField = form.elements.namedItem("mainTreatment");
+  const currentId = form.elements.namedItem("id")?.value || "";
+  const dni = onlyDigits(dniField.value);
+  dniField.value = dni;
+  if (!/^\d{8}$/.test(dni)) {
+    if (hint) hint.textContent = "El DNI debe tener 8 dígitos.";
+    return;
+  }
+  const existingPatient = state.patients.find((patient) => String(patient.dni || "").trim() === dni && patient.id !== currentId);
+  if (existingPatient) {
+    nameField.value = existingPatient.name || "";
+    if (phoneField && existingPatient.phone) phoneField.value = existingPatient.phone;
+    if (birthDateField && existingPatient.birthDate) birthDateField.value = existingPatient.birthDate;
+    if (doctorField && existingPatient.doctor) doctorField.value = existingPatient.doctor;
+    if (treatmentField && existingPatient.mainTreatment) treatmentField.value = existingPatient.mainTreatment;
+    if (hint) hint.textContent = "Paciente encontrado en la base interna.";
+    return;
+  }
+  if (!API_ENABLED || !apiToken) {
+    if (hint) hint.textContent = "Completa los datos manualmente.";
+    return;
+  }
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Buscando...";
+  }
+  if (hint) hint.textContent = "Buscando DNI...";
+  try {
+    const payload = await lookupExternalDni(dni);
+    if (payload?.name) {
+      nameField.value = payload.name;
+      if (hint) hint.textContent = "Nombre encontrado por DNI. Completa celular y fecha.";
+    } else if (hint) {
+      hint.textContent = "No se encontró el DNI. Completa los datos manualmente.";
+    }
+  } catch (error) {
+    if (hint) hint.textContent = error.message || "No se pudo consultar DNI. Completa manualmente.";
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Buscar DNI";
+    }
+  }
 }
 
 async function completePendingPayment(receiptValues = null) {
@@ -5336,6 +5439,15 @@ function bindEvents() {
     restoreRescheduleButton();
   });
 
+  $("#lookupPatientDniBtn")?.addEventListener("click", lookupPatientDni);
+  $('#patientForm input[name="dni"]')?.addEventListener("blur", () => {
+    const form = $("#patientForm");
+    const nameField = form?.elements.namedItem("name");
+    const dniField = form?.elements.namedItem("dni");
+    if (!form || !dniField || String(nameField?.value || "").trim()) return;
+    if (/^\d{8}$/.test(onlyDigits(dniField.value))) lookupPatientDni();
+  });
+
   $("#patientForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (patientSaving) return;
@@ -5439,6 +5551,8 @@ function bindEvents() {
   });
 
   $("#patientForm").addEventListener("reset", () => {
+    const hint = $("#patientDniLookupHint");
+    if (hint) hint.textContent = "";
     setTimeout(resetPatientFormMode, 0);
   });
 

@@ -894,6 +894,25 @@ label {
   min-width: 0;
 }
 
+.lookup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.lookup-button {
+  min-height: 44px;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.lookup-hint {
+  min-height: 16px;
+  margin: -4px 0 4px;
+  font-size: 12px;
+}
+
 .mixed-payment-fields {
   display: grid;
   gap: 10px;
@@ -2767,6 +2786,14 @@ menu {
 @media (max-width: 720px) {
   .receivable-form {
     grid-template-columns: 1fr;
+  }
+
+  .lookup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .lookup-button {
+    width: 100%;
   }
 
   .receipt-fields-grid {
