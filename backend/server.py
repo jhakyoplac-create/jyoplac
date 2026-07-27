@@ -632,7 +632,7 @@ def lionapi_lookup(kind, number):
         return normalize_lionapi_response(kind, number, payload), 200
 
     return {
-        "error": f"LionAPI no encontro la ruta para consultar {kind.upper()}.",
+        "error": f"No se pudo consultar {kind.upper()} en LionAPI. Completa los datos manualmente.",
         "detail": last_404,
     }, 502
 
