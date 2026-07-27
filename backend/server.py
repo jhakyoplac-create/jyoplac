@@ -46,8 +46,8 @@ USE_POSTGRES = bool(DATABASE_URL)
 TOKEN_SECRET = os.environ.get("TOKEN_SECRET") or os.environ.get("ADMIN_PASSWORD", "cm-odontologia-local-secret")
 LIONAPI_KEY = os.environ.get("LIONAPI_KEY", "").strip()
 LIONAPI_BASE_URL = os.environ.get("LIONAPI_BASE_URL", "https://www.softwarelion.pe/api/lion-api/v1").rstrip("/")
-LIONAPI_DNI_URL = os.environ.get("LIONAPI_DNI_URL", f"{LIONAPI_BASE_URL}/dni/{{numero}}")
-LIONAPI_RUC_URL = os.environ.get("LIONAPI_RUC_URL", f"{LIONAPI_BASE_URL}/ruc/{{numero}}")
+LIONAPI_DNI_URL = os.environ.get("LIONAPI_DNI_URL", "").strip()
+LIONAPI_RUC_URL = os.environ.get("LIONAPI_RUC_URL", "").strip()
 
 sessions = {}
 
@@ -481,76 +481,160 @@ def lionapi_url(template, number):
     safe_number = quote(str(number), safe="")
     if "{numero}" in template:
         return template.replace("{numero}", safe_number)
+    if "{number}" in template:
+        return template.replace("{number}", safe_number)
     separator = "&" if "?" in template else "?"
     return f"{template}{separator}numero={safe_number}"
 
 
-def lionapi_lookup(kind, number):
-    if not LIONAPI_KEY:
-        return {"error": "LionAPI no configurado. Agrega LIONAPI_KEY en Render."}, 503
-
-    template = LIONAPI_DNI_URL if kind == "dni" else LIONAPI_RUC_URL
-    request = urllib.request.Request(
-        lionapi_url(template, number),
-        headers={
-            "Accept": "application/json",
-            "x-api-key": LIONAPI_KEY,
-        },
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=12) as response:
-            raw_text = response.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        try:
-            error_text = exc.read().decode("utf-8")
-        except Exception:
-            error_text = ""
-        return {"error": f"LionAPI respondió con error {exc.code}.", "detail": error_text[:300]}, 502
-    except Exception:
-        return {"error": "No se pudo consultar LionAPI."}, 502
-
-    try:
-        payload = json.loads(raw_text) if raw_text else {}
-    except json.JSONDecodeError:
-        return {"error": "LionAPI devolvió una respuesta no válida."}, 502
-
-    result = payload.get("result") if isinstance(payload, dict) else None
-    data = result if isinstance(result, dict) else payload
+def lionapi_candidates(kind):
     if kind == "dni":
-        full_name = first_value(data, [
-            "nombre_completo",
-            "nombreCompleto",
-            "nombres_apellidos",
-            "nombresApellidos",
-            "razonSocial",
-            "razon_social",
-            "nombre",
-            "name",
-        ])
+        templates = [
+            LIONAPI_DNI_URL,
+            f"{LIONAPI_BASE_URL}/dni/{{numero}}",
+            f"{LIONAPI_BASE_URL}/dni?numero={{numero}}",
+            f"{LIONAPI_BASE_URL}/consulta/dni/{{numero}}",
+            f"{LIONAPI_BASE_URL}/consulta/dni?numero={{numero}}",
+            f"{LIONAPI_BASE_URL}/consultar/dni/{{numero}}",
+            f"{LIONAPI_BASE_URL}/persona/dni/{{numero}}",
+            f"{LIONAPI_BASE_URL}/reniec/dni/{{numero}}",
+        ]
+    else:
+        templates = [
+            LIONAPI_RUC_URL,
+            f"{LIONAPI_BASE_URL}/ruc/{{numero}}",
+            f"{LIONAPI_BASE_URL}/ruc?numero={{numero}}",
+            f"{LIONAPI_BASE_URL}/consulta/ruc/{{numero}}",
+            f"{LIONAPI_BASE_URL}/consulta/ruc?numero={{numero}}",
+            f"{LIONAPI_BASE_URL}/consultar/ruc/{{numero}}",
+            f"{LIONAPI_BASE_URL}/empresa/ruc/{{numero}}",
+            f"{LIONAPI_BASE_URL}/sunat/ruc/{{numero}}",
+        ]
+
+    seen = set()
+    for template in templates:
+        if not template or template in seen:
+            continue
+        seen.add(template)
+        yield template
+
+
+def lionapi_data_roots(payload):
+    roots = []
+    if isinstance(payload, dict):
+        roots.append(payload)
+        for key in ("result", "data", "response"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                roots.append(value)
+    return roots
+
+
+def normalize_lionapi_response(kind, number, payload):
+    data_roots = lionapi_data_roots(payload)
+    if kind == "dni":
+        full_name = ""
+        for data in data_roots:
+            full_name = first_value(data, [
+                "nombre_completo",
+                "nombreCompleto",
+                "nombres_apellidos",
+                "nombresApellidos",
+                "razonSocial",
+                "razon_social",
+                "nombre",
+                "name",
+            ])
+            if full_name:
+                break
         if not full_name:
-            names = " ".join(filter(None, [
-                first_value(data, ["nombres", "names"]),
-                first_value(data, ["apellido_paterno", "apellidoPaterno", "paterno"]),
-                first_value(data, ["apellido_materno", "apellidoMaterno", "materno"]),
-            ]))
-            full_name = names.strip()
+            for data in data_roots:
+                names = " ".join(filter(None, [
+                    first_value(data, ["nombres", "names"]),
+                    first_value(data, ["apellido_paterno", "apellidoPaterno", "apePaterno", "paterno"]),
+                    first_value(data, ["apellido_materno", "apellidoMaterno", "apeMaterno", "materno"]),
+                ]))
+                if names.strip():
+                    full_name = names.strip()
+                    break
         return {
             "success": bool(full_name),
             "dni": str(number),
             "name": full_name.upper(),
             "raw": payload,
-        }, 200
+        }
 
-    legal_name = first_value(data, ["razon_social", "razonSocial", "nombre_o_razon_social", "nombre", "name"])
-    address = first_value(data, ["direccion", "direccion_fiscal", "direccionFiscal", "domicilio_fiscal", "domicilioFiscal"])
+    legal_name = ""
+    address = ""
+    for data in data_roots:
+        legal_name = first_value(data, [
+            "razon_social",
+            "razonSocial",
+            "nombre_o_razon_social",
+            "nombreORazonSocial",
+            "nombre",
+            "name",
+        ])
+        address = first_value(data, [
+            "direccion",
+            "direccion_fiscal",
+            "direccionFiscal",
+            "domicilio_fiscal",
+            "domicilioFiscal",
+            "direccionCompleta",
+        ])
+        if legal_name:
+            break
     return {
         "success": bool(legal_name),
         "ruc": str(number),
         "razonSocial": legal_name.upper(),
         "direccionFiscal": address.upper(),
         "raw": payload,
-    }, 200
+    }
+
+
+def lionapi_lookup(kind, number):
+    if not LIONAPI_KEY:
+        return {"error": "LionAPI no configurado. Agrega LIONAPI_KEY en Render."}, 503
+
+    last_404 = ""
+    for template in lionapi_candidates(kind):
+        request = urllib.request.Request(
+            lionapi_url(template, number),
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "CM-Odontologia/1.0",
+                "x-api-key": LIONAPI_KEY,
+            },
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                raw_text = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            try:
+                error_text = exc.read().decode("utf-8")
+            except Exception:
+                error_text = ""
+            if exc.code == 404:
+                last_404 = error_text[:300]
+                continue
+            return {"error": f"LionAPI respondio con error {exc.code}.", "detail": error_text[:300]}, 502
+        except Exception:
+            return {"error": "No se pudo consultar LionAPI."}, 502
+
+        try:
+            payload = json.loads(raw_text) if raw_text else {}
+        except json.JSONDecodeError:
+            return {"error": "LionAPI devolvio una respuesta no valida."}, 502
+
+        return normalize_lionapi_response(kind, number, payload), 200
+
+    return {
+        "error": f"LionAPI no encontro la ruta para consultar {kind.upper()}.",
+        "detail": last_404,
+    }, 502
 
 
 def list_table(table, order="created_at DESC"):
