@@ -5439,15 +5439,6 @@ function bindEvents() {
     restoreRescheduleButton();
   });
 
-  $("#lookupPatientDniBtn")?.addEventListener("click", lookupPatientDni);
-  $('#patientForm input[name="dni"]')?.addEventListener("blur", () => {
-    const form = $("#patientForm");
-    const nameField = form?.elements.namedItem("name");
-    const dniField = form?.elements.namedItem("dni");
-    if (!form || !dniField || String(nameField?.value || "").trim()) return;
-    if (/^\d{8}$/.test(onlyDigits(dniField.value))) lookupPatientDni();
-  });
-
   $("#patientForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (patientSaving) return;
@@ -5551,8 +5542,6 @@ function bindEvents() {
   });
 
   $("#patientForm").addEventListener("reset", () => {
-    const hint = $("#patientDniLookupHint");
-    if (hint) hint.textContent = "";
     setTimeout(resetPatientFormMode, 0);
   });
 
