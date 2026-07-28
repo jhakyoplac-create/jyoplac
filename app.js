@@ -413,7 +413,8 @@ function mapApiOdontogram(row) {
     patientId: row.patient_id || row.patientId,
     tooth: row.tooth,
     condition: row.condition || "Sano",
-    note: row.note || ""
+    note: row.note || "",
+    findings: row.findings || ""
   };
 }
 
@@ -2307,7 +2308,6 @@ function hydrateForms() {
   fillAppointmentPatientSelectForDate($('#historyForm select[name="patientId"]'), $('#historyForm input[name="date"]')?.value || todayISO(), $('#historyForm select[name="patientId"]')?.value || "");
   fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), $('#paymentForm select[name="patientId"]')?.value || "");
   fillPatientSelect($("#historyPatientFilter"), $("#historyPatientFilter").value);
-  fillPatientSelect($("#odontogramPatientFilter"), $("#odontogramPatientFilter").value);
   $$('select[name="tooth"]').forEach((select) => fillSelect(select, teeth, select.value));
   $$('select[name="condition"]').forEach((select) => fillSelect(select, toothConditions, select.value));
   fillSelect($("#doctorFilter"), ["Todos los doctores", ...state.config.doctors], $("#doctorFilter").value);
@@ -3059,137 +3059,176 @@ function renderClinicalHistory() {
   }).join("") || `<p class="muted">Este paciente aun no tiene historial registrado.</p>`;
 }
 
-const odontogramConditionMeta = {
-  Sano: { label: "Sano", short: "OK", className: "sano", mark: "" },
-  Cariado: { label: "Cariado", short: "CA", className: "cariado", mark: "dot" },
-  Obturado: { label: "Obturado", short: "OB", className: "obturado", mark: "square" },
-  Perdido: { label: "Perdido", short: "PE", className: "perdido", mark: "x" },
-  Ausente: { label: "Ausente", short: "AU", className: "ausente", mark: "x" },
-  "Por extraer": { label: "Por extraer", short: "EX", className: "por-extraer", mark: "x" },
-  Extraido: { label: "Extraido", short: "EX", className: "extraido", mark: "x" },
-  Corona: { label: "Corona", short: "CO", className: "corona", mark: "cap" },
-  Endodoncia: { label: "Endodoncia", short: "EN", className: "endodoncia", mark: "line" },
-  Implante: { label: "Implante", short: "IM", className: "implante", mark: "pin" },
-  Sellante: { label: "Sellante", short: "SE", className: "sellante", mark: "square" },
-  Ortodoncia: { label: "Ortodoncia", short: "OR", className: "ortodoncia", mark: "bracket" },
-  Protesis: { label: "Protesis", short: "PR", className: "protesis", mark: "bridge" },
-  Observacion: { label: "Observacion", short: "OBS", className: "observacion", mark: "note" }
-};
+/* ============ Odontograma (Norma Tecnica del Odontograma - MINSA) ============
+   El dibujo y las reglas de la norma viven en odontograma.js. Aqui solo se
+   conecta con el estado del sistema: que paciente esta seleccionado y como se
+   guarda cada hallazgo.
 
-function conditionMeta(condition) {
-  return odontogramConditionMeta[condition] || odontogramConditionMeta.Sano;
+   Los hallazgos se guardan en la misma tabla odontogram de siempre, uno por
+   pieza, con el detalle en la columna findings (JSON). La columna condition
+   conserva un resumen legible para que los registros y respaldos anteriores
+   sigan sirviendo. La hoja de evolucion usa el prefijo "E:" en la pieza, y la
+   fila "__ficha" guarda lo que no pertenece a una pieza concreta: protesis,
+   ortodoncia, trazos de maxilar y especificaciones. */
+let odontogramView = null;
+let odontogramPatientId = "";
+let odontogramSheet = "inicial";
+let odontogramLoadedKey = "";
+let odontogramLoadedSign = "";
+const odontogramPending = new Set();
+let odontogramTimer = null;
+
+function odontogramRowKey(sheet, tooth) {
+  return sheet === "evolucion" ? `E:${tooth}` : tooth;
 }
 
-function toothFamily(tooth) {
-  const last = String(tooth).slice(-1);
-  if (["1", "2"].includes(last)) return "incisor";
-  if (last === "3") return "canine";
-  if (["4", "5"].includes(last)) return "premolar";
-  return "molar";
+function parseFindings(raw) {
+  if (!raw) return {};
+  try {
+    const value = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return value && typeof value === "object" ? value : {};
+  } catch (error) {
+    return {};
+  }
 }
 
-function toothSvg(tooth) {
-  const family = toothFamily(tooth);
-  const topArch = ["18", "17", "16", "15", "14", "13", "12", "11", "21", "22", "23", "24", "25", "26", "27", "28"].includes(String(tooth));
-  const rootY = topArch ? 14 : 68;
-  const crownY = topArch ? 58 : 22;
-  const rootPath = {
-    incisor: `M34 ${rootY} C31 ${topArch ? 26 : 56} 30 ${topArch ? 38 : 44} 36 ${crownY - (topArch ? 10 : -10)} C42 ${topArch ? 38 : 44} 41 ${topArch ? 26 : 56} 38 ${rootY} Z`,
-    canine: `M35 ${rootY} C29 ${topArch ? 30 : 52} 30 ${topArch ? 44 : 38} 36 ${crownY - (topArch ? 9 : -9)} C44 ${topArch ? 42 : 40} 43 ${topArch ? 28 : 54} 37 ${rootY} Z`,
-    premolar: `M29 ${rootY} C25 ${topArch ? 31 : 51} 29 ${topArch ? 43 : 39} 34 ${crownY - (topArch ? 9 : -9)} C39 ${topArch ? 43 : 39} 43 ${topArch ? 31 : 51} 39 ${rootY} Z M39 ${rootY} C35 ${topArch ? 31 : 51} 39 ${topArch ? 43 : 39} 44 ${crownY - (topArch ? 9 : -9)} C49 ${topArch ? 43 : 39} 53 ${topArch ? 31 : 51} 49 ${rootY} Z`,
-    molar: `M24 ${rootY} C20 ${topArch ? 30 : 52} 25 ${topArch ? 42 : 40} 30 ${crownY - (topArch ? 9 : -9)} C35 ${topArch ? 42 : 40} 39 ${topArch ? 30 : 52} 35 ${rootY} Z M38 ${rootY} C35 ${topArch ? 31 : 51} 38 ${topArch ? 43 : 39} 43 ${crownY - (topArch ? 8 : -8)} C48 ${topArch ? 43 : 39} 52 ${topArch ? 31 : 51} 49 ${rootY} Z`
-  }[family];
-  const crown = family === "molar"
-    ? "M22 48 C20 37 28 30 36 35 C43 29 55 36 52 49 C53 62 42 68 36 61 C28 67 20 60 22 48 Z"
-    : family === "premolar"
-      ? "M25 48 C25 37 32 31 39 36 C46 31 53 38 51 48 C52 59 43 66 38 60 C32 66 24 59 25 48 Z"
-      : family === "canine"
-        ? "M27 49 C27 39 32 32 37 35 C43 31 50 39 49 50 C49 60 42 67 37 60 C31 66 26 59 27 49 Z"
-        : "M28 50 C28 39 32 32 38 35 C44 32 49 39 48 50 C49 60 43 66 38 61 C32 66 27 60 28 50 Z";
-  return `<svg class="tooth-svg tooth-${family}" viewBox="0 0 74 84" aria-hidden="true">
-    <path class="tooth-root" d="${rootPath}"></path>
-    <path class="tooth-crown" d="${crown}"></path>
-    <path class="tooth-shade" d="M38 35 C44 38 47 45 46 54 C44 60 40 63 37 61 C42 56 42 44 38 35 Z"></path>
-  </svg>`;
+function odontogramRowsFor(patientId, sheet) {
+  return state.odontogram.filter((row) => {
+    if (row.patientId !== patientId) return false;
+    const isEvolution = String(row.tooth).startsWith("E:");
+    return isEvolution === (sheet === "evolucion");
+  });
 }
 
-function odontogramMark(meta) {
-  if (!meta.mark) return "";
-  return `<span class="tooth-mark mark-${meta.mark}" aria-hidden="true"></span>`;
+function odontogramSignature(patientId, sheet) {
+  return odontogramRowsFor(patientId, sheet)
+    .map((row) => `${row.tooth}:${row.findings || row.condition}:${row.note || ""}`)
+    .sort()
+    .join("|");
 }
 
-function toothSurfaceCross(meta) {
-  const active = ["cariado", "obturado", "sellante", "endodoncia"].includes(meta.className) ? " active" : "";
-  return `<span class="surface-cross ${meta.className}${active}" aria-hidden="true">
-    <i class="surface top"></i>
-    <i class="surface left"></i>
-    <i class="surface center"></i>
-    <i class="surface right"></i>
-    <i class="surface bottom"></i>
-  </span>`;
+function odontogramFichaFor(patientId, sheet) {
+  const ficha = Odontograma.fichaVacia();
+  if (!patientId) return ficha;
+  odontogramRowsFor(patientId, sheet).forEach((row) => {
+    const tooth = String(row.tooth).replace(/^E:/, "");
+    const saved = parseFindings(row.findings);
+    if (tooth === Odontograma.CLAVE_FICHA) {
+      ficha.spans = Array.isArray(saved.spans) ? saved.spans : [];
+      ficha.arcada = saved.arcada || { up: null, down: null };
+      ficha.esp = row.note || "";
+      return;
+    }
+    if (!ficha.dientes[tooth]) return;
+    ficha.dientes[tooth] = saved.sup || saved.pieza
+      ? {
+        sup: saved.sup || {},
+        pieza: saved.pieza || {},
+        box: Array.isArray(saved.box) ? saved.box : [],
+        num: saved.num || null,
+        nota: saved.nota || ""
+      }
+      // registro anterior a la norma: una sola condicion por pieza
+      : Odontograma.migrarRegistro(row.condition, row.note);
+  });
+  return Odontograma.normalizarFicha(ficha);
 }
 
-function renderOdontogramToolbar(currentCondition) {
-  const priority = ["Cariado", "Obturado", "Ausente", "Por extraer", "Corona", "Endodoncia", "Implante", "Ortodoncia", "Protesis", "Sellante", "Extraido", "Observacion", "Sano"];
-  $("#odontogramToolbar").innerHTML = `<div class="odontogram-type">
-    <button class="type-pill active" type="button">Adulto</button>
-    <button class="type-pill" type="button" disabled>Nino</button>
-  </div>
-  <div class="odontogram-symbol-grid">
-  ${priority.map((condition) => {
-    const meta = conditionMeta(condition);
-    const active = condition === currentCondition ? " active" : "";
-    return `<button class="condition-chip ${meta.className}${active}" type="button" data-condition-tool="${escapeHtml(condition)}">
-      <span class="chip-swatch"></span><span>${escapeHtml(meta.label)}</span>
-    </button>`;
-  }).join("")}
-  </div>
-  <button class="ghost compact" type="button" data-condition-tool="Sano">Limpiar pieza</button>`;
+function odontogramQueueSave(claves) {
+  if (!claves || !claves.length || !odontogramPatientId) return;
+  claves.forEach((clave) => odontogramPending.add(clave));
+  clearTimeout(odontogramTimer);
+  // se agrupa para no mandar una peticion por cada tecla de especificaciones
+  odontogramTimer = setTimeout(odontogramFlush, 600);
+}
+
+async function odontogramFlush() {
+  clearTimeout(odontogramTimer);
+  if (!odontogramPending.size || !odontogramView || !odontogramPatientId) return;
+  const claves = [...odontogramPending];
+  odontogramPending.clear();
+  const ficha = odontogramView.ficha();
+  const patientId = odontogramPatientId;
+  const sheet = odontogramSheet;
+
+  for (const clave of claves) {
+    const esFicha = clave === Odontograma.CLAVE_FICHA;
+    const tooth = odontogramRowKey(sheet, clave);
+    const previo = state.odontogram.find((item) => item.patientId === patientId && item.tooth === tooth);
+    const record = {
+      id: previo ? previo.id : uid("odo"),
+      patientId,
+      tooth,
+      condition: esFicha ? "Ficha" : (odontogramView.resumenPieza(clave) || "Sano"),
+      note: esFicha ? (ficha.esp || "") : (ficha.dientes[clave]?.nota || ""),
+      findings: JSON.stringify(esFicha
+        ? { spans: ficha.spans, arcada: ficha.arcada }
+        : ficha.dientes[clave])
+    };
+    try {
+      await saveOdontogramApi(record);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    if (previo) Object.assign(previo, record);
+    else state.odontogram.push(record);
+  }
+  odontogramLoadedSign = odontogramSignature(patientId, sheet);
+  if (!API_ENABLED) saveState();
+}
+
+function odontogramPatientList() {
+  return state.patients.map((patient) => {
+    const edad = ageFromBirthDate(patient.birthDate);
+    return {
+      id: patient.id,
+      nombre: patient.name || "Paciente",
+      doc: patient.dni || "",
+      edad: edad === null ? "" : `${edad} anios`
+    };
+  });
+}
+
+function canEditOdontogram() {
+  // el backend solo acepta escrituras del odontograma de ADMIN y DOCTOR
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
 }
 
 function renderOdontogram() {
-  const patientId = $("#odontogramPatientFilter").value || state.patients[0]?.id;
-  const form = $("#odontogramForm");
-  const selectedTooth = form?.tooth?.value || "";
-  const currentCondition = form?.condition?.value || "Sano";
-  const records = state.odontogram.filter((item) => item.patientId === patientId);
-  const recordMap = new Map(records.map((item) => [item.tooth, item]));
-  renderOdontogramToolbar(currentCondition);
-  const arches = [
-    { label: "Maxilar superior", teeth: ["18", "17", "16", "15", "14", "13", "12", "11", "21", "22", "23", "24", "25", "26", "27", "28"] },
-    { label: "Maxilar inferior", teeth: ["48", "47", "46", "45", "44", "43", "42", "41", "31", "32", "33", "34", "35", "36", "37", "38"] }
-  ];
-  $("#odontogramGrid").innerHTML = `<div class="odontogram-board">
-    <div class="odontogram-sheet-title">
-      <strong>Odontograma adulto</strong>
-      <span>FDI | selecciona condicion, pieza y guarda</span>
-    </div>
-    ${arches.map((arch) => {
-      const numbers = arch.teeth.map((tooth) => `<span>${tooth}</span>`).join("");
-      const buttons = arch.teeth.map((tooth) => {
-        const record = recordMap.get(tooth);
-        const condition = record?.condition || "Sano";
-        const meta = conditionMeta(condition);
-        const selected = String(tooth) === String(selectedTooth) ? " selected" : "";
-        return `<button class="tooth ${meta.className}${selected}" data-tooth="${tooth}" type="button" title="${escapeHtml(record?.note || condition)}">
-          <span class="tooth-condition">${escapeHtml(meta.short)}</span>
-          <span class="tooth-art">${toothSvg(tooth)}${odontogramMark(meta)}</span>
-          ${toothSurfaceCross(meta)}
-        </button>`;
-      }).join("");
-      return `<section class="odontogram-section">
-        <h3>${escapeHtml(arch.label)}</h3>
-        <div class="tooth-number-strip">${numbers}</div>
-        <div class="odontogram-row">${buttons}</div>
-        <div class="tooth-number-strip bottom">${numbers}</div>
-      </section>`;
-    }).join("")}
-  </div>
-  <div class="odontogram-summary">
-    ${records.length
-      ? records.map((record) => `<span><strong>${escapeHtml(record.tooth)}</strong> ${escapeHtml(record.condition)}${record.note ? ` - ${escapeHtml(record.note)}` : ""}</span>`).join("")
-      : `<span class="muted">Sin hallazgos registrados para este paciente.</span>`}
-  </div>`;
+  const lienzo = $("#odontogramGrid");
+  if (!lienzo || typeof Odontograma === "undefined") return;
+
+  if (!odontogramView) {
+    odontogramView = Odontograma.crear({
+      barra: $("#odontogramToolbar"),
+      lienzo,
+      rutaImagenes: "assets/dientes/",
+      tituloClinica: "CM Odontologia Estetica",
+      onChange: (ficha, claves) => odontogramQueueSave(claves),
+      onPaciente: (id, hoja) => {
+        odontogramFlush();
+        odontogramPatientId = id;
+        odontogramSheet = hoja;
+        renderOdontogram();
+      }
+    });
+  }
+
+  if (!odontogramPatientId || !state.patients.some((p) => p.id === odontogramPatientId)) {
+    odontogramPatientId = state.patients[0]?.id || "";
+  }
+  odontogramView.setPacientes(odontogramPatientList(), odontogramPatientId);
+  odontogramView.setSoloLectura(!canEditOdontogram());
+
+  // no se recarga mientras hay cambios sin guardar, para no perder lo escrito
+  if (odontogramPending.size) return;
+  const clave = `${odontogramPatientId}|${odontogramSheet}`;
+  const firma = odontogramSignature(odontogramPatientId, odontogramSheet);
+  if (clave === odontogramLoadedKey && firma === odontogramLoadedSign) return;
+  odontogramLoadedKey = clave;
+  odontogramLoadedSign = firma;
+  odontogramView.cargar(odontogramFichaFor(odontogramPatientId, odontogramSheet));
 }
 
 function renderPayments() {
@@ -5150,7 +5189,6 @@ function bindEvents() {
     refreshReportsRange();
   });
   on("#historyPatientFilter", "change", renderClinicalHistory);
-  on("#odontogramPatientFilter", "change", renderOdontogram);
   on("#doctorFilter", "change", renderAgenda);
   on("#unitFilter", "change", renderAgenda);
   on("#newAppointmentBtn", "click", () => openAppointment());
@@ -5895,52 +5933,8 @@ function bindEvents() {
     updateCreditSummary();
   });
 
-  $("#odontogramForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = formData(event.currentTarget);
-    const index = state.odontogram.findIndex((item) => item.patientId === data.patientId && item.tooth === data.tooth);
-    const record = {
-      id: index >= 0 ? state.odontogram[index].id : uid("odo"),
-      patientId: data.patientId,
-      tooth: data.tooth,
-      condition: data.condition,
-      note: data.note
-    };
-    try {
-      await saveOdontogramApi(record);
-    } catch (error) {
-      alert(error.message);
-      return;
-    }
-    if (index >= 0) state.odontogram[index] = record;
-    else state.odontogram.push(record);
-    $("#odontogramPatientFilter").value = data.patientId;
-    event.currentTarget.reset();
-    if (!API_ENABLED) saveState();
-    render();
-  });
-
-  $("#odontogramGrid").addEventListener("click", (event) => {
-    const tooth = event.target.closest("[data-tooth]");
-    if (!tooth) return;
-    const patientId = $("#odontogramPatientFilter").value || state.patients[0]?.id;
-    const record = state.odontogram.find((item) => item.patientId === patientId && item.tooth === tooth.dataset.tooth);
-    const form = $("#odontogramForm");
-    const selectedCondition = form.condition.value || "Sano";
-    form.patientId.value = patientId;
-    form.tooth.value = tooth.dataset.tooth;
-    form.condition.value = record?.condition || selectedCondition;
-    form.note.value = record?.note || "";
-    renderOdontogram();
-  });
-
-  $("#odontogramToolbar").addEventListener("click", (event) => {
-    const tool = event.target.closest("[data-condition-tool]");
-    if (!tool) return;
-    const form = $("#odontogramForm");
-    form.condition.value = tool.dataset.conditionTool;
-    renderOdontogram();
-  });
+  // El odontograma se maneja por completo dentro de odontograma.js: sus
+  // eventos los registra el propio modulo al crearse en renderOdontogram().
 
   $('#paymentForm select[name="patientId"]').addEventListener("change", () => {
     const selectedPatient = patientIdFromPaymentSelection($('#paymentForm select[name="patientId"]').value);
@@ -6489,7 +6483,24 @@ function bindEvents() {
     render();
   });
 
-  $("#exportPatientsBtn").addEventListener("click", () => exportCsv("pacientes.csv", state.patients));
+  $("#exportPatientsBtn").addEventListener("click", () => {
+    exportCsv("pacientes.csv", state.patients.map((patient) => ({
+      id: patient.id,
+      dni: patient.dni,
+      nombre: patient.name,
+      celular: patient.phone,
+      nacimiento: patient.birthDate,
+      doctor: patient.doctor,
+      tratamiento: patient.mainTreatment,
+      estado: patientStatus(patient),
+      estado_reg: patient.status || "",
+      notas: patient.notes,
+      creado_por: patient.createdByName,
+      rol_creador: patient.createdByRole,
+      oculto_rec: patient.hideFromReceptionNew,
+      creado: patient.createdAt
+    })));
+  });
   $("#exportTreatmentsBtn").addEventListener("click", () => exportCsv("tratamientos.csv", state.treatments));
   $("#exportPaymentsBtn").addEventListener("click", () => {
     const cashDate = cashViewDate();
