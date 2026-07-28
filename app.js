@@ -1753,6 +1753,15 @@ function lastAppointment(patientId) {
     .sort((a, b) => b.date.localeCompare(a.date))[0];
 }
 
+function hasUpcomingActiveAppointment(patientId) {
+  const today = todayISO();
+  const activeStatuses = new Set(["RESERVADA", "CONFIRMADA", "EN_ATENCION", "REPROGRAMADA"]);
+  return state.appointments.some((appointment) => {
+    if (appointment.patientId !== patientId || !appointment.date) return false;
+    return appointment.date >= today && activeStatuses.has(String(appointment.status || "").toUpperCase());
+  });
+}
+
 function appointmentSortKey(appointment) {
   return `${appointment.date || ""} ${appointment.time || ""}`;
 }
@@ -1901,7 +1910,8 @@ function renderPatientAppointmentDetail(patientId) {
 }
 
 function patientStatus(patient) {
-  if (patient.status === "INACTIVO") return "INACTIVO";
+  if (!patient?.id) return patient?.status || "NUEVO";
+  if (hasUpcomingActiveAppointment(patient.id)) return "ACTIVO";
   const last = lastAppointment(patient.id);
   if (!last) return patient.status || "NUEVO";
   const diff = Math.floor((new Date() - new Date(`${last.date}T00:00:00`)) / 86400000);
