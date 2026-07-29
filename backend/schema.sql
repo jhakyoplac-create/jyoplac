@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS odontogram (
   tooth TEXT NOT NULL,
   condition TEXT NOT NULL,
   note TEXT,
+  findings TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(patient_id, tooth),

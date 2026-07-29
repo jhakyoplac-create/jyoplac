@@ -1,9 +1,16 @@
-const CACHE_NAME = "cm-dental-shell-v100";
+const CACHE_NAME = "cm-dental-shell-v102";
 const SHELL_FILES = [
   "/",
   "/index.html",
-  "/styles.css?v=20260727-lionapi-dni-ruc",
-  "/app.js?v=20260727-lionapi-dni-ruc",
+  "/styles.css?v=20260728-pacientes-estado",
+  "/odontograma.css?v=20260728-pacientes-estado",
+  "/app.js?v=20260728-pacientes-estado",
+  "/odontograma.js?v=20260728-pacientes-estado",
+  "/assets/dientes/incisivo.png",
+  "/assets/dientes/canino.png",
+  "/assets/dientes/premolar.png",
+  "/assets/dientes/molar-superior.png",
+  "/assets/dientes/molar-inferior.png",
   "/manifest.webmanifest",
   "/assets/logo.svg",
   "/assets/logo-cm.png",

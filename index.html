@@ -8,7 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260727-lionapi-dni-ruc" />
+    <link rel="stylesheet" href="styles.css?v=20260728-pacientes-estado" />
+    <link rel="stylesheet" href="odontograma.css?v=20260728-pacientes-estado" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -225,28 +226,15 @@
       </section>
 
       <section id="odontograma" class="view">
-        <div class="content-grid form-and-list">
-          <form class="panel form" id="odontogramForm">
-            <div class="panel-head">
-              <h2>Registro dental</h2>
-              <button type="reset" class="ghost">Limpiar</button>
-            </div>
-            <label>Paciente<select name="patientId" required></select></label>
-            <label>Pieza dental<select name="tooth" required></select></label>
-            <label>Condicion<select name="condition" required></select></label>
-            <label>Observacion<textarea name="note" rows="3"></textarea></label>
-            <button class="primary" type="submit">Actualizar odontograma</button>
-          </form>
-
-          <section class="panel odontogram-panel">
-            <div class="panel-head">
-              <h2>Odontograma</h2>
-              <select id="odontogramPatientFilter"></select>
-            </div>
-            <div id="odontogramToolbar" class="odontogram-toolbar" aria-label="Herramientas del odontograma"></div>
-            <div id="odontogramGrid" class="odontogram-grid"></div>
-          </section>
-        </div>
+        <section class="panel odontogram-panel">
+          <div class="panel-head">
+            <h2>Odontograma</h2>
+            <span class="muted">Norma Tecnica del Odontograma (MINSA) &middot; solo rojo y azul</span>
+          </div>
+          <div id="odontogramHeader"></div>
+          <div id="odontogramToolbar" class="odontogram-toolbar" aria-label="Herramientas del odontograma"></div>
+          <div id="odontogramGrid" class="odontogram-grid"></div>
+        </section>
       </section>
 
       <section id="tratamientos" class="view">
@@ -1120,6 +1108,7 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260727-lionapi-dni-ruc"></script>
+    <script src="odontograma.js?v=20260728-pacientes-estado"></script>
+    <script src="app.js?v=20260728-pacientes-estado"></script>
   </body>
 </html>

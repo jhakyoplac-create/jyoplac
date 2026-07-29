@@ -1,0 +1,226 @@
+/*
+  Estilos del odontograma normativo. Con prefijo odo- para que no choquen con
+  las hojas de cada sistema, y usando las variables de color del tema cuando
+  existen (con valores de reserva para la ventana de impresion).
+*/
+/* Los contenedores que recibe el modulo pueden traer estilos del odontograma
+   anterior (rejillas de ancho fijo). Se neutralizan aqui. */
+.odo-raiz {
+  display: block !important;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: none !important;
+  gap: 0;
+}
+.odo-raiz + .odo-raiz { margin-top: 10px; }
+
+.odo-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line, #c8eaf2);
+  margin-bottom: 10px;
+}
+.odo-tab {
+  border: none;
+  background: none;
+  color: var(--muted, #647b84);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 7px 11px;
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+}
+.odo-tab.on { color: var(--aqua, #00a6d6); border-bottom-color: var(--aqua, #00a6d6); }
+
+.odo-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.odo-t {
+  border: 1px solid var(--line, #c8eaf2);
+  background: var(--surface, #fff);
+  color: var(--ink, #17323d);
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 5px 11px 5px 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.odo-t .odo-sw {
+  width: 13px; height: 13px; border-radius: 3px;
+  border: 1.5px solid #9a9384; flex: 0 0 auto;
+}
+.odo-t.on { outline: 2px solid var(--aqua, #00a6d6); outline-offset: 1px; }
+
+.odo-sigrow { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 9px; }
+.odo-sigrow em {
+  font-style: normal; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted, #647b84); font-weight: 700;
+}
+.odo-sig {
+  border: 1px solid var(--line, #c8eaf2);
+  background: var(--surface, #fff);
+  color: var(--ink, #17323d);
+  border-radius: 6px; padding: 3px 9px;
+  font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+}
+.odo-sig.on { background: #1565c0; border-color: #1565c0; color: #fff; }
+.odo-estado {
+  display: flex; align-items: center; gap: 6px; margin-left: auto;
+  font-size: 12px; color: var(--muted, #647b84); font-weight: 600; cursor: pointer;
+}
+.odo-hint { font-size: 11.5px; color: var(--muted, #647b84); margin: 9px 0 0; min-height: 16px; }
+.odo-hint b { color: var(--aqua, #00a6d6); }
+
+/* ---------- buscador de paciente ---------- */
+.odo-buscar {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  position: relative; margin-bottom: 12px;
+}
+.odo-q {
+  flex: 1 1 240px; min-width: 200px; padding: 8px 10px;
+  border: 1px solid var(--line, #c8eaf2); border-radius: 8px;
+  background: var(--aqua-soft, #dff7ff); color: var(--ink, #17323d);
+  font: inherit; font-size: 13px;
+}
+.odo-res {
+  position: absolute; z-index: 30; top: 100%; left: 0; width: min(420px, 100%);
+  margin-top: 4px; max-height: 260px; overflow-y: auto;
+  background: var(--surface, #fff); border: 1px solid var(--line, #c8eaf2);
+  border-radius: 10px; box-shadow: 0 10px 26px rgba(0, 90, 120, .16); padding: 4px;
+}
+.odo-res[hidden] { display: none; }
+.odo-r {
+  padding: 7px 9px; border-radius: 7px; cursor: pointer;
+  display: flex; justify-content: space-between; gap: 10px;
+}
+.odo-r:hover { background: var(--aqua-soft, #dff7ff); }
+.odo-r span { color: var(--muted, #647b84); font-size: 11.5px; white-space: nowrap; }
+.odo-vacio2 { padding: 9px; color: var(--muted, #647b84); font-size: 12px; }
+.odo-ficha {
+  display: flex; flex-wrap: wrap; gap: 14px; padding: 7px 12px;
+  background: var(--aqua-soft, #dff7ff);
+  border: 1px solid var(--line, #c8eaf2); border-radius: 10px;
+}
+.odo-dato i {
+  display: block; font-style: normal; font-size: 10px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted, #647b84); font-weight: 700;
+}
+.odo-dato b { font-weight: 600; font-size: 13px; }
+.odo-hoja, .odo-buscar .odo-btn { width: auto; margin: 0; }
+.odo-hoja {
+  padding: 8px 10px; border: 1px solid var(--line, #c8eaf2); border-radius: 8px;
+  background: var(--aqua-soft, #dff7ff); color: var(--ink, #17323d);
+  font: inherit; font-size: 12.5px; font-weight: 700;
+}
+
+/* ---------- disposicion ---------- */
+.odo-layout { display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: 14px; align-items: start; }
+/* Cuando el panel es angosto el lateral pasa debajo y la arcada usa todo el
+   ancho; el modulo ademas la reduce si aun no entra. */
+.odo-estrecho .odo-layout { grid-template-columns: 1fr; }
+
+.odo-arco { padding: 14px 4px 16px; overflow-x: auto; }
+.odo-titulo {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted, #647b84); text-align: center; margin: 0 0 8px;
+}
+.odo-wrap { position: relative; width: 928px; margin: 0 auto; }
+.odo-fila { display: flex; width: 928px; position: relative; }
+.odo-fila.odo-linea::after {
+  content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px;
+  width: 1.5px; background: currentColor; opacity: .35;
+}
+/* Franja libre junto a los apices: ahi van los trazos de protesis,
+   ortodoncia y supernumerario sin pisar los numeros. */
+#odo-up { margin-top: 26px; }
+#odo-down { margin-bottom: 26px; }
+.odo-col { width: 58px; display: flex; flex-direction: column; align-items: center; }
+.odo-num {
+  font-size: 11px; font-weight: 700; margin: 3px 0; cursor: pointer;
+  padding: 0 4px; border-radius: 4px;
+}
+.odo-num:hover { background: var(--aqua-soft, #dff7ff); }
+.odo-recuadro {
+  width: 46px; min-height: 19px; border: 1.2px solid currentColor;
+  display: grid; place-items: center; font-size: 9px; font-weight: 800;
+  background: var(--surface, #fff); margin: 3px 0; cursor: pointer;
+  line-height: 1.15; padding: 1px; text-align: center;
+}
+.odo-recuadro:hover { border-color: var(--aqua, #00a6d6); }
+.odo-az { color: #1565c0; font-weight: 700; }
+.odo-ro { color: #d32f2f; font-weight: 700; }
+.odo-capa { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+
+/* Las piezas se alinean por la linea del cuello, no por el borde de la imagen. */
+.odo-diente { position: relative; cursor: pointer; line-height: 0; }
+.odo-diente img, .odo-diente svg {
+  position: absolute; left: 0; width: 100%;
+  user-select: none; -webkit-user-drag: none;
+}
+/* En el maxilar superior se voltea el conjunto, asi las coordenadas se
+   calculan siempre con la corona arriba. */
+.odo-diente.odo-arriba img, .odo-diente.odo-arriba svg { transform: scaleY(-1); }
+/* Solo los rellenos se recortan con la silueta: el color de una caries nunca
+   debe salirse del diente. Los trazos van en una capa libre porque la norma
+   los dibuja rodeando o sobresaliendo de la figura. */
+.odo-hall {
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
+.odo-libre { overflow: visible; pointer-events: none; }
+.odo-zona { fill: transparent; cursor: pointer; pointer-events: all; }
+.odo-zona:hover { fill: rgba(30, 136, 199, .22); }
+.odo-diente.odo-sel::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 8px;
+  border: 1.5px dashed var(--aqua, #00a6d6); pointer-events: none;
+}
+.odo-diente.odo-pendiente::before {
+  content: ""; position: absolute; inset: -3px; border-radius: 8px;
+  border: 2px solid var(--aqua, #00a6d6); pointer-events: none;
+}
+.odo-lectura .odo-zona { cursor: default; }
+.odo-lectura .odo-zona:hover { fill: transparent; }
+
+/* ---------- lateral ---------- */
+.odo-side {
+  border: 1px solid var(--line, #c8eaf2); border-radius: 12px;
+  background: var(--surface, #fff); overflow: hidden;
+}
+.odo-side h4 {
+  margin: 0; padding: 10px 13px; font-size: 13.5px;
+  border-bottom: 1px solid var(--line, #c8eaf2);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.odo-side h4 + .odo-body + h4 { border-top: 1px solid var(--line, #c8eaf2); }
+.odo-body { padding: 11px 13px; }
+.odo-selnum { font-size: 22px; font-weight: 800; }
+.odo-selsub { color: var(--muted, #647b84); font-size: 12px; margin-bottom: 10px; line-height: 1.5; }
+.odo-lista {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
+  gap: 5px; max-height: 250px; overflow-y: auto;
+}
+.odo-lista li {
+  display: flex; gap: 8px; font-size: 12px; padding: 5px 7px;
+  border: 1px solid var(--line, #c8eaf2); border-radius: 7px;
+}
+.odo-lista b { min-width: 32px; flex: 0 0 auto; }
+.odo-lista .odo-vacio { border: none; padding: 0; color: var(--muted, #647b84); }
+.odo-btn {
+  width: 100%; border: 1px solid var(--line, #c8eaf2);
+  background: var(--aqua-soft, #dff7ff); padding: 8px; border-radius: 8px;
+  font: inherit; font-weight: 700; font-size: 12px; cursor: pointer;
+  color: var(--ink, #17323d); margin-top: 8px;
+}
+.odo-btn:hover { border-color: var(--aqua, #00a6d6); }
+.odo-esp {
+  width: 100%; min-height: 74px; border: 1px solid var(--line, #c8eaf2);
+  border-radius: 8px; padding: 8px; background: var(--aqua-soft, #dff7ff);
+  color: var(--ink, #17323d); font: inherit; font-size: 12px; resize: vertical;
+}
+.odo-aviso, .odo-ley { font-size: 11.5px; color: var(--muted, #647b84); line-height: 1.6; margin: 6px 0 0; }
+.odo-ley { margin: 0; }

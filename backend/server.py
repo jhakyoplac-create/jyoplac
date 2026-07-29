@@ -296,6 +296,10 @@ def migrate_db(conn):
         """
     )
     ensure_column(conn, "electronic_receipts", "customer_address", "TEXT")
+    # Hallazgos del odontograma segun la Norma Tecnica del MINSA, en JSON.
+    # La columna condition se mantiene con un resumen legible para no romper
+    # los registros anteriores ni los respaldos ya generados.
+    ensure_column(conn, "odontogram", "findings", "TEXT")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS inventory_products (
@@ -1344,10 +1348,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
             with db() as conn:
                 conn.execute(
                     """
-                    INSERT INTO odontogram (id, patient_id, tooth, condition, note)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO odontogram (id, patient_id, tooth, condition, note, findings)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(patient_id, tooth) DO UPDATE SET
                       condition=excluded.condition, note=excluded.note,
+                      findings=excluded.findings,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -1356,6 +1361,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data["tooth"],
                         data["condition"],
                         data.get("note", ""),
+                        data.get("findings", ""),
                     ),
                 )
                 row = conn.execute(

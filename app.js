@@ -3212,6 +3212,7 @@ function renderOdontogram() {
   if (!odontogramView) {
     odontogramView = Odontograma.crear({
       barra: $("#odontogramToolbar"),
+      cabecera: $("#odontogramHeader"),
       lienzo,
       rutaImagenes: "assets/dientes/",
       tituloClinica: "CM Odontologia Estetica",
