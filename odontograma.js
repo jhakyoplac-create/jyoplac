@@ -90,7 +90,7 @@
 
   var TOOLS = [
     { cat: "sup", k: "caries", n: "Caries", c: "rojo",
-      hint: "Clic en la cara comprometida: se pinta totalmente de rojo." },
+      hint: "Clic en la cara comprometida: se pinta totalmente de rojo. La palatina y la lingual se marcan en el cuadro de caras." },
     { cat: "sup", k: "restauracion", n: "Restauracion", c: "azul", sig: ["AM", "R", "IV", "IM", "IE"],
       hint: "Se pinta de azul la cara y la sigla del material va al recuadro." },
     { cat: "sup", k: "rest_temp", n: "Restauracion temporal", c: "rojo", borde: true,
@@ -179,21 +179,68 @@
     return base;
   }
 
-  /* ==================== ZONAS Y TRAZOS ==================== */
-  /* Coordenadas siempre con la corona arriba: el maxilar superior se voltea
-     despues por CSS. La corona va de y=0 al cuello y la franja del borde
-     incisal/oclusal es el extremo libre. */
+  /* ==================== CARAS DEL DIENTE ==================== */
+  /* La cara mesial mira siempre hacia la linea media. Como las arcadas se
+     dibujan de la pieza 8 a la 1 y luego de la 1 a la 8, en los cuadrantes 1 y
+     4 (mitad derecha del paciente, que va a la izquierda de la pantalla) la
+     linea media queda a la derecha, y en los cuadrantes 2 y 3 a la izquierda. */
+  function mesialALaDerecha(t) {
+    var c = String(t).charAt(0);
+    return c === "1" || c === "4";
+  }
+  /* Los anteriores no tienen cara oclusal sino borde incisal, y la cara
+     interna se llama palatina arriba y lingual abajo. */
+  function esAnterior(t) {
+    var u = String(t).slice(-1);
+    return u === "1" || u === "2" || u === "3";
+  }
+  function nombreCara(t, cara) {
+    if (cara === "oclusal") return esAnterior(t) ? "incisal" : "oclusal";
+    if (cara === "lingual") return arcoDe(t) === "up" ? "palatina" : "lingual";
+    return cara;
+  }
+
+  /* Zonas sobre la ilustracion. Coordenadas siempre con la corona arriba: el
+     maxilar superior se voltea despues por CSS. La corona va de y=0 al cuello
+     y la franja del borde incisal/oclusal es el extremo libre.
+     La cara lingual/palatina no aparece aqui porque en vista frontal queda
+     detras del diente: se marca en el cuadro de caras. */
   function zonas(t) {
     var im = IMGS[tipo(t)], W = im.w, H = im.h;
     var cuello = H * CORONA[tipo(t)];
     var bordeY = cuello * 0.34;
     var x0 = W * 0.04, x1 = W * 0.96, p = (x1 - x0) / 3;
+    var der = mesialALaDerecha(t);
     function R(a, b, ya, yb) { return "M" + a + "," + ya + " L" + b + "," + ya + " L" + b + "," + yb + " L" + a + "," + yb + " Z"; }
     return [
       { s: "oclusal", d: R(x0, x1, 0, bordeY) },
-      { s: "mesial", d: R(x0, x0 + p, bordeY, cuello) },
+      { s: der ? "distal" : "mesial", d: R(x0, x0 + p, bordeY, cuello) },
       { s: "vestibular", d: R(x0 + p, x0 + 2 * p, bordeY, cuello) },
-      { s: "distal", d: R(x0 + 2 * p, x1, bordeY, cuello) }
+      { s: der ? "mesial" : "distal", d: R(x0 + 2 * p, x1, bordeY, cuello) }
+    ];
+  }
+
+  /* Cuadro de caras: la corona vista desde el plano oclusal, que es la unica
+     forma de mostrar las cinco caras a la vez. Es el esquema clasico del
+     odontograma y va junto a la corona, entre las dos arcadas.
+     El vestibular apunta siempre hacia afuera de la boca, asi que en el
+     maxilar superior queda arriba y en el inferior abajo. */
+  function caras(t) {
+    var arriba = arcoDe(t) === "up";
+    // El cuadro se dibuja siempre junto a la corona, entre las dos arcadas: en
+    // el maxilar superior queda debajo del diente y en el inferior encima. La
+    // cara vestibular va del lado que toca la ilustracion, que muestra
+    // justamente esa cara, y la palatina o lingual queda al lado opuesto.
+    var ladoSuperior = arriba ? "vestibular" : "lingual";
+    var ladoInferior = arriba ? "lingual" : "vestibular";
+    var ladoDerecho = mesialALaDerecha(t) ? "mesial" : "distal";
+    var ladoIzquierdo = mesialALaDerecha(t) ? "distal" : "mesial";
+    return [
+      { s: ladoSuperior, d: "M0,0 L100,0 L70,30 L30,30 Z" },
+      { s: ladoInferior, d: "M0,100 L100,100 L70,70 L30,70 Z" },
+      { s: ladoIzquierdo, d: "M0,0 L30,30 L30,70 L0,100 Z" },
+      { s: ladoDerecho, d: "M100,0 L100,100 L70,70 L70,30 Z" },
+      { s: "oclusal", d: "M30,30 L70,30 L70,70 L30,70 Z" }
     ];
   }
 
@@ -310,10 +357,32 @@
         "<svg " + vb + ' style="' + pos + '">' + clic + "</svg></div>";
     }
 
+    /* Cuadro con las cinco caras de la corona vista desde el plano oclusal.
+       Aqui si se puede marcar la cara palatina o lingual, que en la
+       ilustracion frontal queda escondida detras del diente. */
+    function carasHtml(t) {
+      var d = ficha.dientes[t];
+      var zs = caras(t).map(function (z) {
+        var h = d.sup[z.s], relleno = "", m = h ? meta(h) : null;
+        // va en style y no como atributo: en SVG los atributos de presentacion
+        // pierden frente a la regla CSS de la clase
+        if (m) {
+          relleno = m.borde
+            ? ' style="fill:none;stroke:' + col(m.c) + ';stroke-width:7"'
+            : ' style="fill:' + col(m.c) + ';fill-opacity:.85"';
+        }
+        return '<path class="odo-cara" d="' + z.d + '" data-s="' + z.s + '"' + relleno +
+          '><title>' + nombreCara(t, z.s) + "</title></path>";
+      }).join("");
+      return '<div class="odo-col"><svg class="odo-caras" viewBox="-3 -3 106 106" data-t="' + t + '">' +
+        zs + "</svg></div>";
+    }
+
     function filaHtml(lista, kind) {
       return lista.map(function (t) {
         if (kind === "diente") return '<div class="odo-col">' + dienteHtml(t) + "</div>";
         if (kind === "num") return '<div class="odo-col"><span class="odo-num" data-num="' + t + '">' + t + "</span></div>";
+        if (kind === "caras") return carasHtml(t);
         var c = ficha.dientes[t].box;
         var txt = c.map(function (x) {
           return '<span class="' + (x.c === "rojo" ? "odo-ro" : "odo-az") + '">' + esc(x.k) + "</span>";
@@ -337,8 +406,13 @@
       var numY = nFila.offsetTop + nFila.offsetHeight / 2;
       // en el maxilar superior la raiz queda arriba y la corona abajo
       var apiceY = up ? tFila + 6 : tFila + CELDA - 6;
-      var coronaY = up ? tFila + CELDA - 5 : tFila + 5;
       var fuera = up ? -1 : 1;   // hacia afuera de la boca desde el apice
+      // los trazos que van sobre las coronas se dibujan por fuera del cuadro
+      // de caras, para no taparlo
+      var cFila = lienzo.querySelector("#odo-" + arco + "-caras");
+      var carasY = cFila.offsetTop, carasH = cFila.offsetHeight;
+      var coronaY = up ? carasY + carasH + 3 : carasY - 3;
+      var carasCY = carasY + carasH / 2;   // altura del hueco entre dos piezas
 
       var out = "";
       function st(c, gr) {
@@ -385,7 +459,9 @@
           }
           out += '<path d="' + d + '" ' + st(c, 2.2) + "/>";
         } else if (s.k === "diastema") {
-          var xm = (centroDe(s.a) + centroDe(s.b)) / 2, y0 = coronaY, y1 = coronaY - fuera * 20;
+          // va en el hueco entre las dos piezas, a la altura del cuadro de caras
+          var xm = (centroDe(s.a) + centroDe(s.b)) / 2;
+          var y0 = carasCY + 13, y1 = carasCY - 13;
           out += '<path d="M' + (xm - 5) + "," + y0 + " Q" + (xm - 1) + "," + ((y0 + y1) / 2) + " " + (xm - 5) + "," + y1 + '" ' + st(c, 2.2) + "/>";
           out += '<path d="M' + (xm + 5) + "," + y0 + " Q" + (xm + 1) + "," + ((y0 + y1) / 2) + " " + (xm + 5) + "," + y1 + '" ' + st(c, 2.2) + "/>";
         } else if (s.k === "supernumerario") {
@@ -414,7 +490,7 @@
     }
 
     /* ---------- descripcion de hallazgos ---------- */
-    var ORDEN = ["mesial", "vestibular", "distal", "oclusal"];
+    var ORDEN = ["mesial", "vestibular", "distal", "lingual", "oclusal"];
     function describir(t) {
       var d = ficha.dientes[t], out = [];
       Object.keys(d.pieza).forEach(function (k) {
@@ -424,7 +500,7 @@
       ORDEN.forEach(function (z) {
         if (!d.sup[z]) return;
         var m = meta(d.sup[z]); if (!m) return;
-        out.push({ txt: m.n + " · " + z, c: m.c });
+        out.push({ txt: m.n + " · " + nombreCara(t, z), c: m.c });
       });
       d.box.forEach(function (x) {
         var m = meta(x.k);   // las siglas de material no son herramienta propia
@@ -485,6 +561,29 @@
       barra.innerHTML = html;
     }
 
+    /* Guia del cuadro de caras: explica que es la corona vista desde arriba y
+       donde queda cada cara, porque la palatina o lingual solo se marca ahi. */
+    function guiaCarasHtml() {
+      var etiquetas = [
+        { s: "Vestibular", x: 50, y: -6 },
+        { s: "Palatina o lingual", x: 50, y: 116 },
+        { s: "Distal", x: -6, y: 50, anchor: "end" },
+        { s: "Mesial", x: 106, y: 50, anchor: "start" },
+        { s: "Oclusal", x: 50, y: 52 }
+      ];
+      var caja = caras("16").map(function (z) {
+        return '<path d="' + z.d + '" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>';
+      }).join("");
+      var texto = etiquetas.map(function (e) {
+        return '<text x="' + e.x + '" y="' + e.y + '" font-size="13" fill="currentColor"' +
+          ' text-anchor="' + (e.anchor || "middle") + '" dominant-baseline="middle">' + e.s + "</text>";
+      }).join("");
+      return '<svg viewBox="-64 -16 228 148" class="odo-guia-svg">' + caja + texto + "</svg>" +
+        "<p>El cuadro es la corona vista desde arriba. La cara palatina o lingual " +
+        "queda detras del diente, por eso solo se puede marcar ahi. " +
+        "La mesial siempre mira hacia el centro de la boca.</p>";
+    }
+
     function esqueleto() {
       var buscador = onPaciente
         ? '<div class="odo-buscar">' +
@@ -503,10 +602,13 @@
         '<div class="odo-fila" id="odo-up-box"></div>' +
         '<div class="odo-fila odo-linea" id="odo-up-num"></div>' +
         '<div class="odo-fila odo-linea" id="odo-up"></div>' +
+        // el cuadro de caras va junto a la corona, mirando al centro de la boca
+        '<div class="odo-fila odo-linea" id="odo-up-caras"></div>' +
         '<svg class="odo-capa" id="odo-up-ov"></svg></div>' +
         // espacio para los trazos que la norma dibuja sobre el plano oclusal
-        '<div style="height:34px"></div>' +
+        '<div style="height:40px"></div>' +
         '<div class="odo-wrap" id="odo-down-wrap">' +
+        '<div class="odo-fila odo-linea" id="odo-down-caras"></div>' +
         '<div class="odo-fila odo-linea" id="odo-down"></div>' +
         '<div class="odo-fila odo-linea" id="odo-down-num"></div>' +
         '<div class="odo-fila" id="odo-down-box"></div>' +
@@ -520,9 +622,10 @@
         '<h4>Especificaciones</h4><div class="odo-body">' +
         '<textarea class="odo-esp" rows="3" placeholder="Hallazgos que no pueden registrarse graficamente, piezas con mas de una anomalia, color del metal, tipo de aparatologia o material."></textarea>' +
         '<p class="odo-aviso"></p></div>' +
-        '<h4>Codigo de color</h4><div class="odo-body odo-ley">' +
+        '<h4>Como se lee</h4><div class="odo-body odo-ley">' +
         '<span class="odo-az">Azul</span>: tratamiento en buen estado.<br>' +
         '<span class="odo-ro">Rojo</span>: patologia, mal estado o temporal.' +
+        '<div class="odo-guia">' + guiaCarasHtml() + "</div>" +
         "</div></div></div>";
     }
 
@@ -543,6 +646,8 @@
       lienzo.querySelector("#odo-up-box").innerHTML = filaHtml(UP, "box");
       lienzo.querySelector("#odo-up-num").innerHTML = filaHtml(UP, "num");
       lienzo.querySelector("#odo-up").innerHTML = filaHtml(UP, "diente");
+      lienzo.querySelector("#odo-up-caras").innerHTML = filaHtml(UP, "caras");
+      lienzo.querySelector("#odo-down-caras").innerHTML = filaHtml(DOWN, "caras");
       lienzo.querySelector("#odo-down").innerHTML = filaHtml(DOWN, "diente");
       lienzo.querySelector("#odo-down-num").innerHTML = filaHtml(DOWN, "num");
       lienzo.querySelector("#odo-down-box").innerHTML = filaHtml(DOWN, "box");
@@ -736,7 +841,8 @@
         return;
       }
 
-      var z = ev.target.closest(".odo-zona");
+      // se marca igual sobre la ilustracion que sobre el cuadro de caras
+      var z = ev.target.closest(".odo-zona, .odo-cara");
       if (!z) return;
       var t = z.closest("[data-t]").dataset.t;
       guardar();

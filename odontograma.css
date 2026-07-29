@@ -186,6 +186,28 @@
 .odo-lectura .odo-zona { cursor: default; }
 .odo-lectura .odo-zona:hover { fill: transparent; }
 
+/* Cuadro de caras: la corona vista desde el plano oclusal. Es el unico sitio
+   donde se puede marcar la cara palatina o lingual, que en la ilustracion
+   frontal queda detras del diente. */
+.odo-caras {
+  width: 26px;
+  height: 26px;
+  display: block;
+  margin: 3px 0;
+  overflow: visible;
+}
+.odo-cara {
+  fill: var(--surface, #fff);
+  stroke: var(--ink, #17323d);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  cursor: pointer;
+  pointer-events: all;
+}
+.odo-cara:hover { fill: rgba(30, 136, 199, .3); }
+.odo-lectura .odo-cara { cursor: default; }
+.odo-lectura .odo-cara:hover { fill: var(--surface, #fff); }
+
 /* ---------- lateral ---------- */
 .odo-side {
   border: 1px solid var(--line, #c8eaf2); border-radius: 12px;
@@ -224,3 +246,8 @@
 }
 .odo-aviso, .odo-ley { font-size: 11.5px; color: var(--muted, #647b84); line-height: 1.6; margin: 6px 0 0; }
 .odo-ley { margin: 0; }
+
+/* guia del cuadro de caras */
+.odo-guia { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line, #c8eaf2); }
+.odo-guia-svg { width: 100%; max-width: 210px; display: block; margin: 0 auto 6px; color: var(--ink, #17323d); }
+.odo-guia p { margin: 0; font-size: 11px; line-height: 1.55; }
