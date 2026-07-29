@@ -51,22 +51,56 @@
   function indiceDe(t) { var l = arcoDe(t) === "up" ? UP : DOWN; return l.indexOf(String(t)); }
   function centroDe(t) { return indiceDe(t) * COLW + COLW / 2; }
 
+  /* --- Tamano de cada pieza ------------------------------------------------
+     Hay cinco ilustraciones para treinta y dos piezas, asi que cada una se
+     dibuja con su tamano real en vez de repetir el mismo dibujo a la misma
+     escala: el incisivo lateral es mas angosto que el central, el canino es
+     la pieza mas larga y los molares inferiores son mas anchos que los
+     superiores. Medidas en milimetros de la anatomia dental (ancho
+     mesiodistal de la corona y largo total de la pieza). */
+  var MEDIDAS = {
+    "11": [8.5, 23.5], "12": [6.5, 22.0], "13": [7.5, 26.5], "14": [7.0, 22.5],
+    "15": [6.7, 22.5], "16": [10.0, 20.0], "17": [9.0, 20.0], "18": [8.5, 17.0],
+    "31": [5.0, 21.5], "32": [5.5, 23.5], "33": [7.0, 25.5], "34": [7.0, 22.5],
+    "35": [7.1, 22.5], "36": [11.0, 21.0], "37": [10.5, 20.0], "38": [10.0, 18.0]
+  };
+  // la ilustracion de cada tipo representa a esta pieza, que sirve de patron
+  var PATRON = {
+    "incisivo": "11", "canino": "13", "premolar": "14",
+    "molar-superior": "16", "molar-inferior": "36"
+  };
+  function medidaDe(t) {
+    // las piezas de la izquierda miden igual que su simetrica de la derecha
+    var n = String(t), c = n.charAt(0), u = n.charAt(1);
+    var clave = (c === "1" || c === "2" ? "1" : "3") + u;
+    return MEDIDAS[clave] || MEDIDAS["11"];
+  }
+  function escalaDe(t) {
+    var base = medidaDe(PATRON[tipo(t)]), m = medidaDe(t);
+    return { ancho: m[0] / base[0], largo: m[1] / base[1] };
+  }
+  function anchoDe(t) { return ANCHO * escalaDe(t).ancho; }
+  function altoDe(t) {
+    var tp = tipo(t);
+    return ANCHO * (IMGS[tp].h / IMGS[tp].w) * escalaDe(t).largo;
+  }
+
   /* --- Alineacion por la linea del cuello ---------------------------------
-     Cada ilustracion tiene proporciones distintas. Si se apilaran por el borde
-     de la imagen, los caninos colgarian mucho mas que los molares. Con la
-     corona y la raiz mas largas del juego se fija una altura de celda comun y
-     la altura donde debe caer el cuello en cada maxilar. */
-  function altoDe(tp) { return ANCHO * IMGS[tp].h / IMGS[tp].w; }
+     Si las piezas se apilaran por el borde de la imagen, los caninos
+     colgarian mucho mas que los molares. Con la corona y la raiz mas largas
+     del juego se fija una altura de celda comun y la altura a la que debe
+     caer el cuello en cada maxilar. */
   var MAX_CORONA = 0, MAX_RAIZ = 0;
-  Object.keys(CORONA).forEach(function (tp) {
-    MAX_CORONA = Math.max(MAX_CORONA, altoDe(tp) * CORONA[tp]);
-    MAX_RAIZ = Math.max(MAX_RAIZ, altoDe(tp) * (1 - CORONA[tp]));
+  PIEZAS.forEach(function (t) {
+    var h = altoDe(t), f = CORONA[tipo(t)];
+    MAX_CORONA = Math.max(MAX_CORONA, h * f);
+    MAX_RAIZ = Math.max(MAX_RAIZ, h * (1 - f));
   });
   var CELDA = Math.round(MAX_CORONA + MAX_RAIZ);
   var CUELLO = { up: Math.round(MAX_RAIZ), down: Math.round(MAX_CORONA) };
 
   function desplazamiento(t) {
-    var tp = tipo(t), arriba = arcoDe(t) === "up", h = altoDe(tp);
+    var tp = tipo(t), arriba = arcoDe(t) === "up", h = altoDe(t);
     // al voltear la imagen la corona pasa abajo, por eso cambia la fraccion
     var cuelloEnImagen = arriba ? h * (1 - CORONA[tp]) : h * CORONA[tp];
     return { top: (arriba ? CUELLO.up : CUELLO.down) - cuelloEnImagen, h: h };
@@ -350,7 +384,7 @@
       var estado = pendiente === t ? " odo-pendiente" : (sel === t ? " odo-sel" : "");
       var vb = 'viewBox="0 0 ' + im.w + " " + im.h + '" preserveAspectRatio="none"';
       return '<div class="odo-diente' + (arriba ? " odo-arriba" : "") + estado + '" data-t="' + t + '"' +
-        ' style="width:' + ANCHO + "px;height:" + CELDA + 'px">' +
+        ' style="width:' + anchoDe(t).toFixed(1) + "px;height:" + CELDA + 'px">' +
         '<img src="' + src(tipo(t)) + '" alt="Pieza ' + t + '" draggable="false" style="' + pos + '">' +
         '<svg class="odo-hall" ' + vb + ' style="' + pos + ";" + mask + '">' + rell + "</svg>" +
         '<svg class="odo-libre" ' + vb + ' style="' + pos + '">' + marcas(t) + "</svg>" +
