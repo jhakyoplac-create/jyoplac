@@ -1,0 +1,53 @@
+{
+ "tipo_documento": "01",
+ "serie": "F001",
+ "numero": 17,
+ "fecha_emision": "2026-07-30",
+ "hora_emision": "10:35:00",
+ "moneda": "PEN",
+ "observaciones": "Atencion del dia",
+ "emisor": {
+  "tipo_documento": "6",
+  "numero_documento": "10766704391",
+  "razon_social": "CONSULTORIO DENTAL & ASOCIADOS S.A.C.",
+  "nombre_comercial": "CM ODONTOLOGIA ESTETICA",
+  "direccion": "JR. LIMA 123 INT. <A>",
+  "ubigeo": "220901",
+  "departamento": "SAN MARTIN",
+  "provincia": "MOYOBAMBA",
+  "distrito": "MOYOBAMBA",
+  "codigo_establecimiento": "0000"
+ },
+ "cliente": {
+  "tipo_documento": "1",
+  "numero_documento": "09887654",
+  "razon_social": "ROSA AMELIA TUESTA PINEDO",
+  "direccion": "AV. GRAU 456"
+ },
+ "items": [
+  {
+   "descripcion": "Profilaxis dental",
+   "cantidad": 1,
+   "precio_unitario": 50,
+   "unidad": "NIU",
+   "codigo": null,
+   "afectacion": "10"
+  },
+  {
+   "descripcion": "Fluorizacion \"completa\" & control",
+   "cantidad": 3,
+   "precio_unitario": 33.33,
+   "unidad": "NIU",
+   "codigo": "SERV-02",
+   "afectacion": "10"
+  },
+  {
+   "descripcion": "Consulta exonerada",
+   "cantidad": 2,
+   "precio_unitario": 15.5,
+   "unidad": "ZZ",
+   "codigo": null,
+   "afectacion": "20"
+  }
+ ]
+}

@@ -1,5 +1,5 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 import urllib.error
@@ -16,6 +16,9 @@ import sqlite3
 import threading
 import time
 import uuid
+
+from sunat import config as sunat_config
+from sunat import emision as sunat_emision
 
 try:
     from zoneinfo import ZoneInfo
@@ -296,6 +299,39 @@ def migrate_db(conn):
         """
     )
     ensure_column(conn, "electronic_receipts", "customer_address", "TEXT")
+    # Facturacion electronica ante SUNAT. Son columnas nuevas y vacias: mientras
+    # no se configure, el comprobante se sigue registrando solo internamente.
+    for columna in ["sunat_estado", "sunat_codigo", "sunat_descripcion", "sunat_ticket",
+                    "sunat_xml", "sunat_cdr", "sunat_hash", "sunat_nombre",
+                    "sunat_notas", "sunat_enviado_at"]:
+        ensure_column(conn, "electronic_receipts", columna, "TEXT")
+    # El correlativo lo lleva la base de datos y no el navegador: dos cobros a
+    # la vez no pueden tomar el mismo numero, porque SUNAT rechaza duplicados.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sunat_correlativos (
+          serie TEXT PRIMARY KEY,
+          siguiente INTEGER NOT NULL DEFAULT 1
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sunat_resumenes (
+          id TEXT PRIMARY KEY,
+          fecha_referencia TEXT NOT NULL,
+          ticket TEXT,
+          estado TEXT NOT NULL DEFAULT 'ENVIADO',
+          codigo TEXT,
+          descripcion TEXT,
+          xml TEXT,
+          cdr TEXT,
+          comprobantes TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          revisado_at TEXT
+        )
+        """
+    )
     # Hallazgos del odontograma segun la Norma Tecnica del MINSA, en JSON.
     # La columna condition se mantiene con un resumen legible para no romper
     # los registros anteriores ni los respaldos ya generados.
@@ -926,6 +962,22 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not require_role(self, {"ADMIN"}):
                 return
             return send_json(self, {"auditEvents": list_audit_events()})
+
+        if parsed.path == "/api/sunat/estado":
+            # solo dice si esta lista y con que serie emite; nada secreto
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+                return
+            estado = sunat_config.resumen_configuracion()
+            with db() as conn:
+                pendientes = conn.execute(
+                    "SELECT COUNT(*) AS total FROM electronic_receipts WHERE sunat_estado = 'PENDIENTE'"
+                ).fetchone()
+                sin_respuesta = conn.execute(
+                    "SELECT COUNT(*) AS total FROM sunat_resumenes WHERE estado = 'ENVIADO'"
+                ).fetchone()
+            estado["boletasPendientes"] = int(pendientes["total"] if pendientes else 0)
+            estado["resumenesSinRespuesta"] = int(sin_respuesta["total"] if sin_respuesta else 0)
+            return send_json(self, estado)
 
         send_json(self, {"error": "Ruta no encontrada"}, 404)
 
@@ -1678,7 +1730,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         """,
                         (
                             item_id,
-                            data.get("paymentId", ""),
+                            # cadena vacia rompe la clave foranea: sin pago va nulo
+                            data.get("paymentId") or None,
                             data.get("patientId"),
                             receipt_type,
                             series,
@@ -1703,6 +1756,71 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         return send_json(self, {"error": "Ese numero de comprobante ya existe."}, 400)
                     raise
             return send_json(self, {"ok": True, "id": item_id})
+
+        # ---------- Facturacion electronica ante SUNAT ----------
+        if parsed.path == "/api/sunat/emitir":
+            if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            comprobante_id = str(data.get("id") or "").strip()
+            if not comprobante_id:
+                return send_json(self, {"error": "Comprobante no indicado."}, 400)
+            try:
+                with db() as conn:
+                    resultado = sunat_emision.emitir(conn, comprobante_id)
+            except Exception as error:
+                return send_json(self, {"error": str(error)}, 400)
+            return send_json(self, {"ok": True, **resultado})
+
+        if parsed.path == "/api/sunat/resumen":
+            if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            # por defecto el dia anterior, que es lo que toca informar
+            fecha = str(data.get("fecha") or "").strip()
+            if not fecha:
+                ayer = date.fromisoformat(today_lima()) - timedelta(days=1)
+                fecha = ayer.isoformat()
+            try:
+                with db() as conn:
+                    resultado = sunat_emision.enviar_resumen_diario(conn, fecha)
+            except Exception as error:
+                return send_json(self, {"error": str(error)}, 400)
+            return send_json(self, {"ok": True, "fecha": fecha, **resultado})
+
+        if parsed.path == "/api/sunat/revisar":
+            if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+                return
+            data = read_json(self)
+            ticket = str(data.get("ticket") or "").strip()
+            try:
+                with db() as conn:
+                    if ticket:
+                        return send_json(self, {"ok": True, **sunat_emision.revisar_resumen(conn, ticket)})
+                    revisados = []
+                    for fila in sunat_emision.resumenes_sin_respuesta(conn):
+                        try:
+                            revisados.append({
+                                "ticket": fila["ticket"],
+                                **sunat_emision.revisar_resumen(conn, fila["ticket"]),
+                            })
+                        except Exception as error:
+                            revisados.append({"ticket": fila["ticket"], "error": str(error)[:200]})
+                    return send_json(self, {"ok": True, "revisados": revisados})
+            except Exception as error:
+                return send_json(self, {"error": str(error)}, 400)
+
+        if parsed.path == "/api/sunat/correlativo":
+            if not require_role(self, {"ADMIN"}):
+                return
+            data = read_json(self)
+            serie = str(data.get("serie") or "").strip().upper()
+            siguiente = int(data.get("siguiente") or 0)
+            if not serie or siguiente <= 0:
+                return send_json(self, {"error": "Indica la serie y el siguiente numero."}, 400)
+            with db() as conn:
+                sunat_emision.fijar_correlativo(conn, serie, siguiente)
+            return send_json(self, {"ok": True, "serie": serie, "siguiente": siguiente})
 
         if parsed.path == "/api/expenses":
             if not require_role(self, {"ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"}):

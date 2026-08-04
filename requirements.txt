@@ -1,2 +1,4 @@
 psycopg[binary]==3.3.4
 psycopg-pool==3.2.4
+# firma digital de los comprobantes electronicos de SUNAT
+cryptography==50.0.0
