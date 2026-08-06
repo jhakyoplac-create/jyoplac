@@ -741,8 +741,11 @@ def list_appointments(params=None):
 # Tratamientos que necesitan control periodico. Un paciente de ortodoncia sin
 # cita se nota mucho antes que uno de una limpieza anual.
 CONTROL_PERIODICO = [
-    ("ORTODONCIA", 35),
-    ("BRACKETS", 35),
+    # La ortodoncia es de control mensual, asi que a los 25 dias ya deberia
+    # estar agendada la siguiente. Se avisa antes de que se cumpla el mes,
+    # porque pasado el mes el paciente ya cuenta como inactivo.
+    ("ORTODONCIA", 25),
+    ("BRACKETS", 25),
     ("RETENEDOR", 60),
     ("PERIODONCIA", 120),
     ("IMPLANTE", 120),
@@ -820,15 +823,17 @@ def estado_de_paciente(row, hoy, limite):
     if dias is None:
         return "ACTIVO"
 
-    # El control vencido manda sobre el inactivo generico mientras el
-    # tratamiento siga teniendo sentido: una ortodoncia con cuarenta dias no es
-    # un paciente que se enfrio, es uno que hay que llamar hoy. Pasados tres
-    # meses ya no se sostiene y vuelve a contar como inactivo.
-    control = dias_de_control(row.get("main_treatment"))
-    if control and control <= dias <= 90:
-        return "CONTROL VENCIDO"
+    # El limite de inactivo manda para todos, tambien para los tratamientos con
+    # control periodico: asi la clinica decidio leer su registro. CONTROL
+    # VENCIDO queda para el tramo anterior, cuando ya paso la fecha del control
+    # pero todavia no se cumple el mes.
     if dias > limite:
         return "INACTIVO"
+    # Solo avisa si el control cae antes del limite de inactivo; los
+    # tratamientos de control espaciado ya quedan cubiertos por INACTIVO.
+    control = dias_de_control(row.get("main_treatment"))
+    if control and control <= limite and dias >= control:
+        return "CONTROL VENCIDO"
     return "SIN CITA"
 
 
