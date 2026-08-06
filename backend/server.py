@@ -254,6 +254,13 @@ def migrate_db(conn):
     ensure_column(conn, "patients", "created_by_name", "TEXT")
     ensure_column(conn, "patients", "created_by_role", "TEXT")
     ensure_column(conn, "patients", "hide_from_reception_new", "INTEGER NOT NULL DEFAULT 0")
+    # Resultado de la llamada de seguimiento. contact_snooze evita que el mismo
+    # paciente reaparezca al dia siguiente cuando ya se le llamo y quedo en algo.
+    ensure_column(conn, "patients", "contact_date", "TEXT")
+    ensure_column(conn, "patients", "contact_result", "TEXT")
+    ensure_column(conn, "patients", "contact_note", "TEXT")
+    ensure_column(conn, "patients", "contact_snooze", "TEXT")
+    ensure_column(conn, "patients", "contact_by", "TEXT")
     ensure_column(conn, "clinical_history", "credit_pending", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "clinical_history", "credit_due_date", "TEXT")
@@ -731,6 +738,152 @@ def list_appointments(params=None):
         ]
 
 
+# Tratamientos que necesitan control periodico. Un paciente de ortodoncia sin
+# cita se nota mucho antes que uno de una limpieza anual.
+CONTROL_PERIODICO = [
+    ("ORTODONCIA", 35),
+    ("BRACKETS", 35),
+    ("RETENEDOR", 60),
+    ("PERIODONCIA", 120),
+    ("IMPLANTE", 120),
+    ("PROTESIS", 180),
+]
+
+
+def dias_de_control(tratamiento):
+    texto = str(tratamiento or "").upper()
+    for clave, dias in CONTROL_PERIODICO:
+        if clave in texto:
+            return dias
+    return None
+
+
+def seguimiento_de_pacientes():
+    """Dos listas: a quien llamar y a quien reactivar con una promocion.
+
+    Se calcula aqui y no en el navegador porque el navegador solo recibe las
+    citas de los proximos dias: sin el historial completo, un paciente atendido
+    hace tres meses parecia no haber venido nunca.
+    """
+    hoy = today_lima()
+    activos = "('RESERVADA', 'CONFIRMADA', 'EN_ATENCION', 'REPROGRAMADA')"
+    with db() as conn:
+        filas = conn.execute(
+            f"""
+            SELECT p.id, p.name, p.dni, p.phone, p.doctor, p.main_treatment, p.notes,
+                   p.created_at, p.contact_date, p.contact_result, p.contact_note,
+                   p.contact_snooze, p.contact_by,
+                   (SELECT MAX(a.date) FROM appointments a
+                     WHERE a.patient_id = p.id AND a.status = 'ATENDIDA') AS ultima_atencion,
+                   (SELECT MAX(a.date) FROM appointments a
+                     WHERE a.patient_id = p.id) AS ultimo_contacto,
+                   (SELECT COUNT(*) FROM appointments a
+                     WHERE a.patient_id = p.id AND a.date >= ?
+                       AND a.status IN {activos}) AS citas_futuras,
+                   (SELECT COUNT(*) FROM appointments a
+                     WHERE a.patient_id = p.id) AS total_citas,
+                   (SELECT MAX(a.date) FROM appointments a
+                     WHERE a.patient_id = p.id AND a.date < ?
+                       AND a.status IN ('REPROGRAMADA', 'CANCELADA', 'NO_ASISTIO')) AS ultima_fallida
+              FROM patients p
+             ORDER BY p.name ASC
+            """,
+            (hoy, hoy),
+        ).fetchall()
+
+    try:
+        limite = int(str(app_config().get("inactiveDays", "30")).strip('" '))
+    except (TypeError, ValueError):
+        limite = 30
+    salida = []
+    promociones = []
+    for fila in filas:
+        row = row_to_dict(fila)
+        if int(row.get("citas_futuras") or 0) > 0:
+            continue
+
+        # --- inactivos para promociones ---
+        # Se mide desde el ultimo contacto y no desde la ultima atencion: quien
+        # reprogramo el mes pasado no esta frio, aunque nunca llegara a venir.
+        contacto = str(row.get("ultimo_contacto") or "")[:10]
+        referencia = contacto or str(row.get("created_at") or "")[:10]
+        dias_frio = days_between(referencia, hoy)
+        control_promo = dias_de_control(row.get("main_treatment"))
+        if dias_frio is not None and dias_frio > limite and not (control_promo and dias_frio <= 90):
+            if not contacto:
+                segmento = "NUNCA VINO"
+            elif dias_frio <= 90:
+                segmento = "1 A 3 MESES"
+            elif dias_frio <= 180:
+                segmento = "3 A 6 MESES"
+            else:
+                segmento = "MAS DE 6 MESES"
+            promociones.append({
+                "id": row["id"], "name": row["name"], "dni": row["dni"],
+                "phone": row["phone"], "doctor": row["doctor"],
+                "mainTreatment": row["main_treatment"],
+                "segmento": segmento, "dias": dias_frio, "meses": dias_frio // 30,
+                "ultimaAtencion": str(row.get("ultima_atencion") or "")[:10],
+            })
+
+        # --- a quien llamar ---
+        # ya se le llamo y quedo en algo: no reaparece hasta esa fecha
+        snooze = str(row.get("contact_snooze") or "")[:10]
+        if snooze and snooze > hoy:
+            continue
+
+        atencion = str(row.get("ultima_atencion") or "")[:10]
+        fallida = str(row.get("ultima_fallida") or "")[:10]
+        creado = str(row.get("created_at") or "")[:10]
+        control = dias_de_control(row.get("main_treatment"))
+
+        if not int(row.get("total_citas") or 0):
+            motivo, dias, prioridad = "NUNCA VINO", days_between(creado, hoy), 3
+        elif fallida and (not atencion or fallida > atencion):
+            motivo, dias, prioridad = "NO VINO Y NO REPROGRAMO", days_between(fallida, hoy), 1
+        elif atencion:
+            dias = days_between(atencion, hoy)
+            if control and dias is not None and dias >= control:
+                motivo, prioridad = "CONTROL VENCIDO", 0
+            elif dias is not None and dias > limite:
+                motivo, prioridad = "SIN PROXIMA CITA", 2
+            else:
+                continue
+        else:
+            continue
+        if dias is None:
+            continue
+
+        salida.append({
+            "id": row["id"],
+            "name": row["name"],
+            "dni": row["dni"],
+            "phone": row["phone"],
+            "doctor": row["doctor"],
+            "mainTreatment": row["main_treatment"],
+            "notes": row["notes"],
+            "motivo": motivo,
+            "dias": dias,
+            "prioridad": prioridad,
+            "ultimaAtencion": atencion,
+            "ultimoContacto": str(row.get("ultimo_contacto") or "")[:10],
+            "contactDate": str(row.get("contact_date") or "")[:10],
+            "contactResult": row.get("contact_result") or "",
+            "contactNote": row.get("contact_note") or "",
+            "contactBy": row.get("contact_by") or "",
+        })
+
+    salida.sort(key=lambda x: (x["prioridad"], -x["dias"]))
+    promociones.sort(key=lambda x: x["dias"])
+    return {"porLlamar": salida, "promociones": promociones}
+
+
+def days_between(desde, hasta):
+    if not valid_iso_date(str(desde)[:10]) or not valid_iso_date(str(hasta)[:10]):
+        return None
+    return (date.fromisoformat(hasta[:10]) - date.fromisoformat(desde[:10])).days
+
+
 def list_bootstrap_appointments():
     today = today_lima()
     next_days = add_days_iso(today, 2)
@@ -958,6 +1111,15 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not require_role(self, {"ADMIN"}):
                 return
             return send_json(self, {"users": list_users()})
+        if parsed.path == "/api/patients-to-call":
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+                return
+            listas = seguimiento_de_pacientes()
+            return send_json(self, {
+                "patientsToCall": listas["porLlamar"],
+                "promotions": listas["promociones"],
+            })
+
         if parsed.path == "/api/audit-events":
             if not require_role(self, {"ADMIN"}):
                 return
@@ -1137,6 +1299,57 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 label = "Ingreso paciente" if not existing_patient else "Edito paciente"
                 add_audit_event(conn, user, action, f"{label}: {patient_values['name']} ({patient_values['dni']})", item_id)
             return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/patient-contact":
+            # Resultado de una llamada de seguimiento. Cada resultado decide
+            # cuando vuelve el paciente a la lista, para no llamarlo dos veces
+            # por lo mismo ni perderlo si quedo en algo.
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
+                return
+            data = read_json(self)
+            patient_id = str(data.get("patientId") or "").strip()
+            result = str(data.get("result") or "").strip().upper()
+            espera = {
+                "VOLVERA": None,          # la fecha la indica quien llama
+                "NO_CONTESTO": 3,
+                "NUMERO_ERRADO": 365,
+                "NO_INTERESA": 180,
+                "SIN_RESULTADO": 7,
+            }
+            if result not in espera:
+                return send_json(self, {"error": "Resultado de llamada no valido."}, 400)
+            if not patient_id:
+                return send_json(self, {"error": "Paciente no indicado."}, 400)
+
+            hoy = today_lima()
+            if result == "VOLVERA":
+                snooze = str(data.get("snoozeUntil") or "").strip()[:10]
+                if not valid_iso_date(snooze) or snooze <= hoy:
+                    return send_json(self, {"error": "Indica para cuando quedo el paciente."}, 400)
+            else:
+                # add_days_iso y no date.fromisoformat: mas abajo do_POST asigna
+                # una variable local llamada date, que tapa el import en toda la
+                # funcion y hace fallar cualquier uso previo
+                snooze = add_days_iso(hoy, espera[result])
+
+            with db() as conn:
+                existe = conn.execute("SELECT name FROM patients WHERE id = ?", (patient_id,)).fetchone()
+                if not existe:
+                    return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                conn.execute(
+                    """
+                    UPDATE patients
+                    SET contact_date = ?, contact_result = ?, contact_note = ?,
+                        contact_snooze = ?, contact_by = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (hoy, result, str(data.get("note") or "")[:400], snooze,
+                     user["name"], patient_id),
+                )
+                add_audit_event(conn, user, "PATIENT_CONTACT",
+                                f"Llamada a {existe['name']}: {result}", patient_id)
+            return send_json(self, {"ok": True, "id": patient_id, "snoozeUntil": snooze})
 
         if parsed.path == "/api/appointments":
             if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):

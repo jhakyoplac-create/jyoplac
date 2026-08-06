@@ -334,6 +334,11 @@ function mapApiPatient(row) {
     createdByName: row.created_by_name || row.createdByName || "",
     createdByRole: row.created_by_role || row.createdByRole || "",
     hideFromReceptionNew: Boolean(row.hide_from_reception_new ?? row.hideFromReceptionNew ?? false),
+    contactDate: row.contact_date || row.contactDate || "",
+    contactResult: row.contact_result || row.contactResult || "",
+    contactNote: row.contact_note || row.contactNote || "",
+    contactSnooze: (row.contact_snooze || row.contactSnooze || "").slice(0, 10),
+    contactBy: row.contact_by || row.contactBy || "",
     createdAt: (row.created_at || "").slice(0, 10)
   };
 }
@@ -1941,100 +1946,12 @@ function patientStatus(patient) {
 
    Los tratamientos con control periodico (ortodoncia) tienen su propio plazo:
    esperar el mes general es demasiado para un paciente con brackets. */
-const CONTROL_PERIODICO = [
-  { patron: /ORTODONC|BRACKET/i, dias: 35, nombre: "Control de ortodoncia" },
-];
-
-function controlDelTratamiento(patient) {
-  const texto = `${patient?.mainTreatment || ""}`;
-  return CONTROL_PERIODICO.find((item) => item.patron.test(texto)) || null;
-}
-
-function ultimaCitaDelPaciente(patientId) {
-  return state.appointments
-    .filter((appointment) => appointment.patientId === patientId && appointment.date)
-    .sort((a, b) => appointmentSortKey(b).localeCompare(appointmentSortKey(a)))[0];
-}
-
-function seguimientoDePaciente(patient) {
-  if (!patient?.id) return null;
-  if (hasUpcomingActiveAppointment(patient.id)) return null;   // ya tiene fecha
-
-  const atendida = lastAppointment(patient.id);
-  const ultima = ultimaCitaDelPaciente(patient.id);
-  const limite = Number(state.config.inactiveDays);
-  const control = controlDelTratamiento(patient);
-
-  if (!atendida) {
-    const dias = daysSince(patient.createdAt);
-    if (ultima && ["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(String(ultima.status || "").toUpperCase())) {
-      return { motivo: "NO VINO Y NO REPROGRAMO", prioridad: 2,
-               dias: daysSince(ultima.date), referencia: ultima };
-    }
-    if (dias !== null && dias > limite) {
-      return { motivo: "NUNCA VINO", prioridad: 4, dias, referencia: null };
-    }
-    return null;
-  }
-
-  const dias = daysSince(atendida.date);
-  // si su ultima cita quedo sin reprogramar, ese es el motivo real
-  if (ultima && ultima.date > atendida.date &&
-      ["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(String(ultima.status || "").toUpperCase())) {
-    return { motivo: "NO VINO Y NO REPROGRAMO", prioridad: 2,
-             dias: daysSince(ultima.date), referencia: ultima };
-  }
-  if (control && dias !== null && dias > control.dias) {
-    return { motivo: "CONTROL VENCIDO", prioridad: 1, dias, referencia: atendida,
-             detalle: control.nombre };
-  }
-  // atendido y sin proxima cita: se avisa desde el primer dia, sin esperar el mes
-  return { motivo: "SIN PROXIMA CITA", prioridad: dias > limite ? 3 : 5,
-           dias, referencia: atendida };
-}
-
-function pacientesPorLlamar() {
-  return state.patients
-    .map((patient) => ({ patient, seguimiento: seguimientoDePaciente(patient) }))
-    .filter((fila) => fila.seguimiento)
-    .sort((a, b) => (a.seguimiento.prioridad - b.seguimiento.prioridad)
-      || ((b.seguimiento.dias || 0) - (a.seguimiento.dias || 0)));
-}
-
-/* ---- Inactivos para promociones ----------------------------------------
-   Es una lista distinta a la de llamar. A quien tiene un control vencido se le
-   llama por su tratamiento, no con un descuento; aqui van los que ya no tienen
-   nada en curso y hay que reactivar. Se separan por antiguedad porque no se le
-   ofrece lo mismo a quien falta hace dos meses que a quien no viene hace un
-   ano, y se marca la deuda para no mezclar una promocion con una cobranza. */
-function pacientesInactivosParaPromocion() {
-  const limite = Number(state.config.inactiveDays);
-  return state.patients
-    .map((patient) => {
-      if (hasUpcomingActiveAppointment(patient.id)) return null;
-      const ultima = lastAppointment(patient.id);
-      // se mide desde el ultimo contacto, no desde la ultima atencion: quien
-      // reprogramo el mes pasado no esta frio, aunque nunca llegara a atenderse
-      const contacto = ultimaCitaDelPaciente(patient.id);
-      const referencia = contacto?.date || patient.createdAt;
-      const dias = daysSince(referencia);
-      if (dias === null || dias <= limite) return null;
-      // un control de ortodoncia recien vencido se resuelve llamando, no con
-      // una promocion: entra recien cuando ya se enfrio de verdad
-      const control = controlDelTratamiento(patient);
-      if (control && dias <= 90) return null;
-      const meses = Math.floor(dias / 30);
-      let segmento = "MAS DE 6 MESES";
-      // solo es NUNCA VINO quien no tiene ninguna cita registrada; si tuvo una
-      // y no llego a atenderse, interesa cuanto tiempo lleva sin aparecer
-      if (!contacto) segmento = "NUNCA VINO";
-      else if (dias <= 90) segmento = "1 A 3 MESES";
-      else if (dias <= 180) segmento = "3 A 6 MESES";
-      return { patient, meses, segmento, ultima, dias };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.dias - b.dias);
-}
+/* ---- Seguimiento de pacientes ------------------------------------------
+   Las dos listas (a quien llamar y a quien reactivar con una promocion) las
+   calcula el servidor en /api/patients-to-call. No se hacen aqui porque el
+   navegador solo recibe las citas de los proximos dias: sin el historial
+   completo, un paciente atendido hace tres meses parecia no haber venido
+   nunca. */
 
 function fillSelect(select, options, selected = "") {
   if (!select) return;
@@ -2368,6 +2285,8 @@ function renderActiveView() {
       break;
     case "seguimiento-citas":
       renderAppointmentFollowUps();
+      renderPatientsToCall();
+      refreshPatientsToCall().then(renderPatientsToCall);
       break;
     case "panel":
       renderStaffPanel();
@@ -2403,6 +2322,7 @@ function renderFullApp() {
   renderGeneralCash();
   renderReceivables();
   renderAppointmentFollowUps();
+  renderPatientsToCall();
   renderStaffPanel();
   renderReminders();
   renderReports();
@@ -3923,6 +3843,85 @@ function renderReceivables() {
       </td>
     </tr>`;
   }).join("") || `<tr><td colspan="7">No hay cuentas por cobrar pendientes.</td></tr>`;
+}
+
+const CLASE_MOTIVO = {
+  "CONTROL VENCIDO": "danger",
+  "NO VINO Y NO REPROGRAMO": "danger",
+  "SIN PROXIMA CITA": "warn",
+  "NUNCA VINO": "",
+};
+
+/* La lista la calcula el servidor: el navegador solo recibe las citas de los
+   proximos dias, y sin el historial completo un paciente atendido hace meses
+   parecia no haber venido nunca. */
+let patientsToCall = [];
+
+async function refreshPatientsToCall() {
+  if (!API_ENABLED || !apiToken) return;
+  try {
+    const result = await apiFetch("/api/patients-to-call");
+    patientsToCall = result.patientsToCall || [];
+  } catch (error) {
+    patientsToCall = [];
+  }
+}
+
+function renderPatientsToCall() {
+  const table = $("#patientsToCallTable");
+  if (!table) return;
+  const contador = $("#toCallCount");
+  if (contador) contador.textContent = `${patientsToCall.length} pendientes`;
+
+  table.innerHTML = patientsToCall.map((fila) => {
+    const wa = whatsappPhone(fila.phone);
+    const mensaje = `Hola ${fila.name}, le saludamos de ${state.config.clinicName}. Queriamos saber como se encuentra y coordinar su proxima cita.`;
+    const llamada = fila.contactDate
+      ? `${formatDate(fila.contactDate)}<br><span class="muted">${escapeHtml(RESULTADOS_LLAMADA[fila.contactResult] || fila.contactResult || "")}</span>`
+      : `<span class="muted">Sin registro</span>`;
+    return `<tr>
+      <td><span class="status ${CLASE_MOTIVO[fila.motivo] ?? ""}">${escapeHtml(fila.motivo)}</span>
+        <br><span class="muted">${fila.dias ?? "-"} dias</span></td>
+      <td><strong>${escapeHtml(fila.name)}</strong><br><span class="muted">${escapeHtml(fila.mainTreatment || "")}</span></td>
+      <td>${escapeHtml(fila.phone || "-")}</td>
+      <td>${fila.ultimaAtencion ? formatDate(fila.ultimaAtencion) : "<span class='muted'>Nunca</span>"}</td>
+      <td>${llamada}</td>
+      <td class="row-actions">
+        ${wa ? `<a class="small-btn" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(mensaje)}">WhatsApp</a>` : ""}
+        <button class="small-btn" type="button" data-call-patient="${fila.id}">Registrar llamada</button>
+      </td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6">No hay pacientes pendientes de llamar.</td></tr>`;
+}
+
+async function registrarLlamada(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) return;
+  const opciones = Object.entries(RESULTADOS_LLAMADA)
+    .map(([clave, texto], indice) => `${indice + 1}. ${texto}`)
+    .join("\n");
+  const eleccion = prompt(`Llamada a ${patient.name}\n\n${opciones}\n\nEscribe el numero:`, "1");
+  if (!eleccion) return;
+  const claves = Object.keys(RESULTADOS_LLAMADA);
+  const result = claves[Number(eleccion) - 1];
+  if (!result) return alert("Opcion no valida.");
+
+  const cuerpo = { patientId, result, note: "" };
+  if (result === "VOLVERA") {
+    const fecha = prompt("Para cuando quedo? (AAAA-MM-DD)", addDaysISO(todayISO(), 14));
+    if (!fecha) return;
+    if (!validISODate(fecha) || fecha <= todayISO()) return alert("Fecha no valida.");
+    cuerpo.snoozeUntil = fecha;
+  }
+  cuerpo.note = prompt("Comentario (opcional):", "") || "";
+
+  try {
+    await apiFetch("/api/patient-contact", { method: "POST", body: JSON.stringify(cuerpo) });
+  } catch (error) {
+    return alert(error.message);
+  }
+  await refreshPatientsToCall();
+  renderPatientsToCall();
 }
 
 function renderAppointmentFollowUps() {
@@ -6630,30 +6629,33 @@ function bindEvents() {
       creado: patient.createdAt
     })));
   });
-  $("#exportFollowUpBtn")?.addEventListener("click", () => {
-    const filas = pacientesPorLlamar().map(({ patient, seguimiento }) => {
-      const referencia = seguimiento.referencia;
-      const atendida = lastAppointment(patient.id);
-      return {
-        motivo: seguimiento.motivo,
-        dias: seguimiento.dias ?? "",
-        paciente: patient.name,
-        celular: patient.phone,
-        dni: patient.dni,
-        doctor: patient.doctor || "",
-        tratamiento: patient.mainTreatment || "",
-        ultima_atencion: atendida?.date || "",
-        ultimo_servicio: atendida?.service || "",
-        ultima_cita: referencia?.date || "",
-        estado_ultima_cita: referencia?.status || "",
-        motivo_no_asistio: referencia?.followUpComment || "",
-        saldo: patientDebt(patient.id),
-        estado_actual: patientStatus(patient),
-        observaciones: patient.notes || "",
-        llamado: "",
-        resultado: "",
-      };
-    });
+  $("#patientsToCallTable")?.addEventListener("click", (event) => {
+    const boton = event.target.closest("[data-call-patient]");
+    if (!boton) return;
+    registrarLlamada(boton.dataset.callPatient);
+  });
+  $("#exportToCallBtn")?.addEventListener("click", () => $("#exportFollowUpBtn")?.click());
+
+  $("#exportFollowUpBtn")?.addEventListener("click", async () => {
+    await refreshPatientsToCall();
+    const filas = patientsToCall.map((fila) => ({
+      motivo: fila.motivo,
+      dias: fila.dias ?? "",
+      paciente: fila.name,
+      celular: fila.phone,
+      dni: fila.dni,
+      doctor: fila.doctor || "",
+      tratamiento: fila.mainTreatment || "",
+      ultima_atencion: fila.ultimaAtencion || "",
+      ultimo_contacto: fila.ultimoContacto || "",
+      saldo: patientDebt(fila.id),
+      observaciones: fila.notes || "",
+      ultima_llamada: fila.contactDate || "",
+      resultado_anterior: RESULTADOS_LLAMADA[fila.contactResult] || "",
+      comentario_llamada: fila.contactNote || "",
+      llamado: "",
+      resultado: "",
+    }));
     if (!filas.length) {
       alert("No hay pacientes pendientes de llamar.");
       return;
@@ -7014,18 +7016,24 @@ function bindEvents() {
   });
   $("#exportCampaignBtn").addEventListener("click", () => exportCsv("campanas.csv", state.patients.map((patient) => ({ nombre: patient.name, telefono: patient.phone, estado: patientStatus(patient), saldo: patientDebt(patient.id) }))));
 
-  $("#exportPromoBtn")?.addEventListener("click", () => {
-    const filas = pacientesInactivosParaPromocion().map(({ patient, meses, segmento, ultima }) => ({
-      segmento,
-      meses_sin_venir: meses === null ? "" : meses,
-      paciente: patient.name,
-      celular: patient.phone,
-      dni: patient.dni,
-      ultimo_tratamiento: ultima?.service || patient.mainTreatment || "",
-      ultima_atencion: ultima?.date || "",
-      doctor: patient.doctor || "",
-      saldo: patientDebt(patient.id),
-      tiene_deuda: patientDebt(patient.id) > 0 ? "SI" : "NO",
+  $("#exportPromoBtn")?.addEventListener("click", async () => {
+    let promociones = [];
+    try {
+      promociones = (await apiFetch("/api/patients-to-call")).promotions || [];
+    } catch (error) {
+      return alert(error.message);
+    }
+    const filas = promociones.map((fila) => ({
+      segmento: fila.segmento,
+      meses_sin_venir: fila.meses,
+      paciente: fila.name,
+      celular: fila.phone,
+      dni: fila.dni,
+      tratamiento: fila.mainTreatment || "",
+      ultima_atencion: fila.ultimaAtencion || "",
+      doctor: fila.doctor || "",
+      saldo: patientDebt(fila.id),
+      tiene_deuda: patientDebt(fila.id) > 0 ? "SI" : "NO",
     }));
     if (!filas.length) {
       alert("No hay pacientes inactivos para promocionar.");

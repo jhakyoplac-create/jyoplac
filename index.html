@@ -627,6 +627,34 @@
             </table>
           </div>
         </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Pacientes por llamar</h2>
+              <p class="muted">Sin proxima cita, sin reprogramar o con control vencido. Al registrar la llamada dejan de aparecer hasta la fecha que corresponda.</p>
+            </div>
+            <div class="panel-head-actions">
+              <span class="status warn" id="toCallCount">0 pendientes</span>
+              <button class="ghost" id="exportToCallBtn">CSV</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Motivo</th>
+                  <th>Paciente</th>
+                  <th>Celular</th>
+                  <th>Ultima atencion</th>
+                  <th>Ultima llamada</th>
+                  <th>Accion</th>
+                </tr>
+              </thead>
+              <tbody id="patientsToCallTable"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section id="panel" class="view">
