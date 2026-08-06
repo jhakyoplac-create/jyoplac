@@ -343,6 +343,7 @@ function mapApiPatient(row) {
     lastAttended: (row.last_attended || row.lastAttended || "").slice(0, 10),
     nextAppointment: (row.next_appointment || row.nextAppointment || "").slice(0, 10),
     totalAppointments: Number(row.total_appointments ?? row.totalAppointments ?? 0),
+    estado: row.estado || "",
     createdAt: (row.created_at || "").slice(0, 10)
   };
 }
@@ -1925,8 +1926,23 @@ function daysSince(date) {
   return Math.floor((new Date(`${todayISO()}T00:00:00`) - desde) / 86400000);
 }
 
+const CLASE_ESTADO = {
+  ACTIVO: "",
+  NUEVO: "warn",
+  "SIN CITA": "warn",
+  "CONTROL VENCIDO": "danger",
+  INACTIVO: "danger",
+};
+const TITULO_ESTADO = {
+  "SIN CITA": "Se atendio pero no tiene proxima cita agendada",
+  "CONTROL VENCIDO": "Su tratamiento necesita control periodico y ya paso la fecha",
+  INACTIVO: "Sin venir desde hace mas del limite configurado",
+};
+
 function patientStatus(patient) {
   if (!patient?.id) return patient?.status || "NUEVO";
+  // el servidor lo calcula con todas las citas a la vista; aqui solo se muestra
+  if (patient.estado) return patient.estado;
   const limite = Number(state.config.inactiveDays);
 
   /* Se usan la proxima cita y la ultima atencion que calcula el servidor. El
@@ -3070,7 +3086,7 @@ function renderPatients() {
         <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
         <td>${escapeHtml(patient.phone)}${patient.birthDate ? `<br><span class="muted">${formatDate(patient.birthDate)}${ageText ? ` | ${ageText}` : ""}</span>` : ""}</td>
         <td>${escapeHtml(patient.doctor)}</td>
-        <td><span class="status ${status === "INACTIVO" ? "danger" : status === "NUEVO" ? "warn" : ""}">${status}</span></td>
+        <td><span class="status ${CLASE_ESTADO[status] ?? ""}" ${TITULO_ESTADO[status] ? `title="${TITULO_ESTADO[status]}"` : ""}>${status}</span></td>
         <td>${money(patientDebt(patient.id))}</td>
         <td class="row-actions">${detailButton}<button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button>${canDeletePatients() ? `<button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button>` : ""}</td>
       </tr>`;

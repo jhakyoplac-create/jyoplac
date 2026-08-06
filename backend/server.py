@@ -769,24 +769,67 @@ def list_patients():
     hoy = today_lima()
     activos = "('RESERVADA', 'CONFIRMADA', 'EN_ATENCION', 'REPROGRAMADA')"
     with db() as conn:
-        return [
-            row_to_dict(row)
-            for row in conn.execute(
-                f"""
-                SELECT p.*,
-                       (SELECT MAX(a.date) FROM appointments a
-                         WHERE a.patient_id = p.id AND a.status = 'ATENDIDA') AS last_attended,
-                       (SELECT MIN(a.date) FROM appointments a
-                         WHERE a.patient_id = p.id AND a.date >= ?
-                           AND a.status IN {activos}) AS next_appointment,
-                       (SELECT COUNT(*) FROM appointments a
-                         WHERE a.patient_id = p.id) AS total_appointments
-                  FROM patients p
-                 ORDER BY p.name ASC
-                """,
-                (hoy,),
-            ).fetchall()
-        ]
+        filas = conn.execute(
+            f"""
+            SELECT p.*,
+                   (SELECT MAX(a.date) FROM appointments a
+                     WHERE a.patient_id = p.id AND a.status = 'ATENDIDA') AS last_attended,
+                   (SELECT MIN(a.date) FROM appointments a
+                     WHERE a.patient_id = p.id AND a.date >= ?
+                       AND a.status IN {activos}) AS next_appointment,
+                   (SELECT COUNT(*) FROM appointments a
+                     WHERE a.patient_id = p.id) AS total_appointments
+              FROM patients p
+             ORDER BY p.name ASC
+            """,
+            (hoy,),
+        ).fetchall()
+
+    try:
+        limite = int(str(app_config().get("inactiveDays", "30")).strip('" '))
+    except (TypeError, ValueError):
+        limite = 30
+
+    salida = []
+    for fila in filas:
+        row = row_to_dict(fila)
+        row["estado"] = estado_de_paciente(row, hoy, limite)
+        salida.append(row)
+    return salida
+
+
+def estado_de_paciente(row, hoy, limite):
+    """Estado que ve recepcion en el registro.
+
+    SIN CITA y CONTROL VENCIDO existen porque un paciente atendido la semana
+    pasada al que nadie le dejo la siguiente cita salia igual que uno que si la
+    tiene, y en el registro no habia forma de notarlo. El caso tipico es el
+    control de ortodoncia que se olvida agendar al dar de alta la consulta.
+    """
+    if str(row.get("next_appointment") or ""):
+        return "ACTIVO"
+
+    atencion = str(row.get("last_attended") or "")[:10]
+    if not atencion:
+        desde_registro = days_between(str(row.get("created_at") or "")[:10], hoy)
+        if desde_registro is not None and desde_registro > limite:
+            return "INACTIVO"
+        return str(row.get("status") or "NUEVO").upper() or "NUEVO"
+
+    dias = days_between(atencion, hoy)
+    if dias is None:
+        return "ACTIVO"
+
+    # El control vencido manda sobre el inactivo generico mientras el
+    # tratamiento siga teniendo sentido: una ortodoncia con cuarenta dias no es
+    # un paciente que se enfrio, es uno que hay que llamar hoy. Pasados tres
+    # meses ya no se sostiene y vuelve a contar como inactivo.
+    control = dias_de_control(row.get("main_treatment"))
+    if control and control <= dias <= 90:
+        return "CONTROL VENCIDO"
+    if dias > limite:
+        return "INACTIVO"
+    return "SIN CITA"
 
 
 def seguimiento_de_pacientes():
