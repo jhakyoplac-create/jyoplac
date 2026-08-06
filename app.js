@@ -339,6 +339,10 @@ function mapApiPatient(row) {
     contactNote: row.contact_note || row.contactNote || "",
     contactSnooze: (row.contact_snooze || row.contactSnooze || "").slice(0, 10),
     contactBy: row.contact_by || row.contactBy || "",
+    // calculados por el servidor: el navegador no tiene todas las citas
+    lastAttended: (row.last_attended || row.lastAttended || "").slice(0, 10),
+    nextAppointment: (row.next_appointment || row.nextAppointment || "").slice(0, 10),
+    totalAppointments: Number(row.total_appointments ?? row.totalAppointments ?? 0),
     createdAt: (row.created_at || "").slice(0, 10)
   };
 }
@@ -1923,10 +1927,22 @@ function daysSince(date) {
 
 function patientStatus(patient) {
   if (!patient?.id) return patient?.status || "NUEVO";
-  if (hasUpcomingActiveAppointment(patient.id)) return "ACTIVO";
-  const last = lastAppointment(patient.id);
   const limite = Number(state.config.inactiveDays);
-  if (!last) {
+
+  /* Se usan la proxima cita y la ultima atencion que calcula el servidor. El
+     navegador solo recibe las citas de los proximos dias, asi que por su
+     cuenta no puede saberlo: un paciente con cita para dentro de dos semanas
+     salia INACTIVO en la lista y solo se corregia al abrir sus citas, que es
+     cuando el frontend las descarga. Si no vienen (modo local sin API), se
+     recurre a lo que haya cargado en memoria. */
+  const proxima = patient.nextAppointment || null;
+  const atendida = patient.lastAttended || null;
+  const tieneDatosDelServidor = "totalAppointments" in patient;
+
+  if (proxima || (!tieneDatosDelServidor && hasUpcomingActiveAppointment(patient.id))) return "ACTIVO";
+
+  const ultima = atendida || (tieneDatosDelServidor ? null : lastAppointment(patient.id)?.date);
+  if (!ultima) {
     // Nunca se atendio. Antes se quedaba como NUEVO para siempre, aunque
     // llevara meses registrado sin venir, y esos pacientes no aparecian en
     // ninguna lista para llamarlos.
@@ -1934,7 +1950,7 @@ function patientStatus(patient) {
     if (desdeRegistro !== null && desdeRegistro > limite) return "INACTIVO";
     return patient.status || "NUEVO";
   }
-  const diff = daysSince(last.date);
+  const diff = daysSince(ultima);
   return diff !== null && diff > limite ? "INACTIVO" : "ACTIVO";
 }
 

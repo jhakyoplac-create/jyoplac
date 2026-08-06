@@ -758,6 +758,37 @@ def dias_de_control(tratamiento):
     return None
 
 
+def list_patients():
+    """Pacientes con su ultima atencion y su proxima cita ya calculadas.
+
+    El navegador solo recibe las citas de los proximos dias, asi que no puede
+    deducir el estado por su cuenta: un paciente con cita para dentro de dos
+    semanas figuraba como INACTIVO en la lista, y solo se corregia al abrir sus
+    citas, que es cuando el frontend las descarga.
+    """
+    hoy = today_lima()
+    activos = "('RESERVADA', 'CONFIRMADA', 'EN_ATENCION', 'REPROGRAMADA')"
+    with db() as conn:
+        return [
+            row_to_dict(row)
+            for row in conn.execute(
+                f"""
+                SELECT p.*,
+                       (SELECT MAX(a.date) FROM appointments a
+                         WHERE a.patient_id = p.id AND a.status = 'ATENDIDA') AS last_attended,
+                       (SELECT MIN(a.date) FROM appointments a
+                         WHERE a.patient_id = p.id AND a.date >= ?
+                           AND a.status IN {activos}) AS next_appointment,
+                       (SELECT COUNT(*) FROM appointments a
+                         WHERE a.patient_id = p.id) AS total_appointments
+                  FROM patients p
+                 ORDER BY p.name ASC
+                """,
+                (hoy,),
+            ).fetchall()
+        ]
+
+
 def seguimiento_de_pacientes():
     """Dos listas: a quien llamar y a quien reactivar con una promocion.
 
@@ -1063,7 +1094,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/bootstrap":
             return send_json(self, {
                 "user": user,
-                "patients": list_table("patients", "name ASC"),
+                "patients": list_patients(),
                 "appointments": list_bootstrap_appointments(),
                 "clinicalHistory": list_table("clinical_history", "date DESC"),
                 "treatments": list_table("treatments", "created_at DESC"),
@@ -1086,7 +1117,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "config": app_config(),
             })
         if parsed.path == "/api/patients":
-            return send_json(self, {"patients": list_table("patients", "name ASC")})
+            return send_json(self, {"patients": list_patients()})
         if parsed.path == "/api/appointments":
             return send_json(self, {"appointments": list_appointments(params)})
         if parsed.path == "/api/clinical-history":
