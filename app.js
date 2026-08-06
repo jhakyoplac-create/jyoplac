@@ -2001,6 +2001,41 @@ function pacientesPorLlamar() {
       || ((b.seguimiento.dias || 0) - (a.seguimiento.dias || 0)));
 }
 
+/* ---- Inactivos para promociones ----------------------------------------
+   Es una lista distinta a la de llamar. A quien tiene un control vencido se le
+   llama por su tratamiento, no con un descuento; aqui van los que ya no tienen
+   nada en curso y hay que reactivar. Se separan por antiguedad porque no se le
+   ofrece lo mismo a quien falta hace dos meses que a quien no viene hace un
+   ano, y se marca la deuda para no mezclar una promocion con una cobranza. */
+function pacientesInactivosParaPromocion() {
+  const limite = Number(state.config.inactiveDays);
+  return state.patients
+    .map((patient) => {
+      if (hasUpcomingActiveAppointment(patient.id)) return null;
+      const ultima = lastAppointment(patient.id);
+      // se mide desde el ultimo contacto, no desde la ultima atencion: quien
+      // reprogramo el mes pasado no esta frio, aunque nunca llegara a atenderse
+      const contacto = ultimaCitaDelPaciente(patient.id);
+      const referencia = contacto?.date || patient.createdAt;
+      const dias = daysSince(referencia);
+      if (dias === null || dias <= limite) return null;
+      // un control de ortodoncia recien vencido se resuelve llamando, no con
+      // una promocion: entra recien cuando ya se enfrio de verdad
+      const control = controlDelTratamiento(patient);
+      if (control && dias <= 90) return null;
+      const meses = Math.floor(dias / 30);
+      let segmento = "MAS DE 6 MESES";
+      // solo es NUNCA VINO quien no tiene ninguna cita registrada; si tuvo una
+      // y no llego a atenderse, interesa cuanto tiempo lleva sin aparecer
+      if (!contacto) segmento = "NUNCA VINO";
+      else if (dias <= 90) segmento = "1 A 3 MESES";
+      else if (dias <= 180) segmento = "3 A 6 MESES";
+      return { patient, meses, segmento, ultima, dias };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.dias - b.dias);
+}
+
 function fillSelect(select, options, selected = "") {
   if (!select) return;
   const cleanOptions = options.map((option) => String(option ?? "").trim()).filter(Boolean);
@@ -6978,6 +7013,26 @@ function bindEvents() {
     })));
   });
   $("#exportCampaignBtn").addEventListener("click", () => exportCsv("campanas.csv", state.patients.map((patient) => ({ nombre: patient.name, telefono: patient.phone, estado: patientStatus(patient), saldo: patientDebt(patient.id) }))));
+
+  $("#exportPromoBtn")?.addEventListener("click", () => {
+    const filas = pacientesInactivosParaPromocion().map(({ patient, meses, segmento, ultima }) => ({
+      segmento,
+      meses_sin_venir: meses === null ? "" : meses,
+      paciente: patient.name,
+      celular: patient.phone,
+      dni: patient.dni,
+      ultimo_tratamiento: ultima?.service || patient.mainTreatment || "",
+      ultima_atencion: ultima?.date || "",
+      doctor: patient.doctor || "",
+      saldo: patientDebt(patient.id),
+      tiene_deuda: patientDebt(patient.id) > 0 ? "SI" : "NO",
+    }));
+    if (!filas.length) {
+      alert("No hay pacientes inactivos para promocionar.");
+      return;
+    }
+    exportCsv(`promociones-inactivos-${todayISO()}.csv`, filas);
+  });
   $("#exportAgendaDayBtn").addEventListener("click", exportAgendaDay);
   $("#exportAgendaFutureBtn").addEventListener("click", exportFutureAgenda);
   $("#exportRemindersBtn").addEventListener("click", () => exportCsv("recordatorios.csv", state.appointments.filter((appointment) => appointment.date >= todayISO()).map((appointment) => ({ fecha: appointment.date, hora: appointment.time, paciente: patientById(appointment.patientId)?.name, telefono: patientById(appointment.patientId)?.phone, servicio: appointment.service, doctor: appointment.doctor, estado: appointment.status }))));
