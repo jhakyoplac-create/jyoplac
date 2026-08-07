@@ -1939,6 +1939,22 @@ const TITULO_ESTADO = {
   INACTIVO: "Sin venir desde hace mas del limite configurado",
 };
 
+/* Traduce el estado a lo que hay que hacer con ese paciente. En el CSV el
+   estado solo dice como esta; esta columna dice que le falta, que es lo que
+   recepcion necesita para trabajar la lista. */
+function queLeFalta(patient, estado, dias) {
+  if (patient.nextAppointment) return `Citado para ${formatDate(patient.nextAppointment)}`;
+  if (estado === "CONTROL VENCIDO") return `Control vencido hace ${dias} dias, llamar`;
+  if (estado === "SIN CITA") return "Falta agendarle la proxima cita";
+  if (estado === "INACTIVO") {
+    return dias === null
+      ? "No ha venido nunca, va a promociones"
+      : `No viene hace ${dias} dias, va a promociones`;
+  }
+  if (estado === "NUEVO") return "Registrado, todavia no viene";
+  return "";
+}
+
 function patientStatus(patient) {
   if (!patient?.id) return patient?.status || "NUEVO";
   // el servidor lo calcula con todas las citas a la vista; aqui solo se muestra
@@ -6644,22 +6660,33 @@ function bindEvents() {
   });
 
   $("#exportPatientsBtn").addEventListener("click", () => {
-    exportCsv("pacientes.csv", state.patients.map((patient) => ({
-      id: patient.id,
-      dni: patient.dni,
-      nombre: patient.name,
-      celular: patient.phone,
-      nacimiento: patient.birthDate,
-      doctor: patient.doctor,
-      tratamiento: patient.mainTreatment,
-      estado_actual: patientStatus(patient),
-      estado_guardado: patient.status || "",
-      notas: patient.notes,
-      creado_por: patient.createdByName,
-      rol_creador: patient.createdByRole,
-      oculto_rec: patient.hideFromReceptionNew,
-      creado: patient.createdAt
-    })));
+    exportCsv(`pacientes-${todayISO()}.csv`, state.patients.map((patient) => {
+      const estado = patientStatus(patient);
+      const dias = patient.lastAttended ? daysSince(patient.lastAttended) : null;
+      return {
+        estado,
+        que_falta: queLeFalta(patient, estado, dias),
+        proxima_cita: patient.nextAppointment || "",
+        ultima_atencion: patient.lastAttended || "",
+        dias_sin_venir: dias === null ? "" : dias,
+        paciente: patient.name,
+        dni: patient.dni,
+        celular: patient.phone,
+        edad: patientAgeText(patient) || "",
+        doctor: patient.doctor,
+        tratamiento: patient.mainTreatment,
+        saldo: patientDebt(patient.id),
+        veces_atendido: patient.totalAppointments ?? "",
+        ultima_llamada: patient.contactDate || "",
+        resultado_llamada: RESULTADOS_LLAMADA[patient.contactResult] || "",
+        comentario_llamada: patient.contactNote || "",
+        notas: patient.notes,
+        nacimiento: patient.birthDate,
+        registrado: patient.createdAt,
+        registrado_por: patient.createdByName,
+        id: patient.id,
+      };
+    }));
   });
   $("#patientsToCallTable")?.addEventListener("click", (event) => {
     const boton = event.target.closest("[data-call-patient]");
