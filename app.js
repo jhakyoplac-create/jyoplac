@@ -6830,27 +6830,37 @@ function bindEvents() {
       alert("Completa el detalle y un monto mayor a cero.");
       return;
     }
-    if (isPurchase && amount > generalCashBalances().utility) {
+    /* Los saldos se acumulan sumando importe por importe, y esas sumas dejan
+       una fraccion invisible: un saldo que en pantalla dice 11 127,60 puede
+       valer 11 127,599999999999. Si se compara tal cual, pasar a utilidad el
+       sobrante exacto que muestra la pantalla se rechaza por una millonesima
+       de centimo. Por eso el dinero se compara en centimos enteros. */
+    const centimos = (valor) => Math.round(Number(valor || 0) * 100);
+
+    if (isPurchase && centimos(amount) > centimos(generalCashBalances().utility)) {
       alert("La compra supera la utilidad disponible.");
       return;
     }
-    /* El aporte se compara con lo que habia disponible en la fecha del
-       movimiento, no con lo que hay hoy. Al cerrar un mes se registra el
-       sobrante con la fecha del ultimo dia, y si se validaba contra el periodo
-       corriente el traslado quedaba bloqueado por gastos posteriores que nada
-       tienen que ver con ese sobrante. */
+
+    /* Para el aporte se toma el saldo mas favorable entre el periodo corriente
+       y el del mes al que pertenece el movimiento. Al cerrar un mes el
+       sobrante se registra con fecha del ultimo dia, y no tiene por que quedar
+       bloqueado por gastos posteriores que no salieron de ese dinero. */
     const fechaMovimiento = data.date || todayISO();
-    const balances = generalCashBalances({
+    const balances = generalCashBalances();
+    const balancesDelMes = generalCashBalances({
       from: `${fechaMovimiento.slice(0, 7)}-01`,
       to: fechaMovimiento,
     });
-    const disponible = balances.cash + balances.bank;
-    if (!isPurchase && amount > disponible) {
+    const disponible = Math.max(
+      balances.cash + balances.bank,
+      balancesDelMes.cash + balancesDelMes.bank,
+    );
+    if (!isPurchase && centimos(amount) > centimos(disponible)) {
       alert(
-        `El aporte de ${money(amount)} supera lo disponible al ${formatDate(fechaMovimiento)}.\n\n` +
-        `Efectivo: ${money(balances.cash)}\n` +
-        `Banco y billeteras: ${money(balances.bank)}\n` +
-        `Disponible: ${money(disponible)}`
+        `El aporte de ${money(amount)} supera lo disponible.\n\n` +
+        `Hoy: ${money(balances.cash + balances.bank)}\n` +
+        `Al ${formatDate(fechaMovimiento)}: ${money(balancesDelMes.cash + balancesDelMes.bank)}`
       );
       return;
     }
