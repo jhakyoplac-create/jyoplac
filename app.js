@@ -6834,9 +6834,24 @@ function bindEvents() {
       alert("La compra supera la utilidad disponible.");
       return;
     }
-    const balances = generalCashBalances();
-    if (!isPurchase && amount > balances.cash + balances.bank) {
-      alert("El aporte supera el total disponible.");
+    /* El aporte se compara con lo que habia disponible en la fecha del
+       movimiento, no con lo que hay hoy. Al cerrar un mes se registra el
+       sobrante con la fecha del ultimo dia, y si se validaba contra el periodo
+       corriente el traslado quedaba bloqueado por gastos posteriores que nada
+       tienen que ver con ese sobrante. */
+    const fechaMovimiento = data.date || todayISO();
+    const balances = generalCashBalances({
+      from: `${fechaMovimiento.slice(0, 7)}-01`,
+      to: fechaMovimiento,
+    });
+    const disponible = balances.cash + balances.bank;
+    if (!isPurchase && amount > disponible) {
+      alert(
+        `El aporte de ${money(amount)} supera lo disponible al ${formatDate(fechaMovimiento)}.\n\n` +
+        `Efectivo: ${money(balances.cash)}\n` +
+        `Banco y billeteras: ${money(balances.bank)}\n` +
+        `Disponible: ${money(disponible)}`
+      );
       return;
     }
     const expense = {
