@@ -6431,7 +6431,9 @@ function bindEvents() {
       return;
     }
     const openingCash = Number(pettyCashAmount(cashDate) || 0);
-    if (openingCash > generalCashBalances().cash) {
+    // en centimos enteros: el saldo acumulado arrastra fracciones invisibles y
+    // entregar justo lo que hay en caja se rechazaba por una millonesima
+    if (Math.round(openingCash * 100) > Math.round(Number(generalCashBalances().cash || 0) * 100)) {
       alert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
       return;
     }
