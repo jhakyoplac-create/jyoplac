@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260814-utilidad-medio" />
-    <link rel="stylesheet" href="odontograma.css?v=20260814-utilidad-medio" />
+    <link rel="stylesheet" href="styles.css?v=20260814-saldo-tarjeta" />
+    <link rel="stylesheet" href="odontograma.css?v=20260814-saldo-tarjeta" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -417,9 +417,10 @@
             <button class="kpi-detail-btn" data-open-general-detail="bank" type="button" aria-label="Ver detalle de billeteras y bancos"></button>
             <span>Billeteras y bancos</span>
             <strong id="generalBankBalance">S/ 0</strong>
-            <div class="kpi-breakdown">
-              <small>Yape/Plin/Tarjeta <b id="generalWalletBalance">S/ 0</b></small>
-              <small>Transferencia <b id="generalTransferBalance">S/ 0</b></small>
+            <div class="kpi-breakdown kpi-breakdown-3">
+              <small><i>Yape/Plin</i><b id="generalWalletBalance">S/ 0</b></small>
+              <small><i>Transferencia</i><b id="generalTransferBalance">S/ 0</b></small>
+              <small><i>Tarjeta</i><b id="generalCardBalance">S/ 0</b></small>
             </div>
           </article>
           <article class="kpi">
@@ -1138,7 +1139,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20260814-utilidad-medio"></script>
-    <script src="app.js?v=20260814-utilidad-medio"></script>
+    <script src="odontograma.js?v=20260814-saldo-tarjeta"></script>
+    <script src="app.js?v=20260814-saldo-tarjeta"></script>
   </body>
 </html>

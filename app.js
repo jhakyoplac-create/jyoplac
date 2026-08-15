@@ -4645,17 +4645,23 @@ function generalCashBalances(options = {}) {
   const cashIncome = balancePayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["EFECTIVO"]), 0);
   const walletIncome = balancePayments
-    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["YAPE", "PLIN", "TARJETA"]), 0);
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["YAPE", "PLIN"]), 0);
   const transferIncome = balancePayments
     .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["TRANSFERENCIA"]), 0);
+  /* La tarjeta entra por el POS, no por la billetera: es su propia bolsa. */
+  const cardIncome = balancePayments
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["TARJETA"]), 0);
   const cashExpenses = balanceExpenses
     .filter((expense) => expense.source !== "UTILIDAD" && String(expense.method || "").toUpperCase() === "EFECTIVO")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const walletExpenses = balanceExpenses
-    .filter((expense) => expense.source !== "UTILIDAD" && ["YAPE", "PLIN", "TARJETA"].includes(String(expense.method || "").toUpperCase()))
+    .filter((expense) => expense.source !== "UTILIDAD" && ["YAPE", "PLIN"].includes(String(expense.method || "").toUpperCase()))
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const transferExpenses = balanceExpenses
     .filter((expense) => expense.source !== "UTILIDAD" && String(expense.method || "").toUpperCase() === "TRANSFERENCIA")
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const cardExpenses = balanceExpenses
+    .filter((expense) => expense.source !== "UTILIDAD" && String(expense.method || "").toUpperCase() === "TARJETA")
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const utilityContributions = allUtilityMovements
     .filter(isUtilityContribution)
@@ -4666,13 +4672,15 @@ function generalCashBalances(options = {}) {
   const cash = opening.cash + cashIncome - cashExpenses - pettyCash;
   const wallet = opening.bank + walletIncome - walletExpenses;
   const transfer = transferIncome - transferExpenses;
-  const bank = wallet + transfer;
+  const card = cardIncome - cardExpenses;
+  const bank = wallet + transfer + card;
   const utility = Number(state.config.generalUtilityOpening || 0) + utilityContributions - utilityPurchases;
   return {
     cash,
     bank,
     wallet,
     transfer,
+    card,
     utility,
     total: cash + bank,
     cashOpening: opening.cash,
@@ -4681,9 +4689,11 @@ function generalCashBalances(options = {}) {
     cashIncome,
     walletIncome,
     transferIncome,
+    cardIncome,
     cashExpenses,
     walletExpenses,
     transferExpenses,
+    cardExpenses,
     utilityContributions,
     utilityPurchases,
     pettyCash,
@@ -4933,6 +4943,7 @@ function renderGeneralCash() {
   $("#generalBankBalance").textContent = money(balances.bank);
   $("#generalWalletBalance").textContent = money(balances.wallet);
   $("#generalTransferBalance").textContent = money(balances.transfer);
+  $("#generalCardBalance").textContent = money(balances.card);
   $("#utilityBalance").textContent = money(balances.utility);
   $("#generalTotalBalance").textContent = money(balances.total);
   $("#generalTodayIncome").textContent = money(todayIncome());
@@ -6822,8 +6833,9 @@ function bindEvents() {
     const balances = generalCashBalances();
     const bolsas = [
       { metodo: "EFECTIVO", saldo: balances.cash, nombre: "efectivo" },
-      { metodo: "YAPE", saldo: balances.wallet, nombre: "Yape, Plin y tarjeta" },
+      { metodo: "YAPE", saldo: balances.wallet, nombre: "Yape y Plin" },
       { metodo: "TRANSFERENCIA", saldo: balances.transfer, nombre: "transferencias" },
+      { metodo: "TARJETA", saldo: balances.card, nombre: "tarjeta" },
     ].filter((bolsa) => bolsa.saldo > 0.009);
 
     if (!bolsas.length) {

@@ -753,6 +753,35 @@ label {
   white-space: nowrap;
 }
 
+/* Tres medios en el mismo alto que ocupaban dos: en vez de una fila por medio,
+   cada uno va en su columna con el nombre encima y el monto debajo. */
+.kpi-breakdown-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 10px;
+}
+
+.kpi-breakdown-3 small {
+  display: block;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.kpi-breakdown-3 i {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi-breakdown-3 b {
+  display: block;
+  font-size: 13px;
+}
+
 .content-grid {
   display: grid;
   gap: 16px;
