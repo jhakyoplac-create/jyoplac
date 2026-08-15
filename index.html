@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260814-pagos-por-mes" />
-    <link rel="stylesheet" href="odontograma.css?v=20260814-pagos-por-mes" />
+    <link rel="stylesheet" href="styles.css?v=20260815-caja-orden" />
+    <link rel="stylesheet" href="odontograma.css?v=20260815-caja-orden" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -413,7 +413,7 @@
             <span>Caja general efectivo</span>
             <strong id="generalCashBalance">S/ 0</strong>
           </article>
-          <article class="kpi kpi-detail-card">
+          <article class="kpi kpi-detail-card kpi-wide">
             <button class="kpi-detail-btn" data-open-general-detail="bank" type="button" aria-label="Ver detalle de billeteras y bancos"></button>
             <span>Billeteras y bancos</span>
             <strong id="generalBankBalance">S/ 0</strong>
@@ -471,6 +471,46 @@
                   </tr>
                 </thead>
                 <tbody id="generalDailyTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div class="content-grid general-layout lower">
+          <form class="panel form" id="staffPaymentForm">
+            <div class="panel-head">
+              <h2>Pago personal / terceros</h2>
+            </div>
+            <label>Fecha<input name="date" type="date" required /></label>
+            <label>Persona / proveedor<input name="person" required placeholder="Doctor, asistente, contador, laboratorio" /></label>
+            <label>Tipo<select name="type"></select></label>
+            <label>Detalle<textarea name="detail" rows="3" required></textarea></label>
+            <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
+            <label>Metodo<select name="method"></select></label>
+            <button class="primary" type="submit">Guardar pago</button>
+          </form>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Pagos registrados</h2>
+              <div class="staff-payment-tools">
+                <select id="staffPaymentMonth" aria-label="Mes de los pagos"></select>
+                <button class="ghost" id="exportStaffPaymentsBtn">Excel</button>
+              </div>
+            </div>
+            <p class="muted staff-payment-total" id="staffPaymentTotal"></p>
+            <div class="table-wrap staff-payments-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Persona</th>
+                    <th>Tipo</th>
+                    <th>Método</th>
+                    <th>Monto</th>
+                    <th>Detalle</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="staffPaymentsTable"></tbody>
               </table>
             </div>
           </section>
@@ -552,46 +592,6 @@
                   </tr>
                 </thead>
                 <tbody id="cardFeeTable"></tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-        <div class="content-grid general-layout lower">
-          <form class="panel form" id="staffPaymentForm">
-            <div class="panel-head">
-              <h2>Pago personal / terceros</h2>
-            </div>
-            <label>Fecha<input name="date" type="date" required /></label>
-            <label>Persona / proveedor<input name="person" required placeholder="Doctor, asistente, contador, laboratorio" /></label>
-            <label>Tipo<select name="type"></select></label>
-            <label>Detalle<textarea name="detail" rows="3" required></textarea></label>
-            <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
-            <label>Metodo<select name="method"></select></label>
-            <button class="primary" type="submit">Guardar pago</button>
-          </form>
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Pagos registrados</h2>
-              <div class="staff-payment-tools">
-                <select id="staffPaymentMonth" aria-label="Mes de los pagos"></select>
-                <button class="ghost" id="exportStaffPaymentsBtn">Excel</button>
-              </div>
-            </div>
-            <p class="muted staff-payment-total" id="staffPaymentTotal"></p>
-            <div class="table-wrap staff-payments-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Persona</th>
-                    <th>Tipo</th>
-                    <th>Método</th>
-                    <th>Monto</th>
-                    <th>Detalle</th>
-                    <th>Acción</th>
-                  </tr>
-                </thead>
-                <tbody id="staffPaymentsTable"></tbody>
               </table>
             </div>
           </section>
@@ -1182,7 +1182,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20260814-pagos-por-mes"></script>
-    <script src="app.js?v=20260814-pagos-por-mes"></script>
+    <script src="odontograma.js?v=20260815-caja-orden"></script>
+    <script src="app.js?v=20260815-caja-orden"></script>
   </body>
 </html>

@@ -3097,3 +3097,109 @@ menu {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   Caja general: version compacta
+   ------------------------------------------------------------
+   Es la vista con mas paneles del sistema y obligaba a bajar sin
+   parar. Todo lo de aqui esta encerrado en #caja-general a
+   proposito: el resto del sistema no cambia.
+   ============================================================ */
+
+#caja-general .panel,
+#caja-general .kpi {
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+
+#caja-general h2 {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+#caja-general .panel-head {
+  margin-bottom: 12px;
+}
+
+#caja-general .form {
+  gap: 10px;
+}
+
+#caja-general label {
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#caja-general input,
+#caja-general select,
+#caja-general textarea {
+  padding: 8px 11px;
+}
+
+#caja-general th,
+#caja-general td {
+  padding: 8px 12px;
+}
+
+/* Las tarjetas se acomodan segun quepan: eran cinco en una rejilla de
+   cuatro y la quinta se quedaba sola ocupando una fila entera. */
+#caja-general .kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* La de billeteras lleva tres cifras dentro y necesita el doble de ancho
+   que una de un solo numero, o los nombres se cortan. */
+#caja-general .kpi-wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 900px) {
+  #caja-general .kpi-wide {
+    grid-column: auto;
+  }
+}
+
+/* Un color plano en vez del degradado de tres colores con doble sombra:
+   asi el boton acompana en lugar de reclamar la pagina entera. */
+#caja-general .primary {
+  background: var(--aqua);
+  box-shadow: 0 1px 2px rgba(0, 106, 137, 0.16);
+  font-weight: 700;
+}
+
+#caja-general .primary:hover {
+  background: #0091ba;
+}
+
+#caja-general .ghost {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: #00708f;
+  font-weight: 600;
+}
+
+#caja-general .ghost:hover {
+  background: #f2f7f9;
+}
+
+#caja-general .small-btn {
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Borrar es la accion menos frecuente de la fila: se queda en gris y solo
+   toma el color de aviso cuando el raton esta encima. */
+#caja-general .danger-btn {
+  color: var(--muted);
+}
+
+#caja-general .danger-btn:hover {
+  color: var(--coral);
+  border-color: #ffc9c9;
+  background: #fff5f5;
+}
