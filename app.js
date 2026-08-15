@@ -6812,11 +6812,39 @@ function bindEvents() {
   $("#suggestUtilityTransferBtn")?.addEventListener("click", () => {
     const form = $("#utilityForm");
     if (!form) return;
+    /* El saldo de "billeteras y bancos" son en realidad dos bolsas distintas:
+       Yape, Plin y tarjeta por un lado, y transferencia por el otro. Antes se
+       sugeria el total de las dos pero se registraba siempre como
+       TRANSFERENCIA, asi que si el dinero estaba en Yape el sistema lo
+       descontaba de transferencia y dejaba el saldo de Yape intacto: los dos
+       medios quedaban descuadrados, uno en negativo y el otro de sobra.
+       Ahora se propone una bolsa a la vez, con su propio metodo. */
     const balances = generalCashBalances();
+    const bolsas = [
+      { metodo: "EFECTIVO", saldo: balances.cash, nombre: "efectivo" },
+      { metodo: "YAPE", saldo: balances.wallet, nombre: "Yape, Plin y tarjeta" },
+      { metodo: "TRANSFERENCIA", saldo: balances.transfer, nombre: "transferencias" },
+    ].filter((bolsa) => bolsa.saldo > 0.009);
+
+    if (!bolsas.length) {
+      alert("No queda saldo del mes para pasar a utilidad.");
+      return;
+    }
+    const elegida = bolsas[0];
     form.type.value = "APORTE";
-    form.method.value = "TRANSFERENCIA";
-    form.amount.value = Math.max(0, balances.bank).toFixed(2);
+    form.method.value = elegida.metodo;
+    form.amount.value = elegida.saldo.toFixed(2);
     form.detail.value = `Cierre de mes: traslado a utilidad ${monthLabel(operatingDate().slice(0, 7))}`;
+    renderGeneralCash();
+
+    if (bolsas.length > 1) {
+      alert(
+        `Queda saldo en ${bolsas.length} medios distintos y cada uno se pasa por separado:\n\n` +
+        bolsas.map((b) => `  ${b.nombre}: ${money(b.saldo)}`).join("\n") +
+        `\n\nSe cargo el de ${elegida.nombre}. Guarda ese movimiento y vuelve a ` +
+        `pulsar el boton para el siguiente.`
+      );
+    }
   });
   $("#utilityForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
