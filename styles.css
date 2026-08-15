@@ -808,6 +808,34 @@ label {
   margin-top: 18px;
 }
 
+.card-fee-help {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.card-fee-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 10px;
+  margin: 2px 0 4px;
+}
+
+.card-fee-figures span {
+  display: block;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.card-fee-figures b {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .receivable-form {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(220px, 1.2fr) auto;

@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260814-saldo-tarjeta" />
-    <link rel="stylesheet" href="odontograma.css?v=20260814-saldo-tarjeta" />
+    <link rel="stylesheet" href="styles.css?v=20260814-comision-pos" />
+    <link rel="stylesheet" href="odontograma.css?v=20260814-comision-pos" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -513,6 +513,45 @@
                   </tr>
                 </thead>
                 <tbody id="utilityMovementsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div class="content-grid general-layout lower">
+          <form class="panel form" id="cardFeeForm">
+            <div class="panel-head">
+              <h2>Comisiones de tarjeta</h2>
+            </div>
+            <p class="muted card-fee-help">El banco deposita la venta con tarjeta ya descontada. Al cerrar el mes, pon lo que realmente entró a la cuenta y el sistema registra la diferencia como comisión.</p>
+            <label>Mes a cuadrar<input name="month" type="month" required /></label>
+            <div class="card-fee-figures">
+              <span>Cobrado por tarjeta<b id="cardFeeCharged">S/ 0</b></span>
+              <span>Comisión registrada<b id="cardFeeRegistered">S/ 0</b></span>
+              <span>Neto en el sistema<b id="cardFeeNet">S/ 0</b></span>
+            </div>
+            <label>Depositado por el banco S/<input name="deposited" type="number" min="0" step="0.01" /></label>
+            <label>Comisión del mes S/<input name="fee" type="number" min="0" step="0.01" /></label>
+            <p class="muted" id="cardFeeNote"></p>
+            <button class="primary" type="submit">Registrar comisión</button>
+          </form>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Comisiones registradas</h2>
+              <button class="ghost" id="exportCardFeeBtn">CSV</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mes</th>
+                    <th>Cobrado por tarjeta</th>
+                    <th>Comisión</th>
+                    <th>Depositado</th>
+                    <th>% del cobrado</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="cardFeeTable"></tbody>
               </table>
             </div>
           </section>
@@ -1139,7 +1178,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20260814-saldo-tarjeta"></script>
-    <script src="app.js?v=20260814-saldo-tarjeta"></script>
+    <script src="odontograma.js?v=20260814-comision-pos"></script>
+    <script src="app.js?v=20260814-comision-pos"></script>
   </body>
 </html>

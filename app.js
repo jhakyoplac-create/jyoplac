@@ -1716,6 +1716,51 @@ function isGeneralCashExpense(expense) {
   return expense.source === "CAJA_GENERAL" && !isUtilityContribution(expense) && !isUtilityPurchase(expense);
 }
 
+/* El POS deposita la venta del dia siguiente ya descontada, y la comision no es
+   fija. Como el dia ya cerro y no se puede corregir el cobro, la diferencia se
+   cuadra al final del mes contra lo que realmente entro a la cuenta. */
+function isCardFee(expense) {
+  return expense.category === "COMISION_TARJETA";
+}
+
+function cardChargedForMonth(month) {
+  if (!month) return 0;
+  return state.payments
+    .filter((payment) => String(payment.date || "").slice(0, 7) === month)
+    .reduce((sum, payment) => sum + paymentAmountForMethods(payment, ["TARJETA"]), 0);
+}
+
+/* La comision se guarda con fecha del ultimo dia del mes que cuadra, asi que el
+   mes sale de la propia fecha y no hace falta un campo aparte. */
+function cardFeeMonth(expense) {
+  return String(expense.date || "").slice(0, 7);
+}
+
+function cardFeesForMonth(month) {
+  if (!month) return [];
+  return state.expenses.filter((expense) => isCardFee(expense) && cardFeeMonth(expense) === month);
+}
+
+function cardFeeTotalForMonth(month) {
+  return cardFeesForMonth(month).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function lastDayOfMonth(month) {
+  const [year, monthNumber] = String(month || "").split("-").map(Number);
+  if (!year || !monthNumber) return todayISO();
+  const dia = new Date(year, monthNumber, 0).getDate();
+  return `${year}-${String(monthNumber).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+/* Los saldos solo cuentan movimientos hasta hoy. Si se cuadra el mes en curso,
+   fechar la comision el ultimo dia del mes la dejaria en el futuro y el saldo de
+   tarjeta no bajaria, asi que en ese caso se fecha hoy. */
+function cardFeeDateForMonth(month) {
+  const ultimo = lastDayOfMonth(month);
+  const hoy = todayISO();
+  return ultimo > hoy ? hoy : ultimo;
+}
+
 function utilityContributionTotalForDate(date) {
   return expensesForDate(date)
     .filter(isUtilityContribution)
@@ -4932,6 +4977,47 @@ function renderUtilityMovements() {
   }).join("") || `<tr><td colspan="6">Aun no hay movimientos de utilidad.</td></tr>`;
 }
 
+function renderCardFees() {
+  const form = $("#cardFeeForm");
+  const table = $("#cardFeeTable");
+  if (!form || !table) return;
+  const month = form.month.value || "";
+  const cobrado = cardChargedForMonth(month);
+  const registrado = cardFeeTotalForMonth(month);
+  const neto = cobrado - registrado;
+  $("#cardFeeCharged").textContent = money(cobrado);
+  $("#cardFeeRegistered").textContent = money(registrado);
+  $("#cardFeeNet").textContent = money(neto);
+
+  const nota = $("#cardFeeNote");
+  if (!month) nota.textContent = "Elige el mes que quieres cuadrar.";
+  else if (cobrado <= 0) nota.textContent = `No hay cobros con tarjeta en ${monthLabel(month)}.`;
+  else if (registrado > 0) nota.textContent = `Ya se registró ${money(registrado)} de comisión para ${monthLabel(month)}. Si vuelves a registrar, se suma a lo anterior.`;
+  else nota.textContent = `Si el banco depositó ${money(neto)}, no hubo comisión que registrar.`;
+
+  const meses = [...new Set(state.expenses.filter(isCardFee).map(cardFeeMonth))]
+    .filter(Boolean)
+    .sort()
+    .reverse();
+  table.innerHTML = meses.map((mes) => {
+    const comision = cardFeeTotalForMonth(mes);
+    const cobradoMes = cardChargedForMonth(mes);
+    const depositado = cobradoMes - comision;
+    const porcentaje = cobradoMes > 0 ? `${(comision / cobradoMes * 100).toFixed(2)} %` : "-";
+    const borrar = isAdmin()
+      ? `<button class="small-btn danger-btn" data-delete-card-fee="${escapeHtml(mes)}">Eliminar</button>`
+      : "";
+    return `<tr>
+      <td>${escapeHtml(monthLabel(mes))}</td>
+      <td>${money(cobradoMes)}</td>
+      <td><strong>-${money(comision)}</strong></td>
+      <td>${money(depositado)}</td>
+      <td>${porcentaje}</td>
+      <td class="row-actions">${borrar}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6">Aún no se cuadraron comisiones de tarjeta.</td></tr>`;
+}
+
 function renderGeneralCash() {
   const cashDate = todayISO();
   syncCashTitleRangeInputs();
@@ -4987,6 +5073,7 @@ function renderGeneralCash() {
     </tr>`;
   }).join("") || `<tr><td colspan="6">No hay movimientos en el rango seleccionado.</td></tr>`;
   renderUtilityMovements();
+  renderCardFees();
   renderStaffPayments();
 }
 
@@ -7101,6 +7188,125 @@ function bindEvents() {
   };
   $("#cashTitleFrom")?.addEventListener("change", applyCashTitleRange);
   $("#cashTitleTo")?.addEventListener("change", applyCashTitleRange);
+  /* Los dos campos son la misma cuenta vista al reves: el banco puede informar
+     el deposito o la comision, y se escriba el que se escriba el otro sale
+     solo, para no obligar a sacar la resta a mano. */
+  const sincronizarComision = (origen) => {
+    const form = $("#cardFeeForm");
+    if (!form) return;
+    const month = form.month.value || "";
+    const neto = cardChargedForMonth(month) - cardFeeTotalForMonth(month);
+    if (origen === "deposited") {
+      const depositado = form.deposited.value;
+      form.fee.value = depositado === "" ? "" : Math.max(0, neto - Number(depositado || 0)).toFixed(2);
+    } else {
+      const comision = form.fee.value;
+      form.deposited.value = comision === "" ? "" : Math.max(0, neto - Number(comision || 0)).toFixed(2);
+    }
+  };
+  $('#cardFeeForm [name="deposited"]')?.addEventListener("input", () => sincronizarComision("deposited"));
+  $('#cardFeeForm [name="fee"]')?.addEventListener("input", () => sincronizarComision("fee"));
+  $('#cardFeeForm [name="month"]')?.addEventListener("change", () => {
+    const form = $("#cardFeeForm");
+    form.deposited.value = "";
+    form.fee.value = "";
+    renderCardFees();
+  });
+
+  $("#cardFeeForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!isAdmin()) {
+      alert("Solo el administrador puede registrar comisiones de tarjeta.");
+      return;
+    }
+    const form = event.currentTarget;
+    const month = form.month.value || "";
+    if (!month) {
+      alert("Elige el mes que quieres cuadrar.");
+      return;
+    }
+    const comision = Number(form.fee.value || 0);
+    if (comision <= 0) {
+      alert("Pon lo que depositó el banco, o la comisión directamente, para calcular la diferencia.");
+      return;
+    }
+    const cobrado = cardChargedForMonth(month);
+    const neto = cobrado - cardFeeTotalForMonth(month);
+    const centimos = (valor) => Math.round(Number(valor || 0) * 100);
+    if (centimos(comision) > centimos(neto)) {
+      alert(`La comisión de ${money(comision)} supera lo que queda por cuadrar de ${monthLabel(month)}, que es ${money(neto)}.`);
+      return;
+    }
+    const depositado = neto - comision;
+    if (!confirm(
+      `Cuadrar ${monthLabel(month)}:\n\n` +
+      `  Cobrado con tarjeta: ${money(cobrado)}\n` +
+      `  Comisión del banco: ${money(comision)}\n` +
+      `  Queda en tarjeta: ${money(depositado)}\n\n` +
+      `Se registra la comisión como egreso del ${formatDate(cardFeeDateForMonth(month))}.`
+    )) return;
+
+    const expense = {
+      id: uid("exp"),
+      date: cardFeeDateForMonth(month),
+      detail: `Comisión de tarjeta ${monthLabel(month)}`,
+      amount: comision,
+      method: "TARJETA",
+      source: "CAJA_GENERAL",
+      category: "COMISION_TARJETA",
+      receipt: ""
+    };
+    try {
+      await saveExpenseApi(expense);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    state.expenses.push(expense);
+    if (!API_ENABLED) saveState();
+    form.deposited.value = "";
+    form.fee.value = "";
+    render();
+  });
+
+  $("#cardFeeTable")?.addEventListener("click", async (event) => {
+    const boton = event.target.closest("[data-delete-card-fee]");
+    if (!boton || !isAdmin()) return;
+    const mes = boton.dataset.deleteCardFee;
+    const comisiones = cardFeesForMonth(mes);
+    if (!comisiones.length) return;
+    if (!confirm(`¿Eliminar la comisión de ${monthLabel(mes)} por ${money(cardFeeTotalForMonth(mes))}? El saldo de tarjeta vuelve a subir.`)) return;
+    for (const expense of comisiones) {
+      try {
+        await deleteExpenseApi(expense.id);
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      state.expenses = state.expenses.filter((item) => item.id !== expense.id);
+    }
+    if (!API_ENABLED) saveState();
+    render();
+  });
+
+  $("#exportCardFeeBtn")?.addEventListener("click", () => {
+    const meses = [...new Set(state.expenses.filter(isCardFee).map(cardFeeMonth))]
+      .filter(Boolean)
+      .sort()
+      .reverse();
+    exportCsv("comisiones-tarjeta.csv", meses.map((mes) => {
+      const comision = cardFeeTotalForMonth(mes);
+      const cobrado = cardChargedForMonth(mes);
+      return {
+        mes,
+        cobrado_por_tarjeta: cobrado,
+        comision: -comision,
+        depositado: cobrado - comision,
+        porcentaje: cobrado > 0 ? Number((comision / cobrado * 100).toFixed(2)) : 0
+      };
+    }));
+  });
+
   $("#exportUtilityBtn")?.addEventListener("click", () => {
     exportCsv("movimientos-utilidad.csv", utilityMovements().map((item) => ({
       fecha: item.date,
@@ -7264,6 +7470,12 @@ function init() {
   $('#historyForm input[name="date"]').value = todayISO();
   $('#staffPaymentForm input[name="date"]').value = todayISO();
   $('#utilityForm input[name="date"]').value = todayISO();
+  /* Las comisiones se cuadran cuando el banco ya informo el mes completo, o sea
+     sobre el mes pasado. */
+  const campoMesComision = $('#cardFeeForm input[name="month"]');
+  if (campoMesComision && !campoMesComision.value) {
+    campoMesComision.value = previousMonth(todayISO().slice(0, 7));
+  }
   $("#reportMonth").value = todayISO().slice(0, 7);
   $("#compareMonth").value = previousMonth($("#reportMonth").value);
   bindEvents();
