@@ -5084,10 +5084,53 @@ function staffPayments() {
     .sort((a, b) => `${b.date || ""}${b.id || ""}`.localeCompare(`${a.date || ""}${a.id || ""}`));
 }
 
+/* La lista completa se vuelve larga con los meses, y casi siempre se revisa un
+   mes a la vez. El filtro solo ofrece los meses que tienen pagos. */
+function staffPaymentMonths() {
+  return [...new Set(staffPayments().map((payment) => String(payment.date || "").slice(0, 7)))]
+    .filter(Boolean)
+    .sort()
+    .reverse();
+}
+
+function selectedStaffPaymentMonth() {
+  return $("#staffPaymentMonth")?.value || "";
+}
+
+function staffPaymentsForSelectedMonth() {
+  const month = selectedStaffPaymentMonth();
+  const pagos = staffPayments();
+  return month ? pagos.filter((payment) => String(payment.date || "").slice(0, 7) === month) : pagos;
+}
+
+function renderStaffPaymentMonths() {
+  const select = $("#staffPaymentMonth");
+  if (!select) return;
+  const meses = staffPaymentMonths();
+  const elegido = select.value;
+  select.innerHTML = `<option value="">Todos los meses</option>` +
+    meses.map((mes) => `<option value="${escapeHtml(mes)}">${escapeHtml(monthLabel(mes))}</option>`).join("");
+  /* Al entrar se muestra el mes mas reciente; despues manda lo que haya elegido,
+     aunque sea "todos". */
+  if (meses.includes(elegido)) select.value = elegido;
+  else if (select.dataset.tocado) select.value = "";
+  else if (meses.length) select.value = meses[0];
+}
+
 function renderStaffPayments() {
   const table = $("#staffPaymentsTable");
   if (!table) return;
-  table.innerHTML = staffPayments().map((payment) => `<tr>
+  renderStaffPaymentMonths();
+  const visibles = staffPaymentsForSelectedMonth();
+  const total = visibles.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const resumen = $("#staffPaymentTotal");
+  if (resumen) {
+    const mes = selectedStaffPaymentMonth();
+    resumen.textContent = visibles.length
+      ? `${visibles.length} pago${visibles.length === 1 ? "" : "s"} en ${mes ? monthLabel(mes) : "todos los meses"}: ${money(total)}`
+      : "";
+  }
+  table.innerHTML = visibles.map((payment) => `<tr>
     <td>${formatDate(payment.date)}</td>
     <td>${escapeHtml(payment.person || "")}</td>
     <td>${escapeHtml(payment.type || "OTRO")}</td>
@@ -5095,7 +5138,7 @@ function renderStaffPayments() {
     <td><strong>${money(payment.amount)}</strong></td>
     <td>${escapeHtml(payment.detail || "")}</td>
     <td class="row-actions">${isAdmin() ? `<button class="small-btn danger-btn" data-delete-staff-payment="${payment.id}">Eliminar</button>` : ""}</td>
-  </tr>`).join("") || `<tr><td colspan="7">Aun no hay pagos de personal o terceros.</td></tr>`;
+  </tr>`).join("") || `<tr><td colspan="7">${staffPayments().length ? "No hay pagos en el mes elegido." : "Aún no hay pagos de personal o terceros."}</td></tr>`;
 }
 
 function openAppointment(appointment = {}) {
@@ -7335,8 +7378,16 @@ function bindEvents() {
       estado: receipt.status
     })));
   });
+  $("#staffPaymentMonth")?.addEventListener("change", (event) => {
+    /* Marcar que la eleccion es suya: sin esto, cada refresco volveria al mes
+       mas reciente y le quitaria de la vista el mes que esta mirando. */
+    event.currentTarget.dataset.tocado = "1";
+    renderStaffPayments();
+  });
   $("#exportStaffPaymentsBtn").addEventListener("click", () => {
-    exportCsv("pagos-personal-terceros.csv", staffPayments().map((payment) => ({
+    const mes = selectedStaffPaymentMonth();
+    const nombre = mes ? `pagos-personal-terceros-${mes}.csv` : "pagos-personal-terceros.csv";
+    exportCsv(nombre, staffPaymentsForSelectedMonth().map((payment) => ({
       fecha: payment.date,
       persona: payment.person,
       tipo: payment.type,

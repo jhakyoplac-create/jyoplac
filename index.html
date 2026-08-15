@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260814-comision-pos" />
-    <link rel="stylesheet" href="odontograma.css?v=20260814-comision-pos" />
+    <link rel="stylesheet" href="styles.css?v=20260814-pagos-por-mes" />
+    <link rel="stylesheet" href="odontograma.css?v=20260814-pagos-por-mes" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -572,19 +572,23 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Pagos registrados</h2>
-              <button class="ghost" id="exportStaffPaymentsBtn">Excel</button>
+              <div class="staff-payment-tools">
+                <select id="staffPaymentMonth" aria-label="Mes de los pagos"></select>
+                <button class="ghost" id="exportStaffPaymentsBtn">Excel</button>
+              </div>
             </div>
-            <div class="table-wrap">
+            <p class="muted staff-payment-total" id="staffPaymentTotal"></p>
+            <div class="table-wrap staff-payments-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Fecha</th>
                     <th>Persona</th>
                     <th>Tipo</th>
-                    <th>Metodo</th>
+                    <th>Método</th>
                     <th>Monto</th>
                     <th>Detalle</th>
-                    <th>Accion</th>
+                    <th>Acción</th>
                   </tr>
                 </thead>
                 <tbody id="staffPaymentsTable"></tbody>
@@ -1178,7 +1182,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20260814-comision-pos"></script>
-    <script src="app.js?v=20260814-comision-pos"></script>
+    <script src="odontograma.js?v=20260814-pagos-por-mes"></script>
+    <script src="app.js?v=20260814-pagos-por-mes"></script>
   </body>
 </html>

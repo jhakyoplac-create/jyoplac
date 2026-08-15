@@ -2405,6 +2405,28 @@ menu {
   overflow: auto;
 }
 
+/* La lista de pagos al personal crece mes a mes, asi que se acota a una altura
+   fija con su propia barra en vez de estirar la pagina. */
+.staff-payments-wrap {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.staff-payment-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.staff-payment-tools select {
+  min-width: 150px;
+}
+
+.staff-payment-total {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
 #utilityForm {
   gap: 10px;
   padding: 18px 20px;
