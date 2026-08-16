@@ -5075,6 +5075,29 @@ function renderGeneralCash() {
   renderUtilityMovements();
   renderCardFees();
   renderStaffPayments();
+  ajustarCifrasDeSaldo();
+}
+
+/* Los saldos crecen con el negocio y "S/ 30,301.86" ya no entraba en su tarjeta:
+   el navegador lo partia en dos lineas y esa tarjeta perdia la forma de las
+   demas. En vez de achicar todas las cifras por si acaso, cada una arranca en
+   su tamano normal y solo baja la que no entra. */
+function ajustarCifrasDeSaldo() {
+  const MINIMO = 16;
+  $$("#caja-general .kpi strong").forEach((cifra) => {
+    /* Se parte del tamano que manda la hoja de estilos, no de uno fijo: en
+       celular las cifras ya arrancan mas chicas. */
+    cifra.style.fontSize = "";
+    if (!cifra.clientWidth) return;
+    let tamano = parseFloat(getComputedStyle(cifra).fontSize) || 28;
+    /* La comparacion va contra el ancho de la propia cifra, que al ser un
+       bloque ya vale el espacio util de la tarjeta. Medir contra el padre
+       daba 32px de mas -su relleno- y las cifras largas se colaban. */
+    while (cifra.scrollWidth > cifra.clientWidth && tamano > MINIMO) {
+      tamano -= 1;
+      cifra.style.fontSize = `${tamano}px`;
+    }
+  });
 }
 
 function staffPayments() {
@@ -7378,6 +7401,14 @@ function bindEvents() {
       estado: receipt.status
     })));
   });
+  /* Al cambiar el ancho de la ventana cambia el espacio de cada tarjeta, asi
+     que las cifras se vuelven a medir. */
+  let recalculoDeCifras = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(recalculoDeCifras);
+    recalculoDeCifras = setTimeout(ajustarCifrasDeSaldo, 120);
+  });
+
   $("#staffPaymentMonth")?.addEventListener("change", (event) => {
     /* Marcar que la eleccion es suya: sin esto, cada refresco volveria al mes
        mas reciente y le quitaria de la vista el mes que esta mirando. */

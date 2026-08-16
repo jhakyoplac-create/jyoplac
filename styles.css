@@ -3151,16 +3151,26 @@ menu {
   margin-bottom: 14px;
 }
 
-/* La de billeteras lleva tres cifras dentro y necesita el doble de ancho
-   que una de un solo numero, o los nombres se cortan. */
-#caja-general .kpi-wide {
-  grid-column: span 2;
+/* Todas las tarjetas miden igual. Darle el doble de ancho a la de billeteras
+   dejaba la fila descompensada, asi que en su lugar el desglose se aprieta. */
+#caja-general .kpi-breakdown-3 {
+  gap: 4px 8px;
 }
 
-@media (max-width: 900px) {
-  #caja-general .kpi-wide {
-    grid-column: auto;
-  }
+#caja-general .kpi-breakdown-3 i {
+  font-size: 10px;
+}
+
+#caja-general .kpi-breakdown-3 b {
+  font-size: 12px;
+}
+
+/* La cifra nunca se parte en dos lineas: si no entra a su tamano normal, el
+   guion de ajustarCifrasDeSaldo la baja hasta que entra. Sin el nowrap el
+   navegador la parte y el ajuste no tendria como darse cuenta. */
+#caja-general .kpi strong {
+  display: block;
+  white-space: nowrap;
 }
 
 /* Un color plano en vez del degradado de tres colores con doble sombra:
