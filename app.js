@@ -714,8 +714,27 @@ function queryRange(from, to) {
   return params.toString();
 }
 
-async function refreshOperationalRangeApi(from, to, { rerender = true } = {}) {
-  if (!API_ENABLED || !apiToken || apiRefreshing || !from || !to) return;
+/* Antes, si ya habia una carga en vuelo la nueva se descartaba en silencio. Al
+   cambiar la fecha de la agenda en ese momento justo, la peticion se perdia y
+   nadie la reintentaba: la pantalla quedaba vacia por mas que se esperara. Las
+   que nacen de una accion de la persona ahora hacen cola en vez de perderse. */
+let colaDeRefresco = Promise.resolve();
+
+function enFilaDeRefresco(tarea) {
+  const turno = colaDeRefresco.then(tarea, tarea);
+  colaDeRefresco = turno.then(() => {}, () => {});
+  return turno;
+}
+
+async function refreshOperationalRangeApi(from, to, { rerender = true, esperarTurno = false } = {}) {
+  if (!API_ENABLED || !apiToken || !from || !to) return;
+  /* El refresco automatico es oportunista: si hay algo en vuelo se saltea, que
+     para eso vuelve a correr solo a los pocos segundos. */
+  if (!esperarTurno && apiRefreshing) return;
+  return enFilaDeRefresco(() => cargarRangoOperativo(from, to, rerender));
+}
+
+async function cargarRangoOperativo(from, to, rerender) {
   apiRefreshing = true;
   try {
     const query = queryRange(from, to);
@@ -742,7 +761,8 @@ async function refreshOperationalRangeApi(from, to, { rerender = true } = {}) {
 async function refreshRangeThenRender(from, to, renderFn = render) {
   if (!from || !to) return;
   try {
-    await refreshOperationalRangeApi(from, to, { rerender: false });
+    /* Siempre sale de un cambio de filtro hecho a mano, asi que espera turno. */
+    await refreshOperationalRangeApi(from, to, { rerender: false, esperarTurno: true });
     renderFn();
   } catch {
     // El refresco por rango es una mejora de velocidad; no debe bloquear la pantalla.
@@ -750,7 +770,15 @@ async function refreshRangeThenRender(from, to, renderFn = render) {
 }
 
 async function refreshPatientAppointmentsApi(patientId) {
-  if (!API_ENABLED || !apiToken || apiRefreshing || !patientId || patientAppointmentHistoryLoaded.has(patientId)) return;
+  if (!API_ENABLED || !apiToken || !patientId || patientAppointmentHistoryLoaded.has(patientId)) return;
+  /* Esto sale de abrir las citas de un paciente. Si se descartaba por haber otra
+     carga en vuelo, la ficha se quedaba mostrando que no tiene citas cuando en
+     realidad no habian llegado todavia. */
+  return enFilaDeRefresco(() => cargarCitasDePaciente(patientId));
+}
+
+async function cargarCitasDePaciente(patientId) {
+  if (patientAppointmentHistoryLoaded.has(patientId)) return;
   apiRefreshing = true;
   try {
     const result = await apiFetch(`/api/appointments?patientId=${encodeURIComponent(patientId)}`);
@@ -808,13 +836,16 @@ async function refreshCashStateApi({ rerender = true } = {}) {
   }
 }
 
-async function refreshActiveViewApi() {
+/* porAccionDelUsuario distingue el refresco de fondo -que puede saltearse- de
+   uno pedido a mano al cambiar de fecha o de vista, que no se puede perder. */
+async function refreshActiveViewApi({ porAccionDelUsuario = false } = {}) {
   const range = activeViewRefreshRange();
   if (!range) return;
+  const opciones = { rerender: false, esperarTurno: porAccionDelUsuario };
   try {
     if (currentView === "pagos") {
       await Promise.all([
-        refreshOperationalRangeApi(range.from, range.to, { rerender: false }),
+        refreshOperationalRangeApi(range.from, range.to, opciones),
         refreshCashStateApi({ rerender: false })
       ]);
       renderPayments();
@@ -822,25 +853,42 @@ async function refreshActiveViewApi() {
     }
     if (currentView === "caja-general") {
       await Promise.all([
-        refreshOperationalRangeApi(range.from, range.to, { rerender: false }),
+        refreshOperationalRangeApi(range.from, range.to, opciones),
         refreshCashStateApi({ rerender: false })
       ]);
       renderGeneralCash();
       return;
     }
-    await refreshOperationalRangeApi(range.from, range.to);
+    await refreshOperationalRangeApi(range.from, range.to, { ...opciones, rerender: true });
   } catch {
     // El refresco liviano no debe cerrar sesion ni interrumpir el trabajo.
   }
+}
+
+/* Elegir una fecha o un filtro no es cargar informacion: son controles para
+   mirar. Como quedan enfocados despues de usarlos, tratarlos como captura
+   congelaba el refresco justo cuando mas falta hace -al cambiar la fecha de la
+   agenda- y la pantalla no se actualizaba hasta tocar otra cosa. */
+const FILTROS_DE_VISTA = new Set([
+  "agendaDate", "doctorFilter", "unitFilter", "globalSearch",
+  "reportMonth", "compareMonth",
+  "cashTitleMonthPicker", "cashTitleFrom", "cashTitleTo",
+  "generalSummaryFrom", "generalSummaryTo", "staffPaymentMonth"
+]);
+
+function focoEnCapturaDeDatos({ incluirSelect }) {
+  const activo = document.activeElement;
+  if (!activo) return false;
+  if (FILTROS_DE_VISTA.has(activo.id)) return false;
+  const etiquetas = incluirSelect ? ["INPUT", "TEXTAREA", "SELECT"] : ["INPUT", "TEXTAREA"];
+  return etiquetas.includes(activo.tagName);
 }
 
 function shouldAutoRefreshApi() {
   if (!API_ENABLED || !apiToken) return false;
   if (document.hidden) return false;
   if ($("dialog[open]")) return false;
-  const active = document.activeElement;
-  if (!active) return true;
-  return !["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+  return !focoEnCapturaDeDatos({ incluirSelect: true });
 }
 
 function shouldFastRefreshCriticalApi() {
@@ -848,9 +896,7 @@ function shouldFastRefreshCriticalApi() {
   if (document.hidden) return false;
   if (!["pagos", "caja-general", "agenda"].includes(currentView)) return false;
   if ($("dialog[open]")) return false;
-  const active = document.activeElement;
-  if (!active) return true;
-  return !["INPUT", "TEXTAREA"].includes(active.tagName);
+  return !focoEnCapturaDeDatos({ incluirSelect: false });
 }
 
 async function refreshPatientsThenRender() {
@@ -2328,7 +2374,7 @@ function setView(view) {
   const cashRangeControls = $("#cashTitleRangeControls");
   if (cashRangeControls) cashRangeControls.hidden = view !== "caja-general";
   render();
-  refreshActiveViewApi();
+  refreshActiveViewApi({ porAccionDelUsuario: true });
 }
 
 function render() {
@@ -5518,7 +5564,7 @@ function bindEvents() {
   });
   on("#agendaDate", "change", () => {
     renderAgenda();
-    refreshActiveViewApi();
+    refreshActiveViewApi({ porAccionDelUsuario: true });
   });
   on("#reportMonth", "change", () => {
     renderReports();
@@ -6697,7 +6743,7 @@ function bindEvents() {
   $("#cashViewDate")?.addEventListener("change", (event) => {
     selectedCashViewDate = event.target.value || "";
     renderPayments();
-    refreshActiveViewApi();
+    refreshActiveViewApi({ porAccionDelUsuario: true });
   });
 
   $("#saveExpenseBtn").addEventListener("click", async () => {
