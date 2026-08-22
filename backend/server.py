@@ -971,22 +971,30 @@ def list_bootstrap_appointments():
             row_to_dict(row)
             for row in conn.execute(
                 """
+                WITH seguimiento_abierto AS (
+                    -- Una falta deja de importar en cuanto el paciente vuelve a
+                    -- atenderse. Si no se descuenta aqui, quien falto en junio y
+                    -- siguio viniendo cada mes se queda en la lista para siempre.
+                    SELECT a.id, a.patient_id
+                    FROM appointments a
+                    WHERE a.status IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')
+                      AND COALESCE(a.follow_up_status, '') <> 'CERRADO'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM appointments b
+                          WHERE b.patient_id = a.patient_id
+                            AND b.status = 'ATENDIDA'
+                            AND (b.date > a.date OR (b.date = a.date AND b.time > a.time))
+                      )
+                )
                 SELECT * FROM appointments
                 WHERE (date BETWEEN ? AND ?)
-                   OR (
-                        status IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')
-                        AND COALESCE(follow_up_status, '') <> 'CERRADO'
-                   )
+                   OR id IN (SELECT id FROM seguimiento_abierto)
                    OR (
                         -- Las citas futuras de quien esta en seguimiento: sin ellas
                         -- el navegador no puede saber que ya se reprogramo y lo deja
                         -- marcado en rojo aunque tenga fecha nueva.
                         date >= ?
-                        AND patient_id IN (
-                            SELECT patient_id FROM appointments
-                            WHERE status IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')
-                              AND COALESCE(follow_up_status, '') <> 'CERRADO'
-                        )
+                        AND patient_id IN (SELECT patient_id FROM seguimiento_abierto)
                    )
                 ORDER BY date DESC, time DESC
                 """,
