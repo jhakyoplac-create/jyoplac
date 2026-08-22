@@ -4939,7 +4939,13 @@ function cashReportRangeForDates(from, to) {
   };
 }
 
-function syncCashTitleRangeInputs() {
+/* El periodo se arma con dos fechas y solo se aplica cuando estan las dos. Entre
+   una y otra hay un momento en que solo hay media respuesta escrita: si un
+   refresco entra justo ahi y limpia los campos, la persona nunca llega a poner
+   la segunda fecha y parece que el sistema no la deja elegir el periodo.
+   Por eso solo se limpia cuando alguien lo pide de verdad -al elegir un mes-,
+   no en cada repintado. */
+function syncCashTitleRangeInputs({ limpiarSiNoHayRango = false } = {}) {
   const fromInput = $("#cashTitleFrom");
   const toInput = $("#cashTitleTo");
   if (!fromInput || !toInput) return;
@@ -4948,6 +4954,7 @@ function syncCashTitleRangeInputs() {
     toInput.value = selectedCashReportRange.to;
     return;
   }
+  if (!limpiarSiNoHayRango) return;
   fromInput.value = "";
   toInput.value = "";
 }
@@ -4970,7 +4977,9 @@ function openCashPeriodDialog() {
 
 function openCashPeriodForMonth(month) {
   selectedCashReportRange = cashReportRangeForMonth(month);
-  syncCashTitleRangeInputs();
+  /* Al elegir un mes si corresponde vaciar las fechas sueltas: son otra forma
+     de pedir el periodo y quedarian contradiciendo al mes elegido. */
+  syncCashTitleRangeInputs({ limpiarSiNoHayRango: true });
   const picker = $("#cashTitleMonthPicker");
   if (picker) picker.value = month;
   const summaryFrom = $("#generalSummaryFrom");
