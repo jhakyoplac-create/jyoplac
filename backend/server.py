@@ -972,14 +972,25 @@ def list_bootstrap_appointments():
             for row in conn.execute(
                 """
                 SELECT * FROM appointments
-                WHERE date BETWEEN ? AND ?
+                WHERE (date BETWEEN ? AND ?)
                    OR (
                         status IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')
                         AND COALESCE(follow_up_status, '') <> 'CERRADO'
                    )
+                   OR (
+                        -- Las citas futuras de quien esta en seguimiento: sin ellas
+                        -- el navegador no puede saber que ya se reprogramo y lo deja
+                        -- marcado en rojo aunque tenga fecha nueva.
+                        date >= ?
+                        AND patient_id IN (
+                            SELECT patient_id FROM appointments
+                            WHERE status IN ('CANCELADA', 'REPROGRAMADA', 'NO_ASISTIO')
+                              AND COALESCE(follow_up_status, '') <> 'CERRADO'
+                        )
+                   )
                 ORDER BY date DESC, time DESC
                 """,
-                (today, next_days),
+                (today, next_days, today),
             ).fetchall()
         ]
 

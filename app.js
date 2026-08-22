@@ -3005,10 +3005,23 @@ function nextAppointmentAfterFollowUp(appointment) {
   return relatedFollowUpAppointments(appointment).find((item) => String(item.status || "").toUpperCase() !== "ATENDIDA") || null;
 }
 
+/* Una cita que se reprograma y vuelve a fallar deja dos filas: la vieja, que ya
+   no aporta nada, y la nueva, que es el caso vivo. Con tres reprogramaciones son
+   tres filas del mismo paciente. Solo interesa la ultima. */
+function haySeguimientoMasReciente(appointment) {
+  return state.appointments.some((item) => {
+    if (item.id === appointment.id || item.patientId !== appointment.patientId) return false;
+    if (appointmentSortKey(item) <= appointmentSortKey(appointment)) return false;
+    if (String(item.followUpStatus || "").toUpperCase() === "CERRADO") return false;
+    return ["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(String(item.status || "").toUpperCase());
+  });
+}
+
 function isFollowUpOpen(appointment) {
   const status = appointmentFollowUpStatus(appointment);
   if (!status || status === "CERRADO") return false;
   if (attendedAfterFollowUp(appointment)) return false;
+  if (haySeguimientoMasReciente(appointment)) return false;
   if (status === "REPROGRAMADO") {
     const next = appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null;
     return !next || next.status !== "ATENDIDA";
