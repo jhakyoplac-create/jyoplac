@@ -151,6 +151,7 @@
             </div>
             <input type="hidden" name="id" />
             <label>DNI<input name="dni" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" required /></label>
+            <p class="muted" id="patientDniLookupHint"></p>
             <label>Nombre completo<input name="name" minlength="5" required /></label>
             <div class="inline-fields patient-contact-row">
               <label class="compact-label">Celular<input name="phone" inputmode="numeric" pattern="9[0-9]{8}" minlength="9" maxlength="9" required /></label>
@@ -383,10 +384,21 @@
       <section id="comprobantes" class="view">
         <section class="panel">
           <div class="panel-head">
-            <h2>Comprobantes internos</h2>
-            <button class="ghost" id="exportReceiptsBtn">CSV</button>
+            <h2>Comprobantes electrónicos</h2>
+            <div class="top-actions">
+              <button class="ghost" id="refreshReceiptsBtn" type="button">Actualizar</button>
+              <button class="ghost" id="exportReceiptsBtn">CSV</button>
+            </div>
           </div>
-          <p class="notice">Primera etapa: registro interno exonerado de IGV. Todavia no envia a SUNAT.</p>
+          <p class="notice" id="sunatStatusNotice">Consultando el estado de la facturación electrónica...</p>
+          <div class="top-actions" id="sunatSummaryBar" hidden>
+            <label>Boletas del día
+              <input type="date" id="sunatSummaryDate" />
+            </label>
+            <button class="ghost" id="sendSunatSummaryBtn" type="button">Enviar resumen a SUNAT</button>
+            <button class="ghost" id="checkSunatSummaryBtn" type="button">Revisar respuesta</button>
+            <span class="muted" id="sunatSummaryHint"></span>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -1182,7 +1194,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20260821-seguimiento"></script>
-    <script src="app.js?v=20260821-seguimiento"></script>
+    <script src="odontograma.js?v=20260825-tildes"></script>
+    <script src="app.js?v=20260824-sunat"></script>
   </body>
 </html>

@@ -146,6 +146,18 @@ const patientAppointmentHistoryLoaded = new Set();
 let selectedCashViewDate = "";
 let selectedProductSaleItems = [];
 let selectedCashReportRange = null;
+/* Lo que el servidor sabe de la facturacion electronica. Vive aparte del estado
+   guardado porque depende del servidor, no de este navegador. */
+let sunatStatus = {
+  configurado: false,
+  modo: "",
+  ruc: "",
+  serieBoleta: "",
+  serieFactura: "",
+  boletasPendientes: 0,
+  resumenesSinRespuesta: 0
+};
+let sunatOcupado = false;
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -471,6 +483,11 @@ function mapApiElectronicReceipt(row) {
     igv: Number(row.igv || 0),
     status: row.status || "BORRADOR",
     notes: row.notes || "",
+    sunatEstado: row.sunat_estado || row.sunatEstado || "",
+    sunatCodigo: row.sunat_codigo || row.sunatCodigo || "",
+    sunatDescripcion: row.sunat_descripcion || row.sunatDescripcion || "",
+    sunatTicket: row.sunat_ticket || row.sunatTicket || "",
+    sunatEnviadoAt: row.sunat_enviado_at || row.sunatEnviadoAt || "",
     createdAt: row.created_at || row.createdAt || ""
   };
 }
@@ -595,6 +612,7 @@ function applyApiBootstrap(payload) {
   state.odontogram = (payload.odontogram || []).map(mapApiOdontogram);
   state.payments = (payload.payments || []).map(mapApiPayment);
   state.electronicReceipts = (payload.electronicReceipts || []).map(mapApiElectronicReceipt);
+  refreshSunatStatus();
   state.expenses = (payload.expenses || []).map(mapApiExpense);
   state.inventoryProducts = (payload.inventoryProducts || []).map(mapApiInventoryProduct);
   state.inventoryMovements = (payload.inventoryMovements || []).map(mapApiInventoryMovement);
@@ -1006,6 +1024,38 @@ async function saveElectronicReceiptApi(receipt) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/electronic-receipts", { method: "POST", body: JSON.stringify(receipt) });
   if (result.id) receipt.id = result.id;
+  // con la facturacion encendida el correlativo lo asigna el servidor
+  if (result.series) receipt.series = result.series;
+  if (Number(result.number) > 0) receipt.number = Number(result.number);
+}
+
+async function refreshSunatStatus() {
+  if (!API_ENABLED || !apiToken) return sunatStatus;
+  try {
+    const estado = await apiFetch("/api/sunat/estado");
+    if (estado) sunatStatus = { ...sunatStatus, ...estado };
+  } catch {
+    // si no se puede preguntar, la pantalla sigue mostrando lo ultimo que supo
+  }
+  return sunatStatus;
+}
+
+async function refreshElectronicReceiptsApi() {
+  if (!API_ENABLED || !apiToken) return;
+  const payload = await apiFetch("/api/electronic-receipts");
+  state.electronicReceipts = (payload.electronicReceipts || []).map(mapApiElectronicReceipt);
+}
+
+async function emitReceiptToSunatApi(id) {
+  return apiFetch("/api/sunat/emitir", { method: "POST", body: JSON.stringify({ id }) });
+}
+
+async function sendSunatSummaryApi(fecha) {
+  return apiFetch("/api/sunat/resumen", { method: "POST", body: JSON.stringify({ fecha }) });
+}
+
+async function checkSunatSummariesApi() {
+  return apiFetch("/api/sunat/revisar", { method: "POST", body: JSON.stringify({}) });
 }
 
 async function deletePaymentApi(id) {
@@ -2415,6 +2465,7 @@ function renderActiveView() {
       break;
     case "comprobantes":
       renderElectronicReceipts();
+      refreshSunatStatus().then(renderElectronicReceipts);
       break;
     case "caja-general":
       renderGeneralCash();
@@ -3385,7 +3436,7 @@ function odontogramPatientList() {
       id: patient.id,
       nombre: patient.name || "Paciente",
       doc: patient.dni || "",
-      edad: edad === null ? "" : `${edad} anios`
+      edad: edad === null ? "" : `${edad} años`
     };
   });
 }
@@ -3502,21 +3553,188 @@ function buildElectronicReceiptFromPayment(payment, formDataValues) {
   };
 }
 
+/* Como se lee cada estado del motor de facturacion. La boleta no se acepta al
+   momento: se firma, y recien el resumen diario le trae la respuesta. */
+const SUNAT_ESTADOS = {
+  ACEPTADO: { texto: "Aceptado por SUNAT", clase: "" },
+  PENDIENTE: { texto: "Firmada, falta el resumen", clase: "warn" },
+  ENVIADO: { texto: "En resumen, esperando respuesta", clase: "warn" },
+  RECHAZADO: { texto: "Rechazado por SUNAT", clase: "danger" },
+  ERROR: { texto: "No llego a SUNAT", clase: "danger" }
+};
+
+function receiptSunatState(receipt) {
+  return String(receipt.sunatEstado || "").toUpperCase();
+}
+
+function receiptSunatBadge(receipt) {
+  const estado = receiptSunatState(receipt);
+  if (!estado) {
+    return sunatStatus.configurado
+      ? `<span class="status warn">Sin enviar</span>`
+      : `<span class="status warn">${escapeHtml(receipt.status || "BORRADOR")}</span>`;
+  }
+  const info = SUNAT_ESTADOS[estado] || { texto: estado, clase: "warn" };
+  const detalle = [
+    receipt.sunatCodigo ? `Codigo ${receipt.sunatCodigo}` : "",
+    receipt.sunatDescripcion || ""
+  ].filter(Boolean).join(" - ");
+  return `<span class="status${info.clase ? ` ${info.clase}` : ""}">${escapeHtml(info.texto)}</span>${detalle ? `<br><span class="muted">${escapeHtml(detalle)}</span>` : ""}`;
+}
+
+function renderSunatPanel() {
+  const notice = $("#sunatStatusNotice");
+  const bar = $("#sunatSummaryBar");
+  if (!notice) return;
+  if (!API_ENABLED || !apiToken) {
+    notice.className = "notice";
+    notice.textContent = "Sin conexion con el servidor: los comprobantes solo quedan en este navegador.";
+    if (bar) bar.hidden = true;
+    return;
+  }
+  if (!sunatStatus.configurado) {
+    notice.className = "notice";
+    notice.textContent = "Registro interno exonerado de IGV. Todavia no envia a SUNAT: falta cargar el certificado y la Clave SOL en el servidor.";
+    if (bar) bar.hidden = true;
+    return;
+  }
+  const enProduccion = sunatStatus.modo === "produccion";
+  notice.className = enProduccion ? "notice subtle" : "notice";
+  const cabecera = enProduccion
+    ? `Emitiendo a SUNAT con el RUC ${sunatStatus.ruc}.`
+    : `MODO PRUEBAS: lo que se emita aqui no tiene valor legal. RUC ${sunatStatus.ruc}.`;
+  notice.textContent = `${cabecera} Boletas ${sunatStatus.serieBoleta}, facturas ${sunatStatus.serieFactura}. Todo exonerado de IGV por la Ley de la Amazonia.`;
+  if (!bar) return;
+  bar.hidden = false;
+  const fecha = $("#sunatSummaryDate");
+  // por defecto el dia anterior, que es el que toca informar
+  if (fecha && !fecha.value) fecha.value = addDaysISO(todayISO(), -1);
+  const hint = $("#sunatSummaryHint");
+  if (hint) {
+    const partes = [];
+    if (sunatStatus.boletasPendientes) partes.push(`${sunatStatus.boletasPendientes} boleta(s) sin informar`);
+    if (sunatStatus.resumenesSinRespuesta) partes.push(`${sunatStatus.resumenesSinRespuesta} resumen(es) esperando respuesta`);
+    hint.textContent = partes.join(" | ") || "Todas las boletas estan informadas.";
+  }
+}
+
 function renderElectronicReceipts() {
+  renderSunatPanel();
   const table = $("#electronicReceiptsTable");
   if (!table) return;
   const rows = state.electronicReceipts
     .slice()
     .sort((a, b) => `${b.issueDate || ""}${b.createdAt || ""}`.localeCompare(`${a.issueDate || ""}${a.createdAt || ""}`));
-  table.innerHTML = rows.map((receipt) => `<tr>
+  table.innerHTML = rows.map((receipt) => {
+    const estado = receiptSunatState(receipt);
+    /* Un rechazo no se reintenta: ese numero ya se quemo y hay que emitir otro
+       comprobante corregido. Solo se reenvia lo que nunca llego. */
+    const puedeEnviar = sunatStatus.configurado && (!estado || estado === "ERROR");
+    return `<tr>
     <td>${formatDate(receipt.issueDate)}</td>
     <td><strong>${escapeHtml(receiptFullNumber(receipt))}</strong><br><span class="muted">${escapeHtml(receipt.type)}</span></td>
     <td>${escapeHtml(receipt.customerName)}<br><span class="muted">${escapeHtml(receipt.customerDocType)} ${escapeHtml(receipt.customerDoc)}</span></td>
     <td>${escapeHtml(receipt.description)}<br><span class="muted">${escapeHtml(receipt.taxCondition)} | IGV ${money(receipt.igv)}</span></td>
     <td><strong>${money(receipt.total)}</strong></td>
-    <td><span class="status warn">${escapeHtml(receipt.status)}</span></td>
-    <td><button class="small-btn" data-print-receipt="${receipt.id}">PDF</button></td>
-  </tr>`).join("") || `<tr><td colspan="7">Aun no hay comprobantes internos.</td></tr>`;
+    <td>${receiptSunatBadge(receipt)}</td>
+    <td><button class="small-btn" data-print-receipt="${receipt.id}">PDF</button>${puedeEnviar ? ` <button class="small-btn" data-send-sunat="${receipt.id}">${estado === "ERROR" ? "Reintentar" : "Enviar a SUNAT"}</button>` : ""}</td>
+  </tr>`;
+  }).join("") || `<tr><td colspan="7">Aun no hay comprobantes emitidos.</td></tr>`;
+}
+
+/* Manda el comprobante a SUNAT. La factura se acepta o se rechaza al momento;
+   la boleta queda firmada y sale despues en el resumen diario. */
+async function enviarComprobanteASunat(receipt, { avisar = false } = {}) {
+  if (!API_ENABLED || !apiToken) return null;
+  if (!sunatStatus.configurado) await refreshSunatStatus();
+  if (!sunatStatus.configurado) return null;
+  try {
+    const result = await emitReceiptToSunatApi(receipt.id);
+    receipt.series = result.serie || receipt.series;
+    receipt.number = Number(result.numero || receipt.number || 0);
+    receipt.sunatEstado = result.estado || "";
+    receipt.sunatCodigo = result.codigo || "";
+    receipt.sunatDescripcion = result.descripcion || "";
+    upsert(state.electronicReceipts, receipt);
+    if (avisar && receipt.sunatEstado === "RECHAZADO") {
+      alert(`SUNAT rechazo ${receiptFullNumber(receipt)}:\n${receipt.sunatDescripcion || "sin detalle"}`);
+    }
+    return result;
+  } catch (error) {
+    /* El pago y el comprobante ya quedaron guardados: solo falto el envio, y
+       desde esta misma pantalla se puede reintentar. */
+    receipt.sunatEstado = "ERROR";
+    receipt.sunatDescripcion = error.message || "No se pudo enviar a SUNAT.";
+    upsert(state.electronicReceipts, receipt);
+    if (avisar) alert(`El pago quedo guardado, pero SUNAT no recibio el comprobante:\n${error.message}`);
+    return null;
+  }
+}
+
+async function reintentarComprobanteSunat(id) {
+  if (sunatOcupado) return;
+  const receipt = state.electronicReceipts.find((item) => item.id === id);
+  if (!receipt) return;
+  sunatOcupado = true;
+  try {
+    const result = await enviarComprobanteASunat(receipt, { avisar: true });
+    if (result) {
+      await refreshSunatStatus();
+      if (result.estado === "ACEPTADO") alert(`SUNAT acepto ${receiptFullNumber(receipt)}.`);
+      if (result.estado === "PENDIENTE") alert(`${receiptFullNumber(receipt)} quedo firmada. Se informa en el resumen diario.`);
+    }
+  } finally {
+    sunatOcupado = false;
+    renderElectronicReceipts();
+  }
+}
+
+async function enviarResumenDiarioDeBoletas() {
+  if (sunatOcupado) return;
+  const fecha = $("#sunatSummaryDate")?.value || "";
+  if (!fecha) {
+    alert("Elige la fecha de las boletas que vas a informar.");
+    return;
+  }
+  if (!confirm(`Se informaran a SUNAT las boletas del ${formatDate(fecha)}. Continuar?`)) return;
+  sunatOcupado = true;
+  try {
+    const result = await sendSunatSummaryApi(fecha);
+    if (!result.enviado) alert(result.motivo || "No habia boletas pendientes de esa fecha.");
+    else alert(`Resumen ${result.resumen} enviado con ${result.boletas} boleta(s). SUNAT responde en unos minutos: usa "Revisar respuesta".`);
+    await refreshElectronicReceiptsApi();
+    await refreshSunatStatus();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    sunatOcupado = false;
+    renderElectronicReceipts();
+  }
+}
+
+async function revisarResumenesSunat() {
+  if (sunatOcupado) return;
+  sunatOcupado = true;
+  try {
+    const result = await checkSunatSummariesApi();
+    const revisados = result.revisados || [];
+    if (!revisados.length) alert("No hay resumenes esperando respuesta.");
+    else {
+      const detalle = revisados.map((item) => {
+        if (item.error) return `${item.ticket}: ${item.error}`;
+        if (!item.listo) return `${item.ticket}: SUNAT todavia lo esta procesando.`;
+        return `${item.ticket}: ${item.estado}${item.descripcion ? ` - ${item.descripcion}` : ""}`;
+      }).join("\n");
+      alert(detalle);
+    }
+    await refreshElectronicReceiptsApi();
+    await refreshSunatStatus();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    sunatOcupado = false;
+    renderElectronicReceipts();
+  }
 }
 
 function numberToSpanish(value) {
@@ -3634,9 +3852,16 @@ function printElectronicReceipt(id) {
           </tbody></table>
         </div>
       </div>`;
-  const note = isInvoice
-    ? "Esta es una representacion interna con formato referencial de factura electronica. Pendiente de envio y validacion real en SUNAT."
-    : "Esta es una representacion interna con formato referencial de Boleta de Venta Electronica. Pendiente de envio y validacion real en SUNAT.";
+  /* La leyenda cambia segun lo que SUNAT ya respondio: mientras no se emita de
+     verdad, el papel tiene que decir que es solo un registro interno. */
+  const nombreDocumento = isInvoice ? "Factura Electronica" : "Boleta de Venta Electronica";
+  const estadoSunat = receiptSunatState(receipt);
+  let note = `Esta es una representacion interna con formato referencial de ${nombreDocumento}. Pendiente de envio y validacion real en SUNAT.`;
+  if (estadoSunat === "ACEPTADO") {
+    note = `Representacion impresa de la ${nombreDocumento}. Aceptada por SUNAT; puedes consultarla en su portal.`;
+  } else if (estadoSunat === "PENDIENTE" || estadoSunat === "ENVIADO") {
+    note = `Representacion impresa de la ${nombreDocumento}. Firmada y declarada a SUNAT en el resumen diario.`;
+  }
 
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(receiptFullNumber(receipt))}</title>
   <style>
@@ -3949,6 +4174,7 @@ async function completePendingPayment(receiptValues = null) {
         upsert(state.electronicReceipts, receipt);
         payment.receipt = receiptFullNumber(receipt);
         await savePaymentApi(payment);
+        await enviarComprobanteASunat(receipt, { avisar: true });
       }
     }
     if (!optimisticSave) applyPaymentLocally();
@@ -5467,6 +5693,11 @@ function bindEvents() {
       printElectronicReceipt(printReceipt.dataset.printReceipt);
       return;
     }
+    const sendSunat = event.target.closest("[data-send-sunat]");
+    if (sendSunat) {
+      reintentarComprobanteSunat(sendSunat.dataset.sendSunat);
+      return;
+    }
     const openReceptionRegistry = event.target.closest("#openReceptionPatientsBtn");
     if (openReceptionRegistry) {
       openReceptionPatientsModal();
@@ -5584,6 +5815,35 @@ function bindEvents() {
     if (currentView === "cuentas-cobrar") renderReceivables();
     else renderPatients();
   });
+  /* Buscar el nombre por DNI sin que nadie pulse nada. La consulta ya existia
+     -y el servidor tambien- pero nada la llamaba: quedo escrita esperando un
+     boton que nunca se puso en la pantalla.
+
+     Se dispara al completar los ocho digitos y tambien al salir del campo,
+     porque en el celular el numero se pega de un tiron y el evento de tecla no
+     siempre llega. No se repite la consulta del mismo DNI, y nunca pisa un
+     nombre ya escrito: en recepcion se corrigen tildes y el orden de los
+     apellidos, y perder esa correccion molesta mas de lo que ayuda. */
+  let ultimoDniConsultado = "";
+  async function autocompletarPacientePorDni() {
+    const form = $("#patientForm");
+    const dniField = form?.elements.namedItem("dni");
+    const nameField = form?.elements.namedItem("name");
+    if (!dniField || !nameField) return;
+    const numero = onlyDigits(dniField.value);
+    if (numero.length !== 8 || numero === ultimoDniConsultado) return;
+    if (String(nameField.value || "").trim()) return;
+    ultimoDniConsultado = numero;
+    await lookupPatientDni();
+  }
+  on('#patientForm input[name="dni"]', "input", autocompletarPacientePorDni);
+  on('#patientForm input[name="dni"]', "blur", autocompletarPacientePorDni);
+  on("#patientForm", "reset", () => {
+    ultimoDniConsultado = "";
+    const hint = $("#patientDniLookupHint");
+    if (hint) hint.textContent = "";
+  });
+
   on("#agendaDate", "change", () => {
     renderAgenda();
     refreshActiveViewApi({ porAccionDelUsuario: true });
@@ -7466,9 +7726,22 @@ function bindEvents() {
       condicion: receipt.taxCondition,
       igv: receipt.igv,
       total: receipt.total,
-      estado: receipt.status
+      estado: receipt.status,
+      estado_sunat: receipt.sunatEstado || "",
+      respuesta_sunat: receipt.sunatDescripcion || ""
     })));
   });
+  $("#refreshReceiptsBtn")?.addEventListener("click", async () => {
+    try {
+      await refreshElectronicReceiptsApi();
+      await refreshSunatStatus();
+    } catch (error) {
+      alert(error.message);
+    }
+    renderElectronicReceipts();
+  });
+  $("#sendSunatSummaryBtn")?.addEventListener("click", enviarResumenDiarioDeBoletas);
+  $("#checkSunatSummaryBtn")?.addEventListener("click", revisarResumenesSunat);
   /* Al cambiar el ancho de la ventana cambia el espacio de cada tarjeta, asi
      que las cifras se vuelven a medir. */
   let recalculoDeCifras = null;

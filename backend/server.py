@@ -17,6 +17,7 @@ import threading
 import time
 import uuid
 
+import documentos_publicos
 from sunat import config as sunat_config
 from sunat import emision as sunat_emision
 
@@ -48,7 +49,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
 TOKEN_SECRET = os.environ.get("TOKEN_SECRET") or os.environ.get("ADMIN_PASSWORD", "cm-odontologia-local-secret")
 LIONAPI_KEY = os.environ.get("LIONAPI_KEY", "").strip()
-LIONAPI_BASE_URL = os.environ.get("LIONAPI_BASE_URL", "https://www.softwarelion.pe/api/lion-api/v1").rstrip("/")
+LIONAPI_BASE_URL = os.environ.get("LIONAPI_BASE_URL", "").rstrip("/")
 LIONAPI_DNI_URL = os.environ.get("LIONAPI_DNI_URL", "").strip()
 LIONAPI_RUC_URL = os.environ.get("LIONAPI_RUC_URL", "").strip()
 
@@ -535,27 +536,23 @@ def lionapi_url(template, number):
 
 
 def lionapi_candidates(kind):
-    if kind == "dni":
-        templates = [
-            LIONAPI_DNI_URL,
-            f"{LIONAPI_BASE_URL}/dni/{{numero}}",
-            f"{LIONAPI_BASE_URL}/dni?numero={{numero}}",
-            f"{LIONAPI_BASE_URL}/consulta/dni/{{numero}}",
-            f"{LIONAPI_BASE_URL}/consulta/dni?numero={{numero}}",
-            f"{LIONAPI_BASE_URL}/consultar/dni/{{numero}}",
-            f"{LIONAPI_BASE_URL}/persona/dni/{{numero}}",
-            f"{LIONAPI_BASE_URL}/reniec/dni/{{numero}}",
-        ]
-    else:
-        templates = [
-            LIONAPI_RUC_URL,
-            f"{LIONAPI_BASE_URL}/ruc/{{numero}}",
-            f"{LIONAPI_BASE_URL}/ruc?numero={{numero}}",
-            f"{LIONAPI_BASE_URL}/consulta/ruc/{{numero}}",
-            f"{LIONAPI_BASE_URL}/consulta/ruc?numero={{numero}}",
-            f"{LIONAPI_BASE_URL}/consultar/ruc/{{numero}}",
-            f"{LIONAPI_BASE_URL}/empresa/ruc/{{numero}}",
-            f"{LIONAPI_BASE_URL}/sunat/ruc/{{numero}}",
+    """Direcciones a probar, en orden.
+
+    Antes se tanteaban siete rutas de softwarelion.pe por si acertaba alguna.
+    Ese proveedor quedo atras y su respuesta de "clave vencida" tapaba el error
+    de verdad del proveedor nuevo, que es lo unico que ayuda a arreglarlo. Solo
+    se prueba lo que el consultorio configuro; las rutas a tanteo vuelven solo
+    si alguien pone LIONAPI_BASE_URL a mano.
+    """
+    directo = LIONAPI_DNI_URL if kind == "dni" else LIONAPI_RUC_URL
+    templates = [directo]
+    if LIONAPI_BASE_URL:
+        parte = "dni" if kind == "dni" else "ruc"
+        templates += [
+            f"{LIONAPI_BASE_URL}/{parte}/{{numero}}",
+            f"{LIONAPI_BASE_URL}/{parte}?numero={{numero}}",
+            f"{LIONAPI_BASE_URL}/consulta/{parte}/{{numero}}",
+            f"{LIONAPI_BASE_URL}/consultar/{parte}/{{numero}}",
         ]
 
     seen = set()
@@ -687,6 +684,27 @@ def lionapi_lookup(kind, number):
 def list_table(table, order="created_at DESC"):
     with db() as conn:
         return [row_to_dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()]
+
+
+# El XML firmado y el CDR pesan cientos de kilobytes cada uno y no se muestran
+# en pantalla: se quedan guardados y al navegador solo viaja lo que la lista
+# necesita, para no gastar datos del consultorio en cada carga.
+COLUMNAS_COMPROBANTE = (
+    "id, payment_id, patient_id, type, series, number, issue_date, "
+    "customer_doc_type, customer_doc, customer_name, customer_address, description, "
+    "quantity, unit_value, total, tax_condition, igv, status, notes, created_at, "
+    "updated_at, sunat_estado, sunat_codigo, sunat_descripcion, sunat_ticket, "
+    "sunat_nombre, sunat_notas, sunat_enviado_at"
+)
+
+
+def list_electronic_receipts():
+    with db() as conn:
+        filas = conn.execute(
+            f"SELECT {COLUMNAS_COMPROBANTE} FROM electronic_receipts "
+            "ORDER BY issue_date DESC, created_at DESC"
+        ).fetchall()
+    return [row_to_dict(fila) for fila in filas]
 
 
 def valid_iso_date(value):
@@ -1140,6 +1158,23 @@ class DentalHandler(SimpleHTTPRequestHandler):
             database = "postgresql" if USE_POSTGRES else str(DB_PATH)
             return send_json(self, {"ok": True, "database": database})
 
+        if parsed.path == "/api/publico/documento":
+            # Puente para los sistemas de EmpresaFacil, que no tienen usuario
+            # aqui. Va antes de require_auth a proposito y por eso esta acotado
+            # por origen y por numero de consultas; no toca la base de datos.
+            origen = (self.headers.get("Origin") or "").strip()
+            if not documentos_publicos.origen_permitido(origen):
+                return send_json(self, {"error": "Origen no autorizado."}, 403)
+            payload, estado = documentos_publicos.consultar((params.get("doc") or [""])[0])
+            cuerpo = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(estado)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.send_header("Access-Control-Allow-Origin", origen)
+            self.send_header("Vary", "Origin")
+            self.end_headers()
+            return self.wfile.write(cuerpo)
+
         user = require_auth(self)
         if not user:
             return
@@ -1167,7 +1202,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "treatments": list_table("treatments", "created_at DESC"),
                 "odontogram": list_table("odontogram", "patient_id ASC, tooth ASC"),
                 "payments": list_table("payments", "date DESC, created_at DESC"),
-                "electronicReceipts": list_table("electronic_receipts", "issue_date DESC, created_at DESC"),
+                "electronicReceipts": list_electronic_receipts(),
                 "expenses": list_table("expenses", "date DESC, created_at DESC"),
                 "inventoryProducts": list_table("inventory_products", "name ASC"),
                 "inventoryMovements": list_table("inventory_movements", "date DESC, created_at DESC"),
@@ -1196,7 +1231,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/payments":
             return send_json(self, {"payments": list_table_by_date("payments", "date DESC, created_at DESC", "date", params)})
         if parsed.path == "/api/electronic-receipts":
-            return send_json(self, {"electronicReceipts": list_table("electronic_receipts", "issue_date DESC, created_at DESC")})
+            return send_json(self, {"electronicReceipts": list_electronic_receipts()})
         if parsed.path == "/api/expenses":
             return send_json(self, {"expenses": list_table_by_date("expenses", "date DESC, created_at DESC", "date", params)})
         if parsed.path == "/api/inventory-products":
@@ -1992,8 +2027,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
             receipt_type = str(data.get("type") or "").upper()
             if receipt_type not in {"BOLETA", "FACTURA"}:
                 return send_json(self, {"error": "Selecciona boleta o factura."}, 400)
-            series = str(data.get("series") or "").strip().upper()
-            number = int(data.get("number") or 0)
+            # Con la facturacion electronica encendida la serie y el correlativo
+            # los pone la base de datos, no el navegador: dos personas cobrando a
+            # la vez no pueden tomar el mismo numero, y SUNAT no perdona duplicados.
+            emite_a_sunat = sunat_config.configurado()
+            if emite_a_sunat:
+                series = sunat_config.serie_de(receipt_type).upper()
+                number = 0
+            else:
+                series = str(data.get("series") or "").strip().upper()
+                number = int(data.get("number") or 0)
             customer_doc = str(data.get("customerDoc") or "").strip()
             customer_doc_type = str(data.get("customerDocType") or ("RUC" if receipt_type == "FACTURA" else "DNI")).strip().upper()
             customer_name = str(data.get("customerName") or "").strip()
@@ -2001,7 +2044,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"error": "La factura requiere RUC de 11 digitos."}, 400)
             if receipt_type == "BOLETA" and not customer_doc:
                 return send_json(self, {"error": "La boleta requiere documento del paciente."}, 400)
-            if not series or number <= 0:
+            if not emite_a_sunat and (not series or number <= 0):
                 return send_json(self, {"error": "Serie y correlativo obligatorios."}, 400)
             if not customer_name:
                 return send_json(self, {"error": "Nombre o razon social obligatoria."}, 400)
@@ -2009,6 +2052,18 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 patient = conn.execute("SELECT id FROM patients WHERE id = ?", (data.get("patientId"),)).fetchone()
                 if not patient:
                     return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                if emite_a_sunat:
+                    # si el comprobante ya tenia numero se respeta: reservar otro
+                    # dejaria un hueco en la serie que SUNAT despues reclama
+                    previo = conn.execute(
+                        "SELECT series, number FROM electronic_receipts WHERE id = ?",
+                        (item_id,),
+                    ).fetchone()
+                    if previo and int(previo["number"] or 0) > 0:
+                        series = str(previo["series"] or series).upper()
+                        number = int(previo["number"])
+                    else:
+                        number = sunat_emision.reservar_numero(conn, series)
                 try:
                     conn.execute(
                         """
@@ -2066,7 +2121,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
                         return send_json(self, {"error": "Ese numero de comprobante ya existe."}, 400)
                     raise
-            return send_json(self, {"ok": True, "id": item_id})
+            return send_json(self, {"ok": True, "id": item_id, "series": series, "number": number})
 
         # ---------- Facturacion electronica ante SUNAT ----------
         if parsed.path == "/api/sunat/emitir":
