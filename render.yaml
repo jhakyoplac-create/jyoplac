@@ -2,7 +2,12 @@ services:
   - type: web
     name: cm-odontologia-sistema
     env: python
-    plan: free
+    # El servicio corre en Starter y aqui decia free. Mientras nadie tocaba
+    # este archivo daba igual, pero cualquier cambio sincroniza el blueprint y
+    # le aplica lo que diga: al declarar las variables de DNI le bajo el plan
+    # solo. En el gratuito el servicio se apaga por inactividad y tarda casi un
+    # minuto en despertar, y la clinica abre a primera hora.
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: python backend/server.py
     envVars:
