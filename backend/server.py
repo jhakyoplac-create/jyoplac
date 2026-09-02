@@ -17,7 +17,6 @@ import threading
 import time
 import uuid
 
-import documentos_publicos
 from sunat import config as sunat_config
 from sunat import emision as sunat_emision
 
@@ -1174,23 +1173,6 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/health":
             database = "postgresql" if USE_POSTGRES else str(DB_PATH)
             return send_json(self, {"ok": True, "database": database})
-
-        if parsed.path == "/api/publico/documento":
-            # Puente para los sistemas de EmpresaFacil, que no tienen usuario
-            # aqui. Va antes de require_auth a proposito y por eso esta acotado
-            # por origen y por numero de consultas; no toca la base de datos.
-            origen = (self.headers.get("Origin") or "").strip()
-            if not documentos_publicos.origen_permitido(origen):
-                return send_json(self, {"error": "Origen no autorizado."}, 403)
-            payload, estado = documentos_publicos.consultar((params.get("doc") or [""])[0])
-            cuerpo = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            self.send_response(estado)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(cuerpo)))
-            self.send_header("Access-Control-Allow-Origin", origen)
-            self.send_header("Vary", "Origin")
-            self.end_headers()
-            return self.wfile.write(cuerpo)
 
         user = require_auth(self)
         if not user:
