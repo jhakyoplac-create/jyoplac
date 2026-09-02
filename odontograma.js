@@ -116,8 +116,8 @@
   ];
 
   var SIGLAS_BOX = [
-    ["DES", "Desgaste oclusal/incisal"], ["DIS", "Diente discromico"],
-    ["E", "Diente ectopico"], ["I", "Impactacion"], ["SI", "Semi-impactacion"],
+    ["DES", "Desgaste oclusal/incisal"], ["DIS", "Diente discrómico"],
+    ["E", "Diente ectópico"], ["I", "Impactación"], ["SI", "Semi-impactación"],
     ["IMP", "Implante"], ["MAC", "Macrodoncia"], ["MIC", "Microdoncia"],
     ["M1", "Movilidad grado 1"], ["M2", "Movilidad grado 2"], ["M3", "Movilidad grado 3"]
   ];
@@ -125,10 +125,10 @@
   var TOOLS = [
     { cat: "sup", k: "caries", n: "Caries", c: "rojo",
       hint: "Clic en la cara comprometida: se pinta totalmente de rojo. La palatina y la lingual se marcan en el cuadro de caras." },
-    { cat: "sup", k: "restauracion", n: "Restauracion", c: "azul", sig: ["AM", "R", "IV", "IM", "IE"],
+    { cat: "sup", k: "restauracion", n: "Restauración", c: "azul", sig: ["AM", "R", "IV", "IM", "IE"],
       hint: "Se pinta de azul la cara y la sigla del material va al recuadro." },
-    { cat: "sup", k: "rest_temp", n: "Restauracion temporal", c: "rojo", borde: true,
-      hint: "Solo el contorno de la restauracion, en rojo." },
+    { cat: "sup", k: "rest_temp", n: "Restauración temporal", c: "rojo", borde: true,
+      hint: "Solo el contorno de la restauración, en rojo." },
     { cat: "sup", k: "borrar_sup", n: "Borrar cara", c: "", hint: "Quita el hallazgo de esa cara." },
 
     { cat: "pieza", k: "ausente", n: "Ausente", c: "azul", hint: "Aspa azul sobre la figura de la pieza." },
@@ -137,41 +137,41 @@
       hint: "Circunferencia azul que encierra la corona. El color del metal va en especificaciones." },
     { cat: "pieza", k: "corona_tmp", n: "Corona temporal", c: "rojo", hint: "Circunferencia roja sobre la corona." },
     { cat: "pieza", k: "pulpar", n: "Tratamiento pulpar", c: "azul", sig: ["TC", "PC", "PP"],
-      hint: "Linea vertical azul sobre la raiz + sigla del tratamiento." },
-    { cat: "pieza", k: "fractura", n: "Fractura", c: "rojo", hint: "Linea roja en el sentido de la fractura." },
-    { cat: "pieza", k: "rr", n: "Remanente radicular", c: "rojo", hint: "Letras RR en rojo sobre la raiz." },
+      hint: "Línea vertical azul sobre la raíz + sigla del tratamiento." },
+    { cat: "pieza", k: "fractura", n: "Fractura", c: "rojo", hint: "Línea roja en el sentido de la fractura." },
+    { cat: "pieza", k: "rr", n: "Remanente radicular", c: "rojo", hint: "Letras RR en rojo sobre la raíz." },
     { cat: "pieza", k: "extruido", n: "Extruido", c: "azul", hint: "Flecha azul hacia el plano oclusal." },
-    { cat: "pieza", k: "intruido", n: "Intruido", c: "azul", hint: "Flecha vertical azul hacia el apice." },
-    { cat: "pieza", k: "giroversion", n: "Giroversion", c: "azul", sig: ["horaria", "antihoraria"],
-      hint: "Flecha curva azul siguiendo el sentido de la rotacion." },
-    { cat: "pieza", k: "migracion", n: "Migracion", c: "azul", sig: ["mesial", "distal"],
+    { cat: "pieza", k: "intruido", n: "Intruido", c: "azul", hint: "Flecha vertical azul hacia el ápice." },
+    { cat: "pieza", k: "giroversion", n: "Giroversión", c: "azul", sig: ["horaria", "antihoraria"],
+      hint: "Flecha curva azul siguiendo el sentido de la rotación." },
+    { cat: "pieza", k: "migracion", n: "Migración", c: "azul", sig: ["mesial", "distal"],
       hint: "Flecha recta horizontal azul en el sentido del desplazamiento." },
     { cat: "pieza", k: "clavija", n: "Diente en clavija", c: "azul",
-      hint: "Triangulo azul circunscribiendo el numero de la pieza." },
+      hint: "Triángulo azul circunscribiendo el número de la pieza." },
     { cat: "pieza", k: "limpiar", n: "Limpiar pieza", c: "", hint: "Borra todos los hallazgos de la pieza." },
 
-    { cat: "span", k: "protesis_fija", n: "Protesis fija", c: "azul", malo: true,
-      hint: "Clic en el pilar inicial y luego en el final: linea con verticales sobre los pilares." },
-    { cat: "span", k: "protesis_rem", n: "Protesis removible", c: "azul", malo: true,
-      hint: "Dos lineas paralelas a nivel de los apices. El material va en especificaciones." },
+    { cat: "span", k: "protesis_fija", n: "Prótesis fija", c: "azul", malo: true,
+      hint: "Clic en el pilar inicial y luego en el final: línea con verticales sobre los pilares." },
+    { cat: "span", k: "protesis_rem", n: "Prótesis removible", c: "azul", malo: true,
+      hint: "Dos líneas paralelas a nivel de los ápices. El material va en especificaciones." },
     { cat: "span", k: "orto_fija", n: "Ortodoncia fija", c: "azul", malo: true,
-      hint: "Cuadrados con cruz en los extremos unidos por una linea." },
+      hint: "Cuadrados con cruz en los extremos unidos por una línea." },
     { cat: "span", k: "orto_rem", n: "Ortodoncia removible", c: "azul", malo: true,
-      hint: "Linea en zig-zag a la altura de los apices del maxilar en tratamiento." },
+      hint: "Línea en zig-zag a la altura de los ápices del maxilar en tratamiento." },
     { cat: "span", k: "diastema", n: "Diastema", c: "azul", vecinas: true,
-      hint: "Parentesis invertido entre dos piezas correlativas." },
+      hint: "Paréntesis invertido entre dos piezas correlativas." },
     { cat: "span", k: "supernumerario", n: "Supernumerario", c: "azul", vecinas: true,
-      hint: "Letra S en una circunferencia, entre los apices de las piezas adyacentes." },
-    { cat: "span", k: "transposicion", n: "Transposicion", c: "azul",
-      hint: "Dos flechas curvas entrecruzadas a la altura de los numeros." },
-    { cat: "span", k: "geminacion", n: "Geminacion / fusion", c: "azul",
-      hint: "Dos circunferencias interceptadas encerrando los numeros." },
+      hint: "Letra S en una circunferencia, entre los ápices de las piezas adyacentes." },
+    { cat: "span", k: "transposicion", n: "Transposición", c: "azul",
+      hint: "Dos flechas curvas entrecruzadas a la altura de los números." },
+    { cat: "span", k: "geminacion", n: "Geminación / fusión", c: "azul",
+      hint: "Dos circunferencias interceptadas encerrando los números." },
     { cat: "span", k: "borrar_span", n: "Borrar trazo", c: "", hint: "Clic sobre una de las dos piezas del trazo." },
 
-    { cat: "arco", k: "edentulo", n: "Edentulo total", c: "azul",
-      hint: "Linea horizontal azul sobre las coronas de las piezas ausentes del maxilar." },
-    { cat: "arco", k: "protesis_total", n: "Protesis total", c: "azul", malo: true,
-      hint: "Dos lineas paralelas sobre las coronas del maxilar." },
+    { cat: "arco", k: "edentulo", n: "Edéntulo total", c: "azul",
+      hint: "Línea horizontal azul sobre las coronas de las piezas ausentes del maxilar." },
+    { cat: "arco", k: "protesis_total", n: "Prótesis total", c: "azul", malo: true,
+      hint: "Dos líneas paralelas sobre las coronas del maxilar." },
     { cat: "arco", k: "borrar_arco", n: "Quitar", c: "", hint: "Quita el trazo del maxilar." }
   ];
 
@@ -614,7 +614,7 @@
       }).join("");
       return '<svg viewBox="-64 -16 228 148" class="odo-guia-svg">' + caja + texto + "</svg>" +
         "<p>El cuadro es la corona vista desde arriba. La cara palatina o lingual " +
-        "queda detras del diente, por eso solo se puede marcar ahi. " +
+        "queda detrás del diente, por eso solo se puede marcar ahí. " +
         "La mesial siempre mira hacia el centro de la boca.</p>";
     }
 
@@ -625,7 +625,7 @@
         '<div class="odo-res" hidden></div>' +
         '<div class="odo-ficha"></div>' +
         '<select class="odo-hoja"><option value="inicial">Odontograma inicial</option>' +
-        '<option value="evolucion">Odontograma de evolucion</option></select>' +
+        '<option value="evolucion">Odontograma de evolución</option></select>' +
         '<button type="button" class="odo-btn odo-imprimir">Imprimir</button></div>'
         : "";
       if (cabecera) cabecera.innerHTML = buscador;
@@ -654,11 +654,11 @@
         '<h4>Hallazgos <small class="odo-cuenta"></small></h4>' +
         '<div class="odo-body"><ul class="odo-lista"></ul></div>' +
         '<h4>Especificaciones</h4><div class="odo-body">' +
-        '<textarea class="odo-esp" rows="3" placeholder="Hallazgos que no pueden registrarse graficamente, piezas con mas de una anomalia, color del metal, tipo de aparatologia o material."></textarea>' +
+        '<textarea class="odo-esp" rows="3" placeholder="Hallazgos que no pueden registrarse gráficamente, piezas con más de una anomalía, color del metal, tipo de aparatología o material."></textarea>' +
         '<p class="odo-aviso"></p></div>' +
-        '<h4>Como se lee</h4><div class="odo-body odo-ley">' +
+        '<h4>Cómo se lee</h4><div class="odo-body odo-ley">' +
         '<span class="odo-az">Azul</span>: tratamiento en buen estado.<br>' +
-        '<span class="odo-ro">Rojo</span>: patologia, mal estado o temporal.' +
+        '<span class="odo-ro">Rojo</span>: patología, mal estado o temporal.' +
         '<div class="odo-guia">' + guiaCarasHtml() + "</div>" +
         "</div></div></div>";
     }
@@ -710,7 +710,7 @@
       // la norma pide detallar en especificaciones las piezas con mas de una anomalia
       var multi = PIEZAS.filter(function (t) { return describir(t).length > 1; });
       lienzo.querySelector(".odo-aviso").innerHTML = multi.length
-        ? "La norma pide detallar aqui las piezas con mas de una anomalia: <b>" + multi.join(", ") + "</b>."
+        ? "La norma pide detallar aquí las piezas con más de una anomalía: <b>" + multi.join(", ") + "</b>."
         : "";
       var esp = lienzo.querySelector(".odo-esp");
       if (document.activeElement !== esp) esp.value = ficha.esp || "";
@@ -949,7 +949,7 @@
         hojasDeLaPagina() +
         "<style>" + estilosImpresion() + "</style></head><body>" +
         '<div class="cab"><div><h2>Odontograma ' + (hoja === "inicial" ? "inicial" : "de evolucion") + "</h2>" +
-        "<p>Ficha estomatologica &mdash; Norma Tecnica del Odontograma (MINSA)</p></div>" +
+        "<p>Ficha estomatológica &mdash; Norma Técnica del Odontograma (MINSA)</p></div>" +
         '<div style="text-align:right"><p><b>Fecha:</b> ' + fecha + "</p>" +
         (opts.tituloClinica ? "<p><b>" + esc(opts.tituloClinica) + "</b></p>" : "") + "</div></div>" +
         '<div class="grid"><div><i>Paciente</i><br><b>' + esc(p.nombre || "") + "</b></div>" +
