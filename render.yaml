@@ -12,3 +12,13 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
+      # Consulta de DNI y RUC. "sync: false" significa que el valor se escribe
+      # en el panel de Render y no aqui: la clave es del consultorio y no tiene
+      # por que estar en el repositorio. Declararlas igual evita que una
+      # sincronizacion del blueprint las borre por no conocerlas.
+      - key: DOC_LOOKUP_KEY
+        sync: false
+      - key: DOC_LOOKUP_DNI_URL
+        sync: false
+      - key: DOC_LOOKUP_RUC_URL
+        sync: false
