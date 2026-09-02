@@ -48,10 +48,12 @@ DOCTOR_SESSION_SECONDS = int(os.environ.get("DOCTOR_SESSION_SECONDS", 60 * 60 * 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
 TOKEN_SECRET = os.environ.get("TOKEN_SECRET") or os.environ.get("ADMIN_PASSWORD", "cm-odontologia-local-secret")
-LIONAPI_KEY = os.environ.get("LIONAPI_KEY", "").strip()
-LIONAPI_BASE_URL = os.environ.get("LIONAPI_BASE_URL", "").rstrip("/")
-LIONAPI_DNI_URL = os.environ.get("LIONAPI_DNI_URL", "").strip()
-LIONAPI_RUC_URL = os.environ.get("LIONAPI_RUC_URL", "").strip()
+# La consulta de DNI y RUC se le compra a un proveedor y el proveedor cambia:
+# ya se cambio una vez. Por eso las variables no llevan su nombre.
+DOC_LOOKUP_KEY = os.environ.get("DOC_LOOKUP_KEY", "").strip()
+DOC_LOOKUP_BASE_URL = os.environ.get("DOC_LOOKUP_BASE_URL", "").strip().rstrip("/")
+DOC_LOOKUP_DNI_URL = os.environ.get("DOC_LOOKUP_DNI_URL", "").strip()
+DOC_LOOKUP_RUC_URL = os.environ.get("DOC_LOOKUP_RUC_URL", "").strip()
 
 sessions = {}
 
@@ -525,34 +527,39 @@ def first_value(data, keys):
     return ""
 
 
-def lionapi_url(template, number):
+def documento_url(template, number):
+    """Arma la direccion final metiendo el numero donde diga la plantilla.
+
+    Se aceptan las tres formas de marcar el hueco -{numero}, {number} y {doc}-
+    porque la misma direccion del proveedor se copia entre sistemas y cada uno
+    la escribio a su manera. Si no hay hueco, el numero va como parametro.
+    """
     safe_number = quote(str(number), safe="")
-    if "{numero}" in template:
-        return template.replace("{numero}", safe_number)
-    if "{number}" in template:
-        return template.replace("{number}", safe_number)
+    for hueco in ("{numero}", "{number}", "{doc}"):
+        if hueco in template:
+            return template.replace(hueco, safe_number)
     separator = "&" if "?" in template else "?"
     return f"{template}{separator}numero={safe_number}"
 
 
-def lionapi_candidates(kind):
+def documento_candidatos(kind):
     """Direcciones a probar, en orden.
 
-    Antes se tanteaban siete rutas de softwarelion.pe por si acertaba alguna.
+    Antes se tanteaban siete rutas del proveedor viejo por si acertaba alguna.
     Ese proveedor quedo atras y su respuesta de "clave vencida" tapaba el error
-    de verdad del proveedor nuevo, que es lo unico que ayuda a arreglarlo. Solo
-    se prueba lo que el consultorio configuro; las rutas a tanteo vuelven solo
-    si alguien pone LIONAPI_BASE_URL a mano.
+    de verdad del nuevo, que es lo unico que ayuda a arreglarlo. Solo se prueba
+    lo que el consultorio configuro; las rutas a tanteo vuelven solo si alguien
+    pone DOC_LOOKUP_BASE_URL a mano.
     """
-    directo = LIONAPI_DNI_URL if kind == "dni" else LIONAPI_RUC_URL
+    directo = DOC_LOOKUP_DNI_URL if kind == "dni" else DOC_LOOKUP_RUC_URL
     templates = [directo]
-    if LIONAPI_BASE_URL:
+    if DOC_LOOKUP_BASE_URL:
         parte = "dni" if kind == "dni" else "ruc"
         templates += [
-            f"{LIONAPI_BASE_URL}/{parte}/{{numero}}",
-            f"{LIONAPI_BASE_URL}/{parte}?numero={{numero}}",
-            f"{LIONAPI_BASE_URL}/consulta/{parte}/{{numero}}",
-            f"{LIONAPI_BASE_URL}/consultar/{parte}/{{numero}}",
+            f"{DOC_LOOKUP_BASE_URL}/{parte}/{{numero}}",
+            f"{DOC_LOOKUP_BASE_URL}/{parte}?numero={{numero}}",
+            f"{DOC_LOOKUP_BASE_URL}/consulta/{parte}/{{numero}}",
+            f"{DOC_LOOKUP_BASE_URL}/consultar/{parte}/{{numero}}",
         ]
 
     seen = set()
@@ -563,7 +570,7 @@ def lionapi_candidates(kind):
         yield template
 
 
-def lionapi_data_roots(payload):
+def documento_raices(payload):
     roots = []
     if isinstance(payload, dict):
         roots.append(payload)
@@ -574,18 +581,21 @@ def lionapi_data_roots(payload):
     return roots
 
 
-def normalize_lionapi_response(kind, number, payload):
-    data_roots = lionapi_data_roots(payload)
+def normalizar_respuesta_documento(kind, number, payload):
+    data_roots = documento_raices(payload)
     if kind == "dni":
         full_name = ""
         for data in data_roots:
             full_name = first_value(data, [
                 "nombre_completo",
                 "nombreCompleto",
+                # el proveedor actual responde en ingles
+                "full_name",
                 "nombres_apellidos",
                 "nombresApellidos",
                 "razonSocial",
                 "razon_social",
+                "legal_name",
                 "nombre",
                 "name",
             ])
@@ -594,9 +604,9 @@ def normalize_lionapi_response(kind, number, payload):
         if not full_name:
             for data in data_roots:
                 names = " ".join(filter(None, [
-                    first_value(data, ["nombres", "names"]),
-                    first_value(data, ["apellido_paterno", "apellidoPaterno", "apePaterno", "paterno"]),
-                    first_value(data, ["apellido_materno", "apellidoMaterno", "apeMaterno", "materno"]),
+                    first_value(data, ["nombres", "names", "first_name"]),
+                    first_value(data, ["apellido_paterno", "apellidoPaterno", "last_name_paternal", "apePaterno", "paterno"]),
+                    first_value(data, ["apellido_materno", "apellidoMaterno", "last_name_maternal", "apeMaterno", "materno"]),
                 ]))
                 if names.strip():
                     full_name = names.strip()
@@ -614,12 +624,15 @@ def normalize_lionapi_response(kind, number, payload):
         legal_name = first_value(data, [
             "razon_social",
             "razonSocial",
+            "legal_name",
             "nombre_o_razon_social",
             "nombreORazonSocial",
             "nombre",
             "name",
         ])
         address = first_value(data, [
+            "direccion_completa",
+            "full_address",
             "direccion",
             "direccion_fiscal",
             "direccionFiscal",
@@ -638,18 +651,22 @@ def normalize_lionapi_response(kind, number, payload):
     }
 
 
-def lionapi_lookup(kind, number):
-    if not LIONAPI_KEY:
-        return {"error": "LionAPI no configurado. Agrega LIONAPI_KEY en Render."}, 503
+def consultar_documento(kind, number):
+    if not DOC_LOOKUP_KEY:
+        return {"error": "La consulta de documentos no esta configurada. Agrega DOC_LOOKUP_KEY y DOC_LOOKUP_DNI_URL en Render."}, 503
 
     last_404 = ""
-    for template in lionapi_candidates(kind):
+    for template in documento_candidatos(kind):
         request = urllib.request.Request(
-            lionapi_url(template, number),
+            documento_url(template, number),
             headers={
                 "Accept": "application/json",
                 "User-Agent": "CM-Odontologia/1.0",
-                "x-api-key": LIONAPI_KEY,
+                # Cada proveedor pide la clave a su manera y ninguno se queja de
+                # que venga tambien de la otra. Mandar las dos evita tener que
+                # tocar el codigo cuando se cambia de proveedor.
+                "x-api-key": DOC_LOOKUP_KEY,
+                "Authorization": f"Bearer {DOC_LOOKUP_KEY}",
             },
             method="GET",
         )
@@ -664,19 +681,19 @@ def lionapi_lookup(kind, number):
             if exc.code == 404:
                 last_404 = error_text[:300]
                 continue
-            return {"error": f"LionAPI respondio con error {exc.code}.", "detail": error_text[:300]}, 502
+            return {"error": f"El proveedor respondio con error {exc.code}.", "detail": error_text[:300]}, 502
         except Exception:
-            return {"error": "No se pudo consultar LionAPI."}, 502
+            return {"error": "No se pudo contactar al proveedor de consulta de documentos."}, 502
 
         try:
             payload = json.loads(raw_text) if raw_text else {}
         except json.JSONDecodeError:
-            return {"error": "LionAPI devolvio una respuesta no valida."}, 502
+            return {"error": "El proveedor devolvio una respuesta no valida."}, 502
 
-        return normalize_lionapi_response(kind, number, payload), 200
+        return normalizar_respuesta_documento(kind, number, payload), 200
 
     return {
-        "error": f"No se pudo consultar {kind.upper()} en LionAPI. Completa los datos manualmente.",
+        "error": f"No se pudo consultar el {kind.upper()}. Completa los datos manualmente.",
         "detail": last_404,
     }, 502
 
@@ -1185,13 +1202,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
             number = re.sub(r"\D", "", (params.get("numero") or [""])[0])
             if not re.match(r"^\d{8}$", number):
                 return send_json(self, {"error": "El DNI debe tener 8 dígitos."}, 400)
-            payload, status = lionapi_lookup("dni", number)
+            payload, status = consultar_documento("dni", number)
             return send_json(self, payload, status)
         if parsed.path == "/api/external/ruc":
             number = re.sub(r"\D", "", (params.get("numero") or [""])[0])
             if not re.match(r"^\d{11}$", number):
                 return send_json(self, {"error": "El RUC debe tener 11 dígitos."}, 400)
-            payload, status = lionapi_lookup("ruc", number)
+            payload, status = consultar_documento("ruc", number)
             return send_json(self, payload, status)
         if parsed.path == "/api/bootstrap":
             return send_json(self, {
