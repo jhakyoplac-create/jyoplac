@@ -2010,14 +2010,53 @@ function appointmentDetailText(appointment) {
   return `${formatDate(appointment.date)}${appointment.time ? ` | ${agendaTimeLabel(appointment.time)}` : ""}${appointment.unit ? ` | ${appointment.unit}` : ""}${appointment.doctor ? ` | Dr(a). ${appointment.doctor}` : ""}`;
 }
 
-function appointmentPaymentSummary(appointment) {
-  const payments = state.payments.filter((payment) => {
-    if (String(payment.appointmentId || "") === String(appointment.id || "")) return true;
-    if (payment.appointmentId) return false;
-    return String(payment.patientId || "") === String(appointment.patientId || "")
-      && payment.date === appointment.date
-      && isAgendaPayment(payment);
-  });
+/* Reparte los pagos del paciente entre sus citas, cada pago en una sola.
+
+   El que apunta a una cita va a esa. El que no apunta a ninguna -se cobro
+   desde Pagos y caja y no desde la agenda- se le da a UNA cita del mismo dia:
+   la ultima atendida, o la ultima del dia si ninguna se atendio. Repartirlo a
+   todas las del dia seria lo facil, pero un dia con dos citas mostraria el
+   mismo cobro dos veces y pareceria el doble de dinero.
+
+   Los que no caen en ningun dia con cita -un adelanto, una cuota que se pago
+   sin venir- se devuelven aparte para que salgan igual. Lo que se ve en el
+   historial tiene que sumar lo mismo que Pagos y caja: la caja es la que dice
+   cuanto entro de verdad, y un cobro que no aparece ahi es un cobro que
+   alguien va a terminar buscando a mano. */
+function pagosPorCita(patientId, appointments) {
+  const porCita = new Map(appointments.map((cita) => [cita.id, []]));
+  const porRepartir = [];
+  for (const pago of state.payments) {
+    if (String(pago.patientId || "") !== String(patientId)) continue;
+    const idCita = String(pago.appointmentId || "");
+    if (idCita) {
+      if (porCita.has(idCita)) porCita.get(idCita).push(pago);
+    } else {
+      porRepartir.push(pago);
+    }
+  }
+  const sueltos = [];
+  for (const pago of porRepartir) {
+    const delDia = appointments
+      .filter((cita) => cita.date === pago.date)
+      .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
+    if (!delDia.length) {
+      sueltos.push(pago);
+      continue;
+    }
+    const atendidas = delDia.filter((cita) => String(cita.status || "").toUpperCase() === "ATENDIDA");
+    const candidatas = atendidas.length ? atendidas : delDia;
+    const elegida = candidatas[candidatas.length - 1];
+    porCita.get(elegida.id).push(pago);
+  }
+  return { porCita, sueltos };
+}
+
+
+/* Lo cobrado, para la esquina derecha de la fila. Sin nada cobrado devuelve
+   cadena vacia y no se muestra importe, que es distinto de mostrar S/ 0: una
+   cita reservada todavia no tiene por que haber cobrado nada. */
+function resumenDePagos(payments) {
   const total = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   if (!payments.length || cents(total) === 0) return "";
   const methods = [...new Set(payments.map((payment) => String(payment.method || "").trim()).filter(Boolean))].join(", ");
@@ -2031,11 +2070,17 @@ function renderPatientAppointmentDetail(patientId) {
     .filter((appointment) => String(appointment.patientId) === String(patientId))
     .slice()
     .sort((a, b) => appointmentSortKey(b).localeCompare(appointmentSortKey(a)));
-  const list = appointments.map((appointment) => {
-    const status = appointmentStatusText(appointment.status);
-    const comment = appointment.notes || appointment.note || appointment.followUpComment || "";
-    const paymentText = appointmentPaymentSummary(appointment);
-    return `<div class="patient-appointment-item">
+  const { porCita, sueltos } = pagosPorCita(patientId, appointments);
+  /* Citas y pagos sueltos van en una sola lista ordenada por fecha, para que
+     el historial se lea de corrido y no haya que cruzar dos bloques. */
+  const entradas = [
+    ...appointments.map((appointment) => {
+      const status = appointmentStatusText(appointment.status);
+      const comment = appointment.notes || appointment.note || appointment.followUpComment || "";
+      const paymentText = resumenDePagos(porCita.get(appointment.id) || []);
+      return {
+        orden: appointmentSortKey(appointment),
+        html: `<div class="patient-appointment-item">
       <div class="patient-appointment-item-head">
         <strong>${escapeHtml(status)}</strong>
         ${paymentText ? `<strong class="patient-appointment-payment">${escapeHtml(paymentText)}</strong>` : ""}
@@ -2043,8 +2088,23 @@ function renderPatientAppointmentDetail(patientId) {
       <span>${escapeHtml(appointmentDetailText(appointment))}</span>
       <span>${escapeHtml(appointment.service || patient?.mainTreatment || "Consulta")}</span>
       ${comment ? `<span class="muted">${escapeHtml(comment)}</span>` : ""}
-    </div>`;
-  }).join("") || `<p class="muted">No tiene citas registradas.</p>`;
+    </div>`
+      };
+    }),
+    ...sueltos.map((pago) => ({
+      // sin hora: cae junto a las citas de su dia, que no las hay
+      orden: `${pago.date || ""} `,
+      html: `<div class="patient-appointment-item">
+      <div class="patient-appointment-item-head">
+        <strong>Pago sin cita</strong>
+        <strong class="patient-appointment-payment">${escapeHtml(resumenDePagos([pago]))}</strong>
+      </div>
+      <span>${escapeHtml(formatDate(pago.date))}</span>
+      <span>${escapeHtml(pago.receipt || pago.concept || "Cobro registrado en caja")}</span>
+    </div>`
+    }))
+  ].sort((a, b) => b.orden.localeCompare(a.orden));
+  const list = entradas.map((entrada) => entrada.html).join("") || `<p class="muted">No tiene citas ni pagos registrados.</p>`;
   return `<div class="patient-appointment-panel patient-appointment-${summary.className}">
     <div class="patient-appointment-status">
       <strong>${escapeHtml(summary.title)}</strong>
