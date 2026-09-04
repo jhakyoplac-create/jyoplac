@@ -376,6 +376,35 @@ def migrate_db(conn):
         )
         """
     )
+    corregir_metodo_de_compras_con_utilidad(conn)
+
+
+def corregir_metodo_de_compras_con_utilidad(conn):
+    """Las compras hechas con la utilidad decian EFECTIVO; se pagaron por Plin.
+
+    El formulario ofrecia efectivo y por ahi se colaron. La utilidad no es
+    dinero fisico: vive en una cuenta. El metodo de una compra con utilidad es
+    solo una etiqueta -ninguna de las cuatro bolsas lo mira y el saldo de
+    utilidad no depende de el-, asi que corregirlo no mueve un solo sol.
+
+    Se limita a lo anterior al 4 de setiembre de 2026, que es el dia en que el
+    formulario dejo de ofrecer efectivo. Lo que se registre despues no pudo
+    entrar por ese error y esta linea no tiene por que tocarlo nunca.
+    """
+    condicion = "source = 'UTILIDAD' AND method = 'EFECTIVO' AND date < '2026-09-04'"
+    # se anotan antes de tocarlas: si mañana hay que devolverlas, el registro de
+    # Render dice exactamente cuales fueron y no hay que adivinar entre las que
+    # ya estaban en Plin
+    afectadas = [
+        (fila["id"], fila["date"], fila["detail"])
+        for fila in conn.execute(f"SELECT id, date, detail FROM expenses WHERE {condicion}")
+    ]
+    if not afectadas:
+        return
+    conn.execute(f"UPDATE expenses SET method = 'PLIN' WHERE {condicion}")
+    print(f"[Dental] Compras con utilidad pasadas de efectivo a Plin: {len(afectadas)}")
+    for identificador, fecha, detalle in afectadas:
+        print(f"[Dental]   {identificador} {fecha} {detalle}")
 
 
 def purge_old_audit_events(conn):
