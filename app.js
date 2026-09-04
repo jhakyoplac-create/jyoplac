@@ -1812,6 +1812,20 @@ function isGeneralCashExpense(expense) {
   return expense.source === "CAJA_GENERAL" && !isUtilityContribution(expense) && !isUtilityPurchase(expense);
 }
 
+/* Egresos que ya tienen su propio sitio en Caja general: el aporte y la compra
+   de utilidad, el pago al personal y la comision del POS. No salen del dinero
+   del dia, y verlos en Pagos y caja hacia pensar que si -de ahi venia la
+   sensacion de que la compra con la utilidad se restaba dos veces-.
+
+   Un egreso suelto marcado como caja general si se queda: la lista del dia es
+   el unico lugar donde se puede ver y borrar, y esconderlo seria perderlo. */
+function expenseBelongsToGeneralCashView(expense) {
+  return isUtilityContribution(expense)
+    || isUtilityPurchase(expense)
+    || isCardFee(expense)
+    || expense.category === "PERSONAL_TERCERO";
+}
+
 /* El POS deposita la venta del dia siguiente ya descontada, y la comision no es
    fija. Como el dia ya cerro y no se puede corregir el cobro, la diferencia se
    cuadra al final del mes contra lo que realmente entro a la cuenta. */
@@ -2202,6 +2216,20 @@ function patientStatus(patient) {
    completo, un paciente atendido hace tres meses parecia no haber venido
    nunca. */
 
+/* La utilidad no es dinero fisico: vive en una cuenta. Pasar dinero a utilidad
+   puede salir de cualquier bolsa -de ahi se descuenta, asi que el metodo importa
+   y estan todos-, pero una compra hecha con la utilidad se paga desde esa
+   cuenta, nunca con billetes. Ofrecer EFECTIVO ahi solo servia para elegirlo por
+   error, que es como quedaron registradas las compras de agosto. */
+const METODOS_DE_COMPRA_CON_UTILIDAD = ["YAPE", "PLIN", "TRANSFERENCIA"];
+
+function utilityMethodOptions() {
+  const tipo = $('#utilityForm select[name="type"]')?.value || "APORTE";
+  if (tipo !== "COMPRA") return state.config.paymentMethods;
+  return state.config.paymentMethods
+    .filter((metodo) => METODOS_DE_COMPRA_CON_UTILIDAD.includes(String(metodo).toUpperCase()));
+}
+
 function fillSelect(select, options, selected = "") {
   if (!select) return;
   const cleanOptions = options.map((option) => String(option ?? "").trim()).filter(Boolean);
@@ -2590,6 +2618,7 @@ function hydrateForms() {
     fillSelect(select, options, select.value);
   });
   $$('select[name="method"]').forEach((select) => {
+    if (select.closest("#utilityForm")) return fillSelect(select, utilityMethodOptions(), select.value);
     const methods = select.closest("#paymentForm")
       ? [...state.config.paymentMethods, "MIXTO"].filter((value, index, list) => list.indexOf(value) === index)
       : state.config.paymentMethods;
@@ -4446,7 +4475,7 @@ function renderExpenses(cashDate = cashViewDate()) {
     return expense.source || "";
   };
   const rows = visibleExpensesForCashView(cashDate)
-    .filter((expense) => expenseAffectsDaily(expense) || expense.source === "CAJA_GENERAL" || expense.source === "UTILIDAD")
+    .filter((expense) => !expenseBelongsToGeneralCashView(expense))
     .map((expense) => `<tr>
     <td>${escapeHtml(expense.detail)}<br><span class="muted">${escapeHtml(expense.receipt || "")}</span></td>
     <td>${escapeHtml(expense.method)}</td>
@@ -7398,6 +7427,13 @@ function bindEvents() {
         `pulsar el boton para el siguiente.`
       );
     }
+  });
+  /* El metodo depende del movimiento, asi que se rehace al cambiarlo. Si estaba
+     puesto EFECTIVO y se pasa a una compra, fillSelect cae a la primera opcion
+     que si es valida. */
+  $('#utilityForm select[name="type"]')?.addEventListener("change", () => {
+    const select = $('#utilityForm select[name="method"]');
+    fillSelect(select, utilityMethodOptions(), select?.value);
   });
   $("#utilityForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
