@@ -2363,8 +2363,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     f"SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE date IN ({placeholders}) AND closed=0",
                     included_dates,
                 ).fetchone()["total"]
+                # Lo que sale de caja general y lo que se compra con la utilidad
+                # no toca el dinero del dia: ya se descontaron de su propia bolsa.
+                # Volver a restarlos aqui pedia contar de menos justo esa cantidad
+                # y la caja no cerraba nunca. Es la misma regla que aplica la
+                # pantalla en expenseAffectsDaily; si una cambia, cambian las dos.
                 expenses = conn.execute(
-                    f"SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date IN ({placeholders}) AND closed=0 AND source <> 'CAJA_GENERAL'",
+                    f"SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date IN ({placeholders}) AND closed=0 AND source NOT IN ('CAJA_GENERAL', 'UTILIDAD')",
                     included_dates,
                 ).fetchone()["total"]
                 expected = float(session["opening_cash"] or 0) + float(income or 0) - float(expenses or 0)
