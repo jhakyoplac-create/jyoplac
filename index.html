@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260906-confirmar" />
+    <link rel="stylesheet" href="styles.css?v=20260907-copias-odontograma" />
     <link rel="stylesheet" href="odontograma.css?v=20260821-seguimiento" />
   </head>
   <body class="locked">
@@ -224,6 +224,14 @@
             </div>
             <div id="historyTimeline" class="timeline"></div>
           </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Copias del odontograma</h2>
+              <span class="muted">Se guardan desde la pantalla del Odontograma</span>
+            </div>
+            <div id="odontogramSnapshots"></div>
+          </section>
         </div>
       </section>
 
@@ -234,6 +242,12 @@
             <span class="muted">Norma Tecnica del Odontograma (MINSA) &middot; solo rojo y azul</span>
           </div>
           <div id="odontogramHeader"></div>
+          <div class="odontogram-copy-bar" id="odontogramSaveCopy" hidden>
+            <input id="odontogramCopyNote" type="text" maxlength="120" placeholder="Qué se hizo hoy (opcional)" />
+            <button class="small-btn" type="button" id="saveOdontogramCopyBtn">Guardar en la historia</button>
+            <span class="muted">Queda una copia fechada; la pantalla no se borra.</span>
+          </div>
+          <div class="odontogram-copy-notice" id="odontogramViewingCopy" hidden></div>
           <div id="odontogramToolbar" class="odontogram-toolbar" aria-label="Herramientas del odontograma"></div>
           <div id="odontogramGrid" class="odontogram-grid"></div>
         </section>
@@ -1194,7 +1208,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20260825-tildes"></script>
-    <script src="app.js?v=20260906-confirmar"></script>
+    <script src="odontograma.js?v=20260907-copias-odontograma"></script>
+    <script src="app.js?v=20260907-copias-odontograma"></script>
   </body>
 </html>

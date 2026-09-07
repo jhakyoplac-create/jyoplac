@@ -99,6 +99,7 @@ const seedData = {
     { id: "h1", patientId: "p1", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Control de ortodoncia", anamnesis: "Sin cambios relevantes.", exam: "Higiene regular.", diagnosis: "Evolucion favorable", plan: "Continuar controles.", procedure: "Cambio de ligas y revision de brackets.", instructions: "Mantener higiene y volver en 30 dias.", agreedPrice: 80 },
     { id: "h2", patientId: "p2", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Consulta inicial", anamnesis: "Niega alergias.", exam: "Evaluacion intraoral inicial.", diagnosis: "Evaluacion pendiente", plan: "Solicitar radiografia.", procedure: "Revision clinica general.", instructions: "Tomar radiografia panoramica.", agreedPrice: 50 }
   ],
+  odontogramSnapshots: [],
   odontogram: [
     { patientId: "p1", tooth: "11", condition: "Obturado", note: "Control ortodontico" },
     { patientId: "p1", tooth: "26", condition: "Cariado", note: "Revisar restauracion" },
@@ -214,7 +215,7 @@ function loadState() {
     const base = structuredClone(seedData);
     const parsed = JSON.parse(saved);
     const merged = { ...base, ...parsed, config: { ...base.config, ...(parsed.config || {}) } };
-    for (const key of ["services", "patients", "appointments", "treatments", "payments", "electronicReceipts", "clinicalHistory", "odontogram", "cashSessions", "dailyClosures", "expenses", "inventoryProducts", "inventoryMovements", "pettyCashAllocations", "auditEvents", "users"]) {
+    for (const key of ["services", "patients", "appointments", "treatments", "payments", "electronicReceipts", "clinicalHistory", "odontogram", "odontogramSnapshots", "cashSessions", "dailyClosures", "expenses", "inventoryProducts", "inventoryMovements", "pettyCashAllocations", "auditEvents", "users"]) {
       if (!Array.isArray(merged[key])) merged[key] = base[key];
     }
     return normalizeState(merged);
@@ -442,6 +443,19 @@ function mapApiOdontogram(row) {
   };
 }
 
+function mapApiOdontogramSnapshot(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id || row.patientId,
+    sheet: row.sheet === "evolucion" ? "evolucion" : "inicial",
+    date: (row.date || "").slice(0, 10),
+    savedAt: row.saved_at || row.savedAt || "",
+    doctor: row.doctor || "",
+    note: row.note || "",
+    ficha: row.ficha || ""
+  };
+}
+
 function mapApiPayment(row) {
   return {
     id: row.id,
@@ -612,6 +626,7 @@ function applyApiBootstrap(payload) {
   state.clinicalHistory = (payload.clinicalHistory || []).map(mapApiClinicalHistory);
   state.treatments = (payload.treatments || []).map(mapApiTreatment);
   state.odontogram = (payload.odontogram || []).map(mapApiOdontogram);
+  state.odontogramSnapshots = (payload.odontogramSnapshots || []).map(mapApiOdontogramSnapshot);
   state.payments = (payload.payments || []).map(mapApiPayment);
   state.electronicReceipts = (payload.electronicReceipts || []).map(mapApiElectronicReceipt);
   refreshSunatStatus();
@@ -1015,6 +1030,12 @@ async function saveOdontogramApi(record) {
   if (result.id) record.id = result.id;
 }
 
+async function saveOdontogramSnapshotApi(copia) {
+  if (!API_ENABLED || !apiToken) return;
+  const result = await apiFetch("/api/odontogram-snapshots", { method: "POST", body: JSON.stringify(copia) });
+  if (result.id) copia.id = result.id;
+}
+
 async function savePaymentApi(payment) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/payments", { method: "POST", body: JSON.stringify(payment) });
@@ -1156,6 +1177,7 @@ function blankStateFromCurrent() {
     inventoryMovements: [],
     clinicalHistory: [],
     odontogram: [],
+    odontogramSnapshots: [],
     cashSessions: [],
     dailyClosures: [],
     expenses: [],
@@ -2540,6 +2562,7 @@ function renderActiveView() {
       break;
     case "historial":
       renderClinicalHistory();
+      renderOdontogramSnapshots();
       break;
     case "odontograma":
       renderOdontogram();
@@ -2594,6 +2617,7 @@ function renderFullApp() {
   renderAgenda();
   renderPatients();
   renderClinicalHistory();
+  renderOdontogramSnapshots();
   renderOdontogram();
   renderTreatments();
   renderInventory();
@@ -3537,6 +3561,209 @@ function odontogramPatientList() {
   });
 }
 
+/* ---- Copias fechadas del odontograma ------------------------------------
+
+   El odontograma vivo se sobrescribe pieza por pieza: al marcar un diente, lo
+   que decia antes deja de existir. Eso hace imposible responder "como estaba
+   esta boca en junio" y deja el trabajo sin respaldo. Una copia guarda la
+   ficha entera con su fecha, quien la hizo y una nota.
+
+   La pantalla NO se limpia al guardar: el odontograma es acumulativo -una
+   pieza restaurada sigue restaurada el mes que viene-, asi que empezar de cero
+   obligaria a remarcar toda la boca en cada cita. */
+
+let odontogramSnapshotId = "";
+
+function copiasDelOdontograma(patientId) {
+  return (state.odontogramSnapshots || [])
+    .filter((copia) => copia.patientId === patientId)
+    .sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
+}
+
+function copiaDelOdontograma(id) {
+  return (state.odontogramSnapshots || []).find((copia) => copia.id === id) || null;
+}
+
+function piezaVacia(diente) {
+  return !Object.keys(diente?.sup || {}).length
+    && !Object.keys(diente?.pieza || {}).length
+    && !(diente?.box || []).length
+    && !diente?.num
+    && !String(diente?.nota || "").trim();
+}
+
+/* Se guardan solo las piezas con algo escrito: una ficha entera son 32 dientes
+   vacios que ocupan sitio y no dicen nada. normalizarFicha reconstruye el
+   resto al abrirla. */
+function fichaCompacta(ficha) {
+  const dientes = {};
+  Object.entries(ficha?.dientes || {}).forEach(([pieza, diente]) => {
+    if (diente && !piezaVacia(diente)) dientes[pieza] = diente;
+  });
+  return {
+    dientes,
+    spans: Array.isArray(ficha?.spans) ? ficha.spans : [],
+    arcada: ficha?.arcada || { up: null, down: null },
+    esp: ficha?.esp || ""
+  };
+}
+
+function hojaLegible(sheet) {
+  return sheet === "evolucion" ? "Evolución" : "Inicial";
+}
+
+async function guardarCopiaDelOdontograma(nota) {
+  if (!canEditOdontogram()) {
+    alert("Tu usuario no puede guardar copias del odontograma.");
+    return false;
+  }
+  if (!odontogramPatientId || !odontogramView) {
+    alert("Elige primero un paciente.");
+    return false;
+  }
+  if (odontogramSnapshotId) {
+    alert("Estás viendo una copia anterior. Vuelve al odontograma actual para guardar.");
+    return false;
+  }
+  await odontogramFlush();
+  const ficha = fichaCompacta(odontogramView.ficha());
+  if (!Object.keys(ficha.dientes).length && !ficha.spans.length && !ficha.esp) {
+    alert("El odontograma está vacío: no hay nada que guardar.");
+    return false;
+  }
+  const copia = {
+    id: uid("odocopia"),
+    patientId: odontogramPatientId,
+    sheet: odontogramSheet,
+    date: todayISO(),
+    savedAt: new Date().toISOString(),
+    doctor: currentUser()?.name || "",
+    note: String(nota || "").trim(),
+    ficha: JSON.stringify(ficha)
+  };
+  try {
+    await saveOdontogramSnapshotApi(copia);
+  } catch (error) {
+    alert(error.message);
+    return false;
+  }
+  state.odontogramSnapshots.push(copia);
+  if (!API_ENABLED) saveState();
+  return true;
+}
+
+/* Volver atras no borra la copia: escribe la ficha guardada encima del
+   odontograma vivo de esa hoja. Las piezas que hoy tienen algo y en la copia
+   no lo tenian se quedan sin marcas, que es lo que significa volver a como
+   estaba ese dia. Se escriben vacias en vez de borrarlas para que el servidor
+   se entere igual que con cualquier otra correccion. */
+async function restaurarCopiaDelOdontograma(id) {
+  const copia = copiaDelOdontograma(id);
+  if (!copia) return false;
+  if (!canEditOdontogram()) {
+    alert("Tu usuario no puede restaurar el odontograma.");
+    return false;
+  }
+  const ficha = Odontograma.normalizarFicha(parseFindings(copia.ficha));
+  const sheet = copia.sheet === "evolucion" ? "evolucion" : "inicial";
+  const previas = new Map(odontogramRowsFor(copia.patientId, sheet).map((row) => [row.tooth, row]));
+
+  const escribir = async (record) => {
+    await saveOdontogramApi(record);
+    const previo = previas.get(record.tooth);
+    if (previo) Object.assign(previo, record);
+    else state.odontogram.push(record);
+    previas.delete(record.tooth);
+  };
+
+  try {
+    for (const [clave, diente] of Object.entries(ficha.dientes)) {
+      if (piezaVacia(diente)) continue;
+      const tooth = odontogramRowKey(sheet, clave);
+      await escribir({
+        id: previas.get(tooth)?.id || uid("odo"),
+        patientId: copia.patientId,
+        tooth,
+        condition: "Restaurado de copia",
+        note: diente.nota || "",
+        findings: JSON.stringify(diente)
+      });
+    }
+    const toothFicha = odontogramRowKey(sheet, Odontograma.CLAVE_FICHA);
+    await escribir({
+      id: previas.get(toothFicha)?.id || uid("odo"),
+      patientId: copia.patientId,
+      tooth: toothFicha,
+      condition: "Ficha",
+      note: ficha.esp || "",
+      findings: JSON.stringify({ spans: ficha.spans, arcada: ficha.arcada })
+    });
+    // lo que la copia no tenia deja de estar marcado
+    for (const [tooth, row] of previas) {
+      await escribir({
+        id: row.id,
+        patientId: copia.patientId,
+        tooth,
+        condition: "Sano",
+        note: "",
+        findings: JSON.stringify({ sup: {}, pieza: {}, box: [], num: null, nota: "" })
+      });
+    }
+  } catch (error) {
+    alert(error.message);
+    return false;
+  }
+
+  odontogramSnapshotId = "";
+  odontogramPatientId = copia.patientId;
+  odontogramSheet = sheet;
+  odontogramLoadedKey = "";
+  odontogramLoadedSign = "";
+  if (!API_ENABLED) saveState();
+  return true;
+}
+
+function verCopiaDelOdontograma(id) {
+  const copia = copiaDelOdontograma(id);
+  if (!copia) return;
+  odontogramSnapshotId = id;
+  odontogramPatientId = copia.patientId;
+  odontogramSheet = copia.sheet === "evolucion" ? "evolucion" : "inicial";
+  odontogramLoadedKey = "";
+  odontogramLoadedSign = "";
+}
+
+function volverAlOdontogramaActual() {
+  odontogramSnapshotId = "";
+  odontogramLoadedKey = "";
+  odontogramLoadedSign = "";
+}
+
+/* La lista se mira en Historial clinico, que es donde se consulta lo clinico
+   de un paciente; la pantalla del odontograma es para trabajar. */
+function renderOdontogramSnapshots() {
+  const caja = $("#odontogramSnapshots");
+  if (!caja) return;
+  const patientId = $("#historyPatientFilter")?.value || state.patients[0]?.id || "";
+  const copias = copiasDelOdontograma(patientId);
+  if (!copias.length) {
+    caja.innerHTML = `<p class="muted">Todavía no hay copias guardadas de este paciente. Se guardan desde la pantalla del Odontograma.</p>`;
+    return;
+  }
+  caja.innerHTML = `<table class="table"><thead><tr>
+      <th>Fecha</th><th>Hoja</th><th>Guardó</th><th>Nota</th><th>Acción</th>
+    </tr></thead><tbody>${copias.map((copia) => `<tr>
+      <td>${escapeHtml(formatDate(copia.date))}</td>
+      <td>${escapeHtml(hojaLegible(copia.sheet))}</td>
+      <td>${escapeHtml(copia.doctor || "")}</td>
+      <td>${escapeHtml(copia.note || "")}</td>
+      <td class="row-actions">
+        <button class="small-btn" data-ver-copia-odontograma="${copia.id}">Ver</button>
+        ${canEditOdontogram() ? `<button class="small-btn" data-restaurar-copia-odontograma="${copia.id}">Restaurar</button>` : ""}
+      </td>
+    </tr>`).join("")}</tbody></table>`;
+}
+
 function canEditOdontogram() {
   // el backend solo acepta escrituras del odontograma de ADMIN y DOCTOR
   return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
@@ -3567,16 +3794,35 @@ function renderOdontogram() {
     odontogramPatientId = state.patients[0]?.id || "";
   }
   odontogramView.setPacientes(odontogramPatientList(), odontogramPatientId);
-  odontogramView.setSoloLectura(!canEditOdontogram());
+
+  /* Mirando una copia anterior no se puede escribir: nadie deberia corregir
+     hoy un registro de hace un mes creyendo que edita el actual. */
+  const copia = odontogramSnapshotId ? copiaDelOdontograma(odontogramSnapshotId) : null;
+  if (odontogramSnapshotId && !copia) odontogramSnapshotId = "";
+  odontogramView.setSoloLectura(Boolean(copia) || !canEditOdontogram());
+  const aviso = $("#odontogramViewingCopy");
+  if (aviso) {
+    aviso.hidden = !copia;
+    if (copia) {
+      aviso.innerHTML = `<span>Estás viendo la copia del <strong>${escapeHtml(formatDate(copia.date))}</strong>` +
+        `${copia.doctor ? ` guardada por ${escapeHtml(copia.doctor)}` : ""}` +
+        `${copia.note ? ` &mdash; ${escapeHtml(copia.note)}` : ""}. No se puede editar.</span>` +
+        `<button class="small-btn" type="button" id="backToLiveOdontogram">Volver al odontograma actual</button>`;
+    }
+  }
+  const guardarCaja = $("#odontogramSaveCopy");
+  if (guardarCaja) guardarCaja.hidden = Boolean(copia) || !canEditOdontogram();
 
   // no se recarga mientras hay cambios sin guardar, para no perder lo escrito
   if (odontogramPending.size) return;
-  const clave = `${odontogramPatientId}|${odontogramSheet}`;
-  const firma = odontogramSignature(odontogramPatientId, odontogramSheet);
+  const clave = copia ? `copia:${copia.id}` : `${odontogramPatientId}|${odontogramSheet}`;
+  const firma = copia ? copia.id : odontogramSignature(odontogramPatientId, odontogramSheet);
   if (clave === odontogramLoadedKey && firma === odontogramLoadedSign) return;
   odontogramLoadedKey = clave;
   odontogramLoadedSign = firma;
-  odontogramView.cargar(odontogramFichaFor(odontogramPatientId, odontogramSheet));
+  odontogramView.cargar(copia
+    ? Odontograma.normalizarFicha(parseFindings(copia.ficha))
+    : odontogramFichaFor(odontogramPatientId, odontogramSheet));
 }
 
 function renderPayments() {
@@ -5952,7 +6198,46 @@ function bindEvents() {
     renderReports();
     refreshReportsRange();
   });
-  on("#historyPatientFilter", "change", renderClinicalHistory);
+  on("#historyPatientFilter", "change", () => {
+    renderClinicalHistory();
+    renderOdontogramSnapshots();
+  });
+
+  on("#saveOdontogramCopyBtn", "click", async (event) => {
+    const boton = event.currentTarget;
+    const campo = $("#odontogramCopyNote");
+    boton.disabled = true;
+    boton.textContent = "Guardando...";
+    const guardado = await guardarCopiaDelOdontograma(campo?.value || "");
+    boton.disabled = false;
+    boton.textContent = "Guardar en la historia";
+    if (!guardado) return;
+    if (campo) campo.value = "";
+    render();
+    alert("Copia guardada. Puedes verla en Historial clínico.");
+  });
+
+  on("#odontogramViewingCopy", "click", (event) => {
+    if (!event.target.closest("#backToLiveOdontogram")) return;
+    volverAlOdontogramaActual();
+    render();
+  });
+
+  on("#odontogramSnapshots", "click", async (event) => {
+    const ver = event.target.closest("[data-ver-copia-odontograma]");
+    if (ver) {
+      verCopiaDelOdontograma(ver.dataset.verCopiaOdontograma);
+      setView("odontograma");
+      render();
+      return;
+    }
+    const restaurar = event.target.closest("[data-restaurar-copia-odontograma]");
+    if (!restaurar) return;
+    if (!confirm("El odontograma actual de este paciente se reemplazará por esta copia. La copia no se borra y puedes volver a la que quieras. ¿Continuar?")) return;
+    if (!(await restaurarCopiaDelOdontograma(restaurar.dataset.restaurarCopiaOdontograma))) return;
+    setView("odontograma");
+    render();
+  });
   on("#doctorFilter", "change", renderAgenda);
   on("#unitFilter", "change", renderAgenda);
   on("#newAppointmentBtn", "click", () => openAppointment());

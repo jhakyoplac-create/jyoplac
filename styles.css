@@ -1796,6 +1796,45 @@ menu {
   box-shadow: 0 0 0 5px var(--aqua-soft);
 }
 
+/* La barra para dejar copia del odontograma y el aviso de estar mirando una
+   anterior. Van pegadas al lienzo, en voz baja: lo que importa en esa pantalla
+   son los dientes. */
+.odontogram-copy-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.odontogram-copy-bar input {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 7px 11px;
+  border: 1px solid #d5dae1;
+  border-radius: 9px;
+  font: inherit;
+}
+
+.odontogram-copy-bar .muted {
+  font-size: 0.74rem;
+}
+
+.odontogram-copy-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0 0 10px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: #4a3208;
+  background: #ffe8b0;
+  border: 1px solid #e5c46f;
+}
+
 .odontogram-panel {
   overflow: hidden;
 }

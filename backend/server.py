@@ -1233,6 +1233,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "clinicalHistory": list_table("clinical_history", "date DESC"),
                 "treatments": list_table("treatments", "created_at DESC"),
                 "odontogram": list_table("odontogram", "patient_id ASC, tooth ASC"),
+                # Copias fechadas del odontograma. La tabla odontogram guarda el
+                # estado actual y se sobrescribe pieza por pieza: al marcar un
+                # diente, lo que decia antes deja de existir. En odontogram_snapshots
+                # queda la ficha entera de un dia, con quien la guardo y una nota,
+                # para poder mirar atras o volver a ese estado.
+                "odontogramSnapshots": list_table("odontogram_snapshots", "saved_at DESC"),
                 "payments": list_table("payments", "date DESC, created_at DESC"),
                 "electronicReceipts": list_electronic_receipts(),
                 "expenses": list_table("expenses", "date DESC, created_at DESC"),
@@ -1260,6 +1266,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"treatments": list_table("treatments", "created_at DESC")})
         if parsed.path == "/api/odontogram":
             return send_json(self, {"odontogram": list_table("odontogram", "patient_id ASC, tooth ASC")})
+        if parsed.path == "/api/odontogram-snapshots":
+            return send_json(self, {"odontogramSnapshots": list_table("odontogram_snapshots", "saved_at DESC")})
         if parsed.path == "/api/payments":
             return send_json(self, {"payments": list_table_by_date("payments", "date DESC, created_at DESC", "date", params)})
         if parsed.path == "/api/electronic-receipts":
@@ -1802,6 +1810,36 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     (data["patientId"], data["tooth"]),
                 ).fetchone()
             return send_json(self, {"ok": True, "id": row["id"] if row else item_id})
+
+        if parsed.path == "/api/odontogram-snapshots":
+            # Una copia no se corrige: si el odontograma cambia se guarda otra.
+            # Por eso aqui solo se inserta, nunca se actualiza lo ya guardado.
+            if not require_role(self, {"ADMIN", "DOCTOR"}):
+                return
+            data = read_json(self)
+            ficha = str(data.get("ficha") or "").strip()
+            if not data.get("patientId") or not ficha:
+                return send_json(self, {"error": "Falta el paciente o la ficha."}, 400)
+            item_id = data.get("id") or now_id("odocopia")
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO odontogram_snapshots
+                      (id, patient_id, sheet, date, saved_at, doctor, note, ficha)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        item_id,
+                        data["patientId"],
+                        "evolucion" if data.get("sheet") == "evolucion" else "inicial",
+                        data.get("date") or today_lima(),
+                        data.get("savedAt") or datetime.now().isoformat(),
+                        data.get("doctor", ""),
+                        data.get("note", ""),
+                        ficha,
+                    ),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/inventory-products":
             if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):

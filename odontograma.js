@@ -132,6 +132,10 @@
     { cat: "sup", k: "borrar_sup", n: "Borrar cara", c: "", hint: "Quita el hallazgo de esa cara." },
 
     { cat: "pieza", k: "ausente", n: "Ausente", c: "azul", hint: "Aspa azul sobre la figura de la pieza." },
+    /* La pieza que todavia esta en boca pero hay que sacar. Se marca igual que
+       la ausente pero en rojo, que es como distingue la norma lo que falta
+       -azul, ya paso- de lo que hay que hacer -rojo, esta pendiente-. */
+    { cat: "pieza", k: "por_extraer", n: "Pieza por extraer", c: "rojo", hint: "Aspa roja sobre la figura de la pieza." },
     { cat: "pieza", k: "corona_def", n: "Corona definitiva", c: "azul",
       sig: ["CC", "CF", "CMC", "3/4", "4/5", "7/8", "CV", "CJ"],
       hint: "Circunferencia azul que encierra la corona. El color del metal va en especificaciones." },
@@ -332,7 +336,7 @@
         function L(dd) {
           return '<path d="' + dd + '" stroke="' + c + '" stroke-width="' + gr + '" fill="none" stroke-linecap="round"/>';
         }
-        if (k === "ausente") {
+        if (k === "ausente" || k === "por_extraer") {
           out += L("M" + x0 + ",2 L" + x1 + "," + cuello) + L("M" + x1 + ",2 L" + x0 + "," + cuello);
         } else if (k === "corona_def" || k === "corona_tmp") {
           out += '<ellipse cx="' + (W / 2) + '" cy="' + (cuello / 2) + '" rx="' + ((x1 - x0) / 2) +
@@ -1064,6 +1068,7 @@
     var d = { sup: {}, pieza: {}, box: [], num: null, nota: "" };
     var c = String(condicion || "").trim();
     if (c === "Ausente" || c === "Extraido") d.pieza.ausente = "";
+    else if (c === "Por extraer") d.pieza.por_extraer = "";
     else if (c === "Corona") d.pieza.corona_def = "CC";
     else if (c === "Endodoncia") { d.pieza.pulpar = "TC"; d.box.push({ k: "TC", c: "azul" }); }
     else if (c === "Cariado") d.sup.vestibular = "caries";

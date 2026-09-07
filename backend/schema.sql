@@ -99,6 +99,19 @@ CREATE TABLE IF NOT EXISTS odontogram (
   FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS odontogram_snapshots (
+  id TEXT PRIMARY KEY,
+  patient_id TEXT NOT NULL,
+  sheet TEXT NOT NULL DEFAULT 'inicial',
+  date TEXT NOT NULL,
+  saved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  doctor TEXT,
+  note TEXT,
+  ficha TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
   patient_id TEXT NOT NULL,
