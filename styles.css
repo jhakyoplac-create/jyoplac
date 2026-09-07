@@ -1209,6 +1209,50 @@ tr.followup-pending td:first-child {
   min-width: 0;
 }
 
+/* La franja pasa a dos columnas cuando hay cita: el texto a la izquierda y el
+   boton de confirmado a la derecha, alto completo para que quede a la altura
+   del nombre. */
+.slot.busy {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 6px;
+}
+
+.slot.busy .slot-main,
+.slot.busy .slot-meta {
+  grid-column: 1;
+}
+
+/* Apagado por defecto y verde cuando el paciente confirmo. El color va solo en
+   el boton: la franja se queda como estaba, porque confirmar no cambia el
+   estado de la cita. */
+.slot-confirm {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: center;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.slot-confirm:hover {
+  border-color: var(--muted);
+  color: var(--ink);
+}
+
+.slot-confirm.confirmada {
+  border-color: #2f8f57;
+  background: #e4f5ea;
+  color: #1c5f39;
+}
+
 .slot-main strong,
 .slot-main span {
   display: block;

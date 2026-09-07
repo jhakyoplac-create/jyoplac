@@ -279,6 +279,10 @@ def migrate_db(conn):
     ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
     ensure_column(conn, "appointments", "reminder_sent_at", "TEXT")
     ensure_column(conn, "appointments", "reminder_sent_by", "TEXT")
+    # Que el paciente contesto el recordatorio. Va aparte del estado de la cita:
+    # confirmar no es lo mismo que haber venido, y una cita confirmada sigue
+    # RESERVADA hasta que se atiende.
+    ensure_column(conn, "appointments", "confirmada", "INTEGER NOT NULL DEFAULT 0")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS electronic_receipts (
@@ -1575,9 +1579,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """
                     INSERT INTO appointments (
                       id, date, time, unit, doctor, patient_id, service, duration, status, notes,
-                      follow_up_status, follow_up_comment, new_appointment_id, reminder_sent_at, reminder_sent_by
+                      follow_up_status, follow_up_comment, new_appointment_id, reminder_sent_at, reminder_sent_by,
+                      confirmada
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       date=excluded.date, time=excluded.time, unit=excluded.unit,
                       doctor=excluded.doctor, patient_id=excluded.patient_id,
@@ -1588,6 +1593,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                       new_appointment_id=excluded.new_appointment_id,
                       reminder_sent_at=excluded.reminder_sent_at,
                       reminder_sent_by=excluded.reminder_sent_by,
+                      confirmada=excluded.confirmada,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -1606,6 +1612,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         new_appointment_id,
                         reminder_sent_at or "",
                         reminder_sent_by or "",
+                        1 if data.get("confirmada") else 0,
                     ),
                 )
                 patient = conn.execute("SELECT name FROM patients WHERE id = ?", (data["patientId"],)).fetchone()

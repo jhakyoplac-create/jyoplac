@@ -390,7 +390,9 @@ function mapApiAppointment(row) {
     followUpComment: row.follow_up_comment || row.followUpComment || "",
     newAppointmentId: row.new_appointment_id || row.newAppointmentId || "",
     reminderSentAt: row.reminder_sent_at || row.reminderSentAt || "",
-    reminderSentBy: row.reminder_sent_by || row.reminderSentBy || ""
+    reminderSentBy: row.reminder_sent_by || row.reminderSentBy || "",
+    // la base la guarda como 0 o 1; en el navegador se trabaja con si o no
+    confirmada: Boolean(row.confirmada)
   };
 }
 
@@ -3295,11 +3297,16 @@ function renderAgenda() {
         const patient = patientById(appointment.patientId);
         const debt = patient ? patientDebt(patient.id) : 0;
         const statusText = appointment.status === "ATENDIDA" ? "ATENDIDO" : appointment.status;
+        /* El boton de confirmado va aparte del estado de la cita. Que el
+           paciente conteste el recordatorio no es lo mismo que haber venido:
+           una cita confirmada sigue siendo RESERVADA hasta que se atiende, y
+           por eso la franja no cambia de color. Solo se pinta el boton. */
         return `<div class="slot busy status-${appointment.status.toLowerCase()}" data-edit-appointment="${appointment.id}">
           <div class="slot-main">
             <strong>${escapeHtml(patient?.name || "Paciente")}</strong>
             <span>${escapeHtml(appointment.service)}</span>
           </div>
+          <button class="slot-confirm${appointment.confirmada ? " confirmada" : ""}" type="button" data-confirm-appointment="${appointment.id}" aria-pressed="${Boolean(appointment.confirmada)}" title="${appointment.confirmada ? "El paciente confirmó. Clic para deshacer." : "Marcar que el paciente confirmó"}">Confir</button>
           <div class="slot-meta">
             <span>${escapeHtml(appointment.doctor)}</span>
             <span>${escapeHtml(statusText)}</span>
@@ -6022,8 +6029,31 @@ function bindEvents() {
     $("#creditDialog").close();
   });
 
-  $("#agendaBoard").addEventListener("click", (event) => {
+  $("#agendaBoard").addEventListener("click", async (event) => {
     if (!canManageAppointments()) return;
+    /* Se atiende antes que el de editar: el boton vive dentro de la franja, y
+       la franja entera abre la cita. Sin esto, marcar confirmado abriria
+       tambien el formulario encima. */
+    const confirmar = event.target.closest("[data-confirm-appointment]");
+    if (confirmar) {
+      event.stopPropagation();
+      const cita = state.appointments.find((item) => item.id === confirmar.dataset.confirmAppointment);
+      if (!cita) return;
+      const antes = Boolean(cita.confirmada);
+      cita.confirmada = !antes;
+      try {
+        await saveAppointmentApi(cita);
+      } catch (error) {
+        // si el servidor no lo acepta se deshace: la agenda no puede decir que
+        // el paciente confirmo cuando eso no quedo guardado en ningun lado
+        cita.confirmada = antes;
+        alert(error.message || "No se pudo guardar la confirmacion.");
+        return;
+      }
+      if (!API_ENABLED) saveState();
+      renderAgenda();
+      return;
+    }
     const edit = event.target.closest("[data-edit-appointment]");
     const empty = event.target.closest("[data-new-at]");
     if (edit) openAppointment(state.appointments.find((appointment) => appointment.id === edit.dataset.editAppointment));
