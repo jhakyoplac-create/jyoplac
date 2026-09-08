@@ -474,6 +474,7 @@ function mapApiPayment(row) {
     cardAmount: Number(row.card_amount ?? row.cardAmount ?? 0),
     transferAmount: Number(row.transfer_amount ?? row.transferAmount ?? 0),
     receipt: row.receipt || "",
+    comprobante: row.comprobante || "",
     closed: Boolean(row.closed)
   };
 }
@@ -2109,23 +2110,47 @@ function renderPatientAppointmentDetail(patientId) {
     .slice()
     .sort((a, b) => appointmentSortKey(b).localeCompare(appointmentSortKey(a)));
   const { porCita, sueltos } = pagosPorCita(patientId, appointments);
+  /* Lo que se le hizo ese dia, para guiarse sin abrir otra pantalla. Sale de
+     donde de verdad esta escrito: primero la nota del cobro, y si el paciente
+     se atendio sin pagar -queda en S/ 0, que pasa seguido- del motivo de
+     consulta de su historia clinica de esa fecha. */
+  const notaDelDia = (appointment, pagos) => {
+    const deLosPagos = pagos.map((pago) => String(pago.receipt || "").trim()).filter(Boolean).join(" · ");
+    if (deLosPagos) return deLosPagos;
+    const historia = state.clinicalHistory.find((entrada) =>
+      String(entrada.patientId) === String(patientId) && entrada.date === appointment.date);
+    return String(historia?.reason || "").trim();
+  };
+
+  /* El numero de la boleta o factura que salio de ese cobro. Va en la linea de
+     la fecha, al costado del doctor, aprovechando el sitio que ahi sobra: asi
+     no se confunde con la nota ni le agrega una linea a la fila. */
+  const comprobantesDe = (pagos) =>
+    pagos.map((pago) => String(pago.comprobante || "").trim()).filter(Boolean).join(" · ");
   /* Citas y pagos sueltos van en una sola lista ordenada por fecha, para que
      el historial se lea de corrido y no haya que cruzar dos bloques. */
   const entradas = [
     ...appointments.map((appointment) => {
       const status = appointmentStatusText(appointment.status);
       const comment = appointment.notes || appointment.note || appointment.followUpComment || "";
-      const paymentText = resumenDePagos(porCita.get(appointment.id) || []);
+      const pagos = porCita.get(appointment.id) || [];
+      const paymentText = resumenDePagos(pagos);
+      const nota = notaDelDia(appointment, pagos);
+      const comprobantes = comprobantesDe(pagos);
+      /* La nota va en el hueco que queda entre el estado y el importe, en una
+         sola linea y en letra chica: la fila no crece de alto, y el texto
+         completo se ve al pasar el mouse. */
       return {
         orden: appointmentSortKey(appointment),
         html: `<div class="patient-appointment-item">
       <div class="patient-appointment-item-head">
         <strong>${escapeHtml(status)}</strong>
+        ${nota ? `<span class="patient-appointment-note" title="${escapeHtml(nota)}">${escapeHtml(nota)}</span>` : ""}
         ${paymentText ? `<strong class="patient-appointment-payment">${escapeHtml(paymentText)}</strong>` : ""}
       </div>
-      <span>${escapeHtml(appointmentDetailText(appointment))}</span>
+      <span class="patient-appointment-line"><span class="patient-appointment-when">${escapeHtml(appointmentDetailText(appointment))}</span>${comprobantes ? `<span class="patient-appointment-note" title="${escapeHtml(comprobantes)}">${escapeHtml(comprobantes)}</span>` : ""}</span>
       <span>${escapeHtml(appointment.service || patient?.mainTreatment || "Consulta")}</span>
-      ${comment ? `<span class="muted">${escapeHtml(comment)}</span>` : ""}
+      ${comment && comment !== nota ? `<span class="muted">${escapeHtml(comment)}</span>` : ""}
     </div>`
       };
     }),
@@ -2135,6 +2160,7 @@ function renderPatientAppointmentDetail(patientId) {
       html: `<div class="patient-appointment-item">
       <div class="patient-appointment-item-head">
         <strong>Pago sin cita</strong>
+        ${pago.comprobante ? `<span class="patient-appointment-note" title="${escapeHtml(pago.comprobante)}">${escapeHtml(pago.comprobante)}</span>` : ""}
         <strong class="patient-appointment-payment">${escapeHtml(resumenDePagos([pago]))}</strong>
       </div>
       <span>${escapeHtml(formatDate(pago.date))}</span>
@@ -3840,7 +3866,7 @@ function renderPayments() {
       <th>Paciente</th>
       <th>Metodo</th>
       <th>Monto</th>
-      <th>Comprobante</th>
+      <th>Notas</th>
       ${isAdmin() ? "<th>Accion</th>" : ""}
     `;
   }
@@ -3856,7 +3882,7 @@ function renderPayments() {
         <td>${escapeHtml(patient?.name || "Paciente")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
         <td>${escapeHtml(paymentMethodLabel(payment))}</td>
         <td><strong>${money(payment.amount)}</strong>${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
-        <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}</td>
+        <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}${payment.comprobante ? `<br><span class="muted">${escapeHtml(payment.comprobante)}</span>` : ""}</td>
         ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
       </tr>`;
     }).join("") || `<tr><td colspan="${isAdmin() ? 6 : 5}">No hay pagos registrados.</td></tr>`;
@@ -4514,7 +4540,10 @@ async function completePendingPayment(receiptValues = null) {
       if (receipt) {
         await saveElectronicReceiptApi(receipt);
         upsert(state.electronicReceipts, receipt);
-        payment.receipt = receiptFullNumber(receipt);
+        /* El numero va en su propio campo. Antes se escribia sobre receipt,
+           que es donde la persona anota que se le hizo al paciente: emitir el
+           comprobante le borraba la nota y nadie se enteraba hasta buscarla. */
+        payment.comprobante = receiptFullNumber(receipt);
         await savePaymentApi(payment);
         await enviarComprobanteASunat(receipt, { avisar: true });
       }

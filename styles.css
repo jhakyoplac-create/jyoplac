@@ -1475,6 +1475,32 @@ tr.followup-pending td:first-child {
   line-height: 1.22;
 }
 
+/* La linea de la fecha comparte sitio con el numero del comprobante: la
+   fecha manda y no se parte, y el numero usa lo que sobra. */
+.patient-appointment-item .patient-appointment-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.patient-appointment-item .patient-appointment-when {
+  display: inline;
+  white-space: nowrap;
+}
+
+/* Lo que se le hizo ese dia, en el hueco que queda en el medio. Se corta con
+   puntos suspensivos en vez de pasar a otra linea: la fila tiene que seguir
+   midiendo lo mismo, y el texto entero esta a un mouse encima. */
+.patient-appointment-item .patient-appointment-note {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .patient-appointment-item-head {
   display: flex;
   align-items: center;

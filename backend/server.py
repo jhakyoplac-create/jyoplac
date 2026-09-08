@@ -274,6 +274,11 @@ def migrate_db(conn):
     ensure_column(conn, "payments", "transfer_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "payments", "appointment_id", "TEXT")
     ensure_column(conn, "payments", "product_total", "REAL NOT NULL DEFAULT 0")
+    # receipt es donde la persona anota que se le hizo al paciente. Emitir el
+    # comprobante escribia su numero encima y la nota desaparecia sin aviso,
+    # asi que el numero pasa a tener su propia columna.
+    ensure_column(conn, "payments", "comprobante", "TEXT")
+    mudar_numeros_de_comprobante(conn)
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
     ensure_column(conn, "appointments", "new_appointment_id", "TEXT")
@@ -461,6 +466,32 @@ def appointment_audit_event(data, existing_appointment, patient_name):
     ):
         return ("APPOINTMENT_RESCHEDULED", f"Reprogramo cita: {patient_label} {date_value} {time_value}")
     return None
+
+
+NUMERO_DE_COMPROBANTE = re.compile(r"^[A-Z]{1,2}[A-Z0-9]{2,3}-\d+$")
+
+
+def mudar_numeros_de_comprobante(conn):
+    """Los pagos que ya tienen el numero escrito en la nota se corrigen.
+
+    Se hace en Python y no en SQL porque la expresion regular se escribe
+    distinto en SQLite y en Postgres, y esto corre en los dos. Solo toca las
+    filas donde la nota es exactamente un numero de comprobante y la columna
+    nueva sigue vacia, asi que volver a correrlo no cambia nada. La nota que
+    tenian antes no se puede recuperar: se sobrescribio en su momento.
+    """
+    filas = conn.execute(
+        "SELECT id, receipt FROM payments WHERE receipt IS NOT NULL AND receipt <> '' "
+        "AND (comprobante IS NULL OR comprobante = '')"
+    ).fetchall()
+    for fila in filas:
+        texto = str(fila["receipt"] or "").strip()
+        if not NUMERO_DE_COMPROBANTE.match(texto):
+            continue
+        conn.execute(
+            "UPDATE payments SET comprobante = ?, receipt = '' WHERE id = ?",
+            (texto, fila["id"]),
+        )
 
 
 def init_db():
@@ -2043,9 +2074,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         INSERT INTO payments (
                           id, patient_id, history_id, appointment_id, date, amount, product_total, cash_received,
                           change_amount, cash_amount, yape_amount, plin_amount,
-                          card_amount, transfer_amount, method, receipt, closed
+                          card_amount, transfer_amount, method, receipt, comprobante, closed
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           patient_id=excluded.patient_id, history_id=excluded.history_id,
                           appointment_id=excluded.appointment_id,
@@ -2059,6 +2090,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           card_amount=excluded.card_amount,
                           transfer_amount=excluded.transfer_amount,
                           method=excluded.method, receipt=excluded.receipt,
+                          comprobante=excluded.comprobante,
                           closed=excluded.closed
                         """,
                         (
@@ -2078,6 +2110,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             split["transfer_amount"],
                             method,
                             receipt_value,
+                            str(data.get("comprobante") or "").strip(),
                             1 if data.get("closed") else 0,
                         ),
                     )
