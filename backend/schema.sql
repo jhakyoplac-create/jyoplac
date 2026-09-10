@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS payments (
   method TEXT NOT NULL,
   receipt TEXT,
   comprobante TEXT,
+  registered_by TEXT,
   closed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,

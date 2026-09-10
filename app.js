@@ -475,6 +475,7 @@ function mapApiPayment(row) {
     transferAmount: Number(row.transfer_amount ?? row.transferAmount ?? 0),
     receipt: row.receipt || "",
     comprobante: row.comprobante || "",
+    registeredBy: row.registered_by || row.registeredBy || "",
     closed: Boolean(row.closed)
   };
 }
@@ -2777,7 +2778,12 @@ function updatePaymentDue() {
   form.amountDue.value = due || 0;
   form.amount.value = due || "";
   form.dataset.basePaymentAmount = Number(form.amount.value || 0);
-  form.amount.readOnly = true;
+  /* Llega con la deuda entera puesta, que es lo mas comun, pero se puede
+     cambiar: el paciente que debe 110 y trae 30 abona esos 30 y queda debiendo
+     80. El saldo no es un numero guardado -se saca de lo acordado menos lo que
+     ya pago-, asi que va bajando solo hasta que la cuenta desaparece de la
+     lista. Lo que no deja el guardado es pasarse del saldo ni poner cero. */
+  form.amount.readOnly = false;
   const clearDebtBtn = $("#clearHistoryDebtBtn");
   if (clearDebtBtn) clearDebtBtn.hidden = !isAdmin() || !form.historyId.value || due <= 0;
   applyProductTotalToPaymentForm();
@@ -4563,6 +4569,19 @@ async function completePendingPayment(receiptValues = null) {
   if (!optimisticSave) finishPaymentUi();
 }
 
+/* Lo que el paciente ya fue abonando, debajo de su nombre. Sin esto, la fila
+   solo decia cuanto falta: quien no registro el cobro no tenia como saber si
+   ese dinero entro, ni quien lo recibio. Cada abono es un pago de la caja de
+   su dia, asi que la caja de ese dia tiene que cuadrar con esto. */
+function abonosDeLaCuenta(historyId) {
+  const abonos = state.payments
+    .filter((pago) => pago.historyId === historyId)
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  if (!abonos.length) return "";
+  return abonos.map((pago) => `<br><span class="muted">Abonó ${money(pago.amount)} el ${escapeHtml(formatDate(pago.date))}${pago.registeredBy ? ` — ${escapeHtml(pago.registeredBy)}` : ""}</span>`).join("");
+}
+
 function renderReceivables() {
   const table = $("#receivablesTable");
   if (!table) return;
@@ -4581,7 +4600,7 @@ function renderReceivables() {
     const wa = `https://wa.me/51${patient?.phone || ""}?text=${encodeURIComponent(text)}`;
     return `<tr>
       <td>${formatDate(dueDate)}</td>
-      <td><strong>${escapeHtml(patient?.name || "")}</strong><br><span class="muted">${escapeHtml(entry.creditNote || entry.reason || "")}</span></td>
+      <td><strong>${escapeHtml(patient?.name || "")}</strong><br><span class="muted">${escapeHtml(entry.creditNote || entry.reason || "")}</span>${abonosDeLaCuenta(entry.id)}</td>
       <td>${escapeHtml(patient?.phone || "")}</td>
       <td>${escapeHtml(entry.attendedBy || patient?.doctor || "")}</td>
       <td><strong>${money(balance)}</strong></td>
@@ -7048,7 +7067,14 @@ function bindEvents() {
     updatePaymentDue();
   });
   $("#clearHistoryDebtBtn")?.addEventListener("click", clearSelectedHistoryDebt);
-  $('#paymentForm input[name="amount"]').addEventListener("input", updatePaymentChange);
+  $('#paymentForm input[name="amount"]').addEventListener("input", () => {
+    /* La cifra escrita a mano pasa a ser la base sobre la que se suman los
+       productos. Sin esto, agregar un producto despues de escribir un abono de
+       30 devolvia el total de la deuda y se cobraba de mas. */
+    const form = $("#paymentForm");
+    if (form) form.dataset.basePaymentAmount = Math.max(0, Number(form.amount.value || 0) - paymentProductTotal());
+    updatePaymentChange();
+  });
   $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
   $('#paymentForm select[name="method"]').addEventListener("change", () => {
     toggleMixedPaymentFields();
@@ -7215,7 +7241,11 @@ function bindEvents() {
         quantity: Number(item.quantity || 0),
         price: Number(item.price || 0)
       })),
-      receipt: buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems)
+      receipt: buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
+      /* El servidor guarda quien cobro tomandolo de la sesion, no de aqui. Se
+         anota igual en la copia local para que la fila lo muestre al momento y
+         no recien despues de recargar; es el mismo usuario, asi que coincide. */
+      registeredBy: currentUser()?.name || ""
     };
     openPaymentReceiptPrompt({ payment, form, restorePaymentButton });
   });

@@ -278,6 +278,10 @@ def migrate_db(conn):
     # comprobante escribia su numero encima y la nota desaparecia sin aviso,
     # asi que el numero pasa a tener su propia columna.
     ensure_column(conn, "payments", "comprobante", "TEXT")
+    # Quien recibio el cobro. Se guarda para que la cuenta por cobrar pueda
+    # decir de donde salio cada abono: esos cobros los hace recepcion y quien
+    # no lo registro no tenia como saber si ese dinero entro.
+    ensure_column(conn, "payments", "registered_by", "TEXT")
     mudar_numeros_de_comprobante(conn)
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
@@ -1953,7 +1957,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id, **snapshot})
 
         if parsed.path == "/api/payments":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            quien_cobra = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not quien_cobra:
                 return
             try:
                 data = read_json(self)
@@ -2074,9 +2079,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         INSERT INTO payments (
                           id, patient_id, history_id, appointment_id, date, amount, product_total, cash_received,
                           change_amount, cash_amount, yape_amount, plin_amount,
-                          card_amount, transfer_amount, method, receipt, comprobante, closed
+                          card_amount, transfer_amount, method, receipt, comprobante,
+                          registered_by, closed
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           patient_id=excluded.patient_id, history_id=excluded.history_id,
                           appointment_id=excluded.appointment_id,
@@ -2091,6 +2097,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           transfer_amount=excluded.transfer_amount,
                           method=excluded.method, receipt=excluded.receipt,
                           comprobante=excluded.comprobante,
+                          -- quien cobro se anota una sola vez: corregir el pago
+                          -- despues no debe cambiar de quien era el cobro
+                          registered_by=COALESCE(payments.registered_by, excluded.registered_by),
                           closed=excluded.closed
                         """,
                         (
@@ -2111,6 +2120,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             method,
                             receipt_value,
                             str(data.get("comprobante") or "").strip(),
+                            quien_cobra["name"] or None,
                             1 if data.get("closed") else 0,
                         ),
                     )
