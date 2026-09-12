@@ -3894,6 +3894,19 @@ function renderPayments() {
     }).join("") || `<tr><td colspan="${isAdmin() ? 6 : 5}">No hay pagos registrados.</td></tr>`;
 }
 
+/* Lo que va en la descripcion del comprobante cuando no se escribe nada.
+   Vive en una sola funcion porque la usan el campo -que la muestra en gris como
+   sugerencia- y la emision. Estaban separadas y ya decian cosas distintas: la
+   del campo tomaba en cuenta el servicio de la cita y la de la emision no, asi
+   que dejar el campo vacio habria emitido "Servicio odontologico" en una cita
+   que tenia su servicio escrito. */
+function descripcionPorDefecto(payment) {
+  const patient = patientById(payment?.patientId);
+  const history = historyById(payment?.historyId);
+  const appointment = state.appointments.find((item) => item.id === payment?.appointmentId);
+  return history?.reason || appointment?.service || patient?.mainTreatment || "Servicio odontologico";
+}
+
 function buildElectronicReceiptFromPayment(payment, formDataValues) {
   const type = String(formDataValues.electronicReceiptType || formDataValues.type || "").toUpperCase();
   if (!type) return null;
@@ -3901,7 +3914,7 @@ function buildElectronicReceiptFromPayment(payment, formDataValues) {
   const history = historyById(payment.historyId);
   const customerDoc = String(formDataValues.receiptCustomerDoc || formDataValues.customerDoc || patient?.dni || "").trim();
   const customerName = String(formDataValues.receiptCustomerName || formDataValues.customerName || patient?.name || "").trim().toUpperCase();
-  const description = String(formDataValues.description || history?.reason || patient?.mainTreatment || "Servicio odontologico").trim();
+  const description = String(formDataValues.description || descripcionPorDefecto(payment)).trim();
   const series = receiptSeriesForType(type);
   const number = nextReceiptNumber(type);
   return {
@@ -4321,15 +4334,15 @@ function setupReceiptIssueForm() {
   const form = $("#receiptIssueForm");
   if (!context || !form) return;
   const patient = patientById(context.payment.patientId);
-  const history = historyById(context.payment.historyId);
-  const appointment = state.appointments.find((item) => item.id === context.payment.appointmentId);
   form.reset();
   form.elements.namedItem("type").value = "BOLETA";
   form.elements.namedItem("customerDoc").placeholder = "DNI";
   form.elements.namedItem("customerDoc").value = patient?.dni || "";
   form.elements.namedItem("customerName").value = patient?.name || "";
   form.elements.namedItem("customerAddress").value = "";
-  form.elements.namedItem("description").value = history?.reason || appointment?.service || patient?.mainTreatment || "Servicio odontologico";
+  /* Vacio a proposito, con lo que saldria en gris: asi no hay que borrar lo
+     puesto para escribir otra cosa, y quien no lo toca obtiene lo de siempre. */
+  form.elements.namedItem("description").placeholder = descripcionPorDefecto(context.payment);
   $("#receiptAddressLabel").hidden = true;
   $("#receiptLookupHint").textContent = "Boleta: busca primero en pacientes registrados.";
 }
