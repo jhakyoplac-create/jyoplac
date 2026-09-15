@@ -838,7 +838,8 @@ label {
 
 .receivable-form {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(220px, 1.2fr) auto;
+  /* paciente, fecha de atencion, fecha de pago, monto, detalle y el boton */
+  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.75fr) minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(200px, 1.1fr) auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 14px;
@@ -2885,11 +2886,15 @@ menu {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* minmax(0, 1fr) y no 1fr: con 1fr la columna crecia hasta el ancho de toda
+     la fila de pestanas del menu y en la tablet cada pantalla se salia por la
+     derecha. Asi el menu se desplaza dentro de su franja. */
   body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
+    min-width: 0;
     position: sticky;
     top: 0;
     z-index: 10;
@@ -3321,4 +3326,506 @@ menu {
   color: var(--coral);
   border-color: #ffc9c9;
   background: #fff5f5;
+}
+
+/* ================= Historial clinico y tratamientos (2026-09-15) =================
+   Lo mismo que quedo en Aurea: la nota arriba en dos filas bajas, debajo la
+   historia del paciente como una hoja imprimible, y el tratamiento se cobra y
+   se descuenta en Pagos. */
+
+/* Las copias del odontograma van a lo ancho, debajo de la nota y de la hoja */
+.content-grid.form-and-list > .odontogram-copies-panel {
+  grid-column: 1 / -1;
+}
+
+.odontogram-copies-panel th:last-child {
+  text-align: right;
+}
+
+/* ---- Nota clinica ----
+   Seis columnas: fecha y cobro angostos, paciente y doctor al doble. */
+.content-grid.history-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.history-note-form {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+  gap: 8px 12px;
+  align-items: end;
+}
+
+.history-note-form > .panel-head {
+  margin-bottom: -4px;
+}
+
+.history-note-form > .panel-head,
+.history-note-form > .hn-completo,
+.history-note-form > .form-more[open] {
+  grid-column: 1 / -1;
+}
+
+.history-note-form > .hn-c1 { grid-column: span 1; }
+.history-note-form > .hn-c2 { grid-column: span 2; }
+
+/* segunda fila: motivo, procedimiento, las dos casillas una sobre otra y
+   Guardar al final. Fijos en sus columnas para no moverse con el plan abierto */
+.history-note-form > .hn-checks { grid-column: 5 / span 1; }
+.history-note-form > .hn-guardar { grid-column: 6 / span 1; }
+
+.history-note-form label {
+  gap: 3px;
+  font-size: 12px;
+}
+
+.history-note-form > .panel-head h2 {
+  font-size: 17px;
+}
+
+.hn-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hn-acciones .ghost {
+  min-height: 30px;
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+.hn-plan-toggle[aria-expanded="true"] {
+  border-color: #1d9e75;
+  color: #0f6e56;
+}
+
+.history-note-form input:not([type="checkbox"]),
+.history-note-form select,
+.history-note-form textarea {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.history-note-form textarea {
+  height: 34px;
+  resize: vertical;
+}
+
+/* el plan se abre con el boton del titulo: cerrado no ocupa ninguna fila, y
+   su propio titulo sobra porque el boton ya dice que es */
+.history-note-form > .form-more:not([open]),
+.history-note-form .form-more > summary {
+  display: none;
+}
+
+.history-note-form > .form-more[open] {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+/* plan y costo lado a lado: la grilla no llega a lo que va dentro de un
+   details, asi que los dos campos tienen su propia fila */
+.history-note-form .hn-plan-fila {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+}
+
+.history-note-form .form-more-hint {
+  margin: 0;
+  color: #0f6e56;
+  font-size: 12px;
+}
+
+.hn-checks {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-height: 34px;
+}
+
+.hn-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1f2a2e;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.history-note-form .hn-check input {
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  margin: 0;
+}
+
+.history-note-form .hn-guardar {
+  min-height: 34px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 13px;
+}
+
+@media (max-width: 980px) {
+  .history-note-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* en dos columnas: fecha, cobro, casillas y guardar a media fila; lo demas entero */
+  .history-note-form > .hn-c2 {
+    grid-column: 1 / -1;
+  }
+
+  .history-note-form > .hn-checks,
+  .history-note-form > .hn-guardar {
+    grid-column: auto;
+  }
+
+  .hn-checks {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px 18px;
+  }
+}
+
+@media (max-width: 720px) {
+  .history-note-form,
+  .history-note-form .hn-plan-fila {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* en una sola columna, span 2 crearia una columna de mas y la hoja se saldria */
+  .history-note-form > .hn-c1,
+  .history-note-form > .hn-c2,
+  .history-note-form > .hn-checks,
+  .history-note-form > .hn-guardar {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---- Historia clinica del paciente ----
+   Una hoja con secciones que se ve igual en pantalla y en papel. Colores
+   fijos: la misma hoja se imprime en una ventana aparte. */
+.history-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.hc-hoja {
+  display: grid;
+  gap: 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  color: #1f2a2e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hc-cabecera {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 2px solid #1f2a2e;
+  padding-bottom: 8px;
+}
+
+.hc-clinica {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hc-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.hc-cabecera h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.hc-cabecera p {
+  margin: 2px 0 0;
+  color: #5b6b70;
+  font-size: 12px;
+}
+
+.hc-numero {
+  text-align: right;
+}
+
+.hc-seccion {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hc-seccion h4 {
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #d9e2e4;
+  color: #5b6b70;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hc-seccion h4 small {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hc-datos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 14px;
+}
+
+.hc-datos span,
+.hc-observacion span {
+  display: block;
+  color: #5b6b70;
+  font-size: 11px;
+}
+
+.hc-observacion {
+  margin: 0;
+}
+
+.hc-tratamiento {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d9e2e4;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.hc-tratamiento-cabeza,
+.hc-tratamiento-montos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 14px;
+}
+
+.hc-tratamiento-cabeza small {
+  margin-left: 6px;
+  color: #5b6b70;
+  font-weight: 400;
+}
+
+.hc-falta {
+  color: #93231c;
+}
+
+.hc-barra {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #e7eef0;
+}
+
+/* claro: lo pagado; oscuro encima: lo que ya se uso */
+.hc-barra i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+}
+
+.hc-barra .hc-barra-pagado {
+  background: #9fd8c2;
+}
+
+.hc-barra .hc-barra-usado {
+  background: #1d9e75;
+}
+
+.hc-grafico {
+  overflow: hidden;
+}
+
+/* las filas del odontograma traen desplazamiento propio: en la hoja se sueltan
+   para que el grafico mida su ancho real y se pueda reducir hasta que entre */
+.hc-grafico .odo-arco,
+.hc-grafico .odo-wrap,
+.hc-grafico .odo-fila {
+  overflow: visible !important;
+  max-width: none !important;
+}
+
+.hc-grafico-lienzo {
+  width: max-content;
+}
+
+.hc-hallazgos {
+  columns: 3;
+  column-gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.hc-hallazgos li {
+  break-inside: avoid;
+  padding: 1px 0;
+}
+
+.hc-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.hc-tabla th {
+  padding: 4px 6px;
+  border-bottom: 1px solid #1f2a2e;
+  color: #5b6b70;
+  font-size: 11px;
+  text-align: left;
+}
+
+.hc-tabla td {
+  padding: 6px;
+  border-bottom: 1px solid #e3e9eb;
+  vertical-align: top;
+}
+
+.hc-tabla .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hc-tabla .hc-fecha {
+  white-space: nowrap;
+}
+
+.hc-tabla tfoot td {
+  border-bottom: 0;
+}
+
+.hc-firma {
+  display: flex;
+  justify-content: space-between;
+  gap: 40px;
+  margin-top: 28px;
+}
+
+.hc-firma div {
+  flex: 1;
+  max-width: 240px;
+  padding-top: 4px;
+  border-top: 1px solid #1f2a2e;
+  color: #5b6b70;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* la copia del odontograma que dibuja el grafico de la hoja no se ve */
+.hc-odontograma-oculto {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  width: 1200px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .hc-datos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hc-hallazgos {
+    columns: 2;
+  }
+}
+
+/* ---- Pagos: descontar del tratamiento ----
+   los campos que se esconden en Pagos -el check del tratamiento, y el dinero
+   cuando se descuenta- son etiquetas con display propio: sin esto el atributo
+   hidden no las oculta */
+#paymentForm [hidden] {
+  display: none !important;
+}
+
+/* el check va en la linea del titulo "Atencion pendiente", a la derecha, como
+   el boton + junto a Paciente: la lista sigue ocupando todo el ancho */
+.payment-attention-row {
+  position: relative;
+}
+
+.payment-attention-row > label:first-child {
+  width: 100%;
+}
+
+.treatment-discount {
+  position: absolute;
+  top: 0;
+  right: 0;
+  /* solo el alto del texto: con el alto de un campo tapaba la lista de abajo */
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f6e56;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* los campos del formulario de pagos traen alto de campo; una casilla no lo
+   lleva, y sin ganarle a esa regla tapaba la lista de abajo */
+#paymentForm .treatment-discount input {
+  width: 15px !important;
+  height: 15px !important;
+  min-height: 0 !important;
+  padding: 0;
+  margin: 0;
+  accent-color: #1d9e75;
+}
+
+.treatment-discount-info {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid #1d9e75;
+  background: #f3faf7;
+  color: #35514a;
+  font-size: 12.5px;
+}
+
+.treatment-discount-info strong {
+  color: #0f3d33;
+}
+
+.payment-discount-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #eaf7f1;
+  color: #0f6e56;
+  font-size: 11px;
+  font-weight: 700;
 }

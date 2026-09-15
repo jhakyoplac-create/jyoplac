@@ -357,6 +357,8 @@ function mapApiPatient(row) {
     nextAppointment: (row.next_appointment || row.nextAppointment || "").slice(0, 10),
     totalAppointments: Number(row.total_appointments ?? row.totalAppointments ?? 0),
     estado: row.estado || "",
+    historiaNumero: Number(row.historia_numero ?? row.historiaNumero ?? 0) || 0,
+    historiaDesde: row.historia_desde || row.historiaDesde || "",
     createdAt: (row.created_at || "").slice(0, 10)
   };
 }
@@ -415,7 +417,8 @@ function mapApiClinicalHistory(row) {
     creditPending: Boolean(row.credit_pending ?? row.creditPending ?? false),
     creditAmount: Number(row.credit_amount ?? row.creditAmount ?? 0),
     creditDueDate: row.credit_due_date || row.creditDueDate || "",
-    creditNote: row.credit_note || row.creditNote || ""
+    creditNote: row.credit_note || row.creditNote || "",
+    planBudget: Number(row.plan_budget ?? row.planBudget ?? 0)
   };
 }
 
@@ -476,6 +479,9 @@ function mapApiPayment(row) {
     receipt: row.receipt || "",
     comprobante: row.comprobante || "",
     registeredBy: row.registered_by || row.registeredBy || "",
+    treatmentId: row.treatment_id || row.treatmentId || "",
+    tipo: row.tipo || "",
+    descontado: Number(row.descontado ?? 0),
     closed: Boolean(row.closed)
   };
 }
@@ -1495,13 +1501,84 @@ function historyById(id) {
 function historyPaid(historyId) {
   return state.payments
     .filter((payment) => payment.historyId === historyId)
-    .reduce((sum, payment) => sum + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0)), 0);
+    // lo descontado del tratamiento tambien cubre la atencion, aunque no sea dinero
+    .reduce((sum, payment) => sum + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0)) + Number(payment.descontado || 0), 0);
 }
 
 function historyBalance(historyId) {
   const entry = historyById(historyId);
   if (!entry) return 0;
   return Math.max(0, Number(entry.agreedPrice || 0) - historyPaid(historyId));
+}
+
+/* Tratamiento con costo total. La nota clinica solo lo crea -plan y costo
+   total- y el dinero se maneja en Pagos y caja, como una cuenta con dos
+   movimientos:
+   - Pagado: cobros con treatmentId que entran a caja con su boleta.
+   - Usado: lo que recepcion descuenta en cada control. No es dinero que entra:
+     se guarda como un movimiento de S/ 0 que lleva aparte lo descontado, asi
+     ninguna suma de caja ni de reportes lo cuenta.
+   Reemplaza a la pantalla Tratamientos, donde ningun pago podia asignarse y lo
+   pagado siempre marcaba S/ 0. */
+const DESCUENTO_TRATAMIENTO = "DESCUENTO_TRATAMIENTO";
+
+function esDescuentoDeTratamiento(payment) {
+  return payment?.tipo === DESCUENTO_TRATAMIENTO;
+}
+
+/* Una ficha que solo lleva una deuda de Cuentas por cobrar no es una atencion:
+   la crea ese modulo con el motivo "Cuenta por cobrar" y nada clinico escrito. */
+function esSoloDeuda(entry) {
+  if (!entry) return false;
+  const vacio = (valor) => !String(valor || "").trim();
+  return String(entry.reason || "").trim() === "Cuenta por cobrar"
+    && vacio(entry.anamnesis) && vacio(entry.exam) && vacio(entry.diagnosis)
+    && vacio(entry.plan) && vacio(entry.procedure) && vacio(entry.instructions);
+}
+
+function esTratamiento(entry) {
+  return Boolean(entry && !esSoloDeuda(entry) && String(entry.plan || "").trim() && Number(entry.planBudget || 0) > 0);
+}
+
+function avanceDelTratamiento(tratamiento) {
+  const movimientos = state.payments.filter((payment) => payment.treatmentId && payment.treatmentId === tratamiento.id);
+  const pagado = movimientos
+    .filter((payment) => !esDescuentoDeTratamiento(payment))
+    .reduce((suma, payment) => suma + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0)), 0);
+  const usado = movimientos
+    .filter(esDescuentoDeTratamiento)
+    .reduce((suma, payment) => suma + Number(payment.descontado || 0), 0);
+  const presupuesto = Number(tratamiento.planBudget || 0);
+  return {
+    presupuesto,
+    pagado,
+    usado,
+    porPagar: Math.max(0, presupuesto - pagado),
+    disponible: Math.max(0, pagado - usado),
+    terminado: presupuesto > 0 && usado >= presupuesto
+  };
+}
+
+function tratamientosDelPaciente(patientId) {
+  return state.clinicalHistory
+    .filter((entry) => entry.patientId === patientId && esTratamiento(entry))
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .map((entry) => ({ entry, ...avanceDelTratamiento(entry) }));
+}
+
+function tratamientoPorId(id) {
+  const entry = historyById(id);
+  return esTratamiento(entry) ? { entry, ...avanceDelTratamiento(entry) } : null;
+}
+
+// el tratamiento mas reciente que todavia tiene dinero pagado sin usar
+function tratamientoParaDescontar(patientId) {
+  return tratamientosDelPaciente(patientId).find((t) => t.disponible > 0) || null;
+}
+
+function descripcionDelTratamiento(payment) {
+  const entry = payment?.treatmentId ? historyById(payment.treatmentId) : null;
+  return entry?.plan ? `Tratamiento de ${entry.plan}` : "";
 }
 
 function pendingHistories() {
@@ -2304,11 +2381,19 @@ function fillPatientSelect(select, selected = "", includeBlank = false) {
 
 function fillPaymentPatientSelect(select, selected = "") {
   if (!select) return;
-  const ids = pendingPatientIds();
+  // tambien entra quien solo tiene un tratamiento por pagar, sin deuda de notas
+  const porPagarDe = (patientId) => tratamientosDelPaciente(patientId).reduce((suma, t) => suma + t.porPagar, 0);
+  const conTratamiento = [...new Set(state.clinicalHistory.filter(esTratamiento).map((entry) => entry.patientId))]
+    .filter((patientId) => porPagarDe(patientId) > 0);
+  const ids = [...new Set([...pendingPatientIds(), ...conTratamiento])];
   const patients = state.patients
     .filter((patient) => ids.includes(patient.id))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const debtOptions = patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - deuda ${money(pendingCashDebtForPatient(patient.id))}</option>`);
+  const debtOptions = patients.map((patient) => {
+    const deuda = pendingCashDebtForPatient(patient.id);
+    const detalle = deuda > 0 ? `deuda ${money(deuda)}` : `tratamiento por pagar ${money(porPagarDe(patient.id))}`;
+    return `<option value="${patient.id}">${escapeHtml(patient.name)} - ${detalle}</option>`;
+  });
   const agendaOptions = agendaPaymentAppointments()
     .map((appointment) => {
       const patient = patientById(appointment.patientId);
@@ -2363,6 +2448,10 @@ function appointmentHasRegisteredPayment(appointment) {
     && item.date === appointment.date
   )).length;
   return state.payments.some((payment) => {
+    /* Un descuento del tratamiento no cobra la cita: si la cubre entera ya la
+       dejo ATENDIDA, y si no la cubre la cita debe seguir en la lista para
+       cobrar el resto como pago normal. */
+    if (esDescuentoDeTratamiento(payment)) return false;
     if (String(payment.appointmentId || "") === String(appointment.id || "")) return true;
     if (payment.appointmentId) return false;
     return patientDateAppointments === 1
@@ -2391,7 +2480,9 @@ function paymentSelectionExists(value) {
 function fillAppointmentPatientSelectForDate(select, date, selected = "") {
   if (!select) return;
   const historyCountByPatient = state.clinicalHistory
-    .filter((entry) => entry.date === date && entry.attended && entry.id !== $("#historyForm")?.id?.value)
+    // una ficha que solo lleva una deuda no es una atencion: no quita al
+    // paciente de la lista, o la doctora no podria escribirle su nota
+    .filter((entry) => entry.date === date && entry.attended && !esSoloDeuda(entry) && entry.id !== $("#historyForm")?.id?.value)
     .reduce((map, entry) => {
       map[entry.patientId] = (map[entry.patientId] || 0) + 1;
       return map;
@@ -2416,6 +2507,95 @@ function fillAppointmentPatientSelectForDate(select, date, selected = "") {
   syncAssignedDoctor();
 }
 
+/* La cita "abierta" del paciente en una fecha: se dejan fuera las canceladas,
+   las reprogramadas, las que no asistieron y las ya atendidas. Con hasta, solo
+   las que ya empezaron o empiezan antes de esa hora. */
+function citaAbiertaDelPaciente(patientId, date, hasta = "") {
+  if (!patientId || !date) return null;
+  return state.appointments
+    .filter((appointment) => {
+      if (appointment.patientId !== patientId || appointment.date !== date) return false;
+      const status = String(appointment.status || "").toUpperCase();
+      if (["CANCELADA", "NO_ASISTIO", "REPROGRAMADA", "ATENDIDA"].includes(status)) return false;
+      return !hasta || String(appointment.time || "") <= hasta;
+    })
+    .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")))[0] || null;
+}
+
+/* La cita que se pone en verde al guardar una nota clinica. Antes el servidor
+   marcaba todas las citas del paciente ese dia: una cancelada volvia como
+   atendida. Cada nota del dia explica una cita atendida; si ya hay tantas
+   verdes como notas no se toca nada -asi editar una nota vieja no marca otra-.
+   Si falta, la primera cita abierta que ya empezo o empieza dentro de la hora
+   (el paciente que llega temprano); la de la tarde no se marca por la nota de
+   la manana. */
+function citaParaLaNota(patientId, date, notaId = "") {
+  const hoy = todayISO();
+  if (!patientId || !date || date > hoy) return null;
+  const atendidas = state.appointments.filter((cita) =>
+    cita.patientId === patientId && cita.date === date &&
+    String(cita.status || "").toUpperCase() === "ATENDIDA").length;
+  // la nota que se guarda cuenta aunque todavia no este en la lista
+  const notas = state.clinicalHistory.filter((entry) =>
+    entry.patientId === patientId && entry.date === date && entry.attended &&
+    !esSoloDeuda(entry) && entry.id !== notaId).length + 1;
+  if (atendidas >= notas) return null;
+  const hasta = date === hoy ? timeFromMinutes(minutes(new Date().toTimeString().slice(0, 5)) + 60) : "";
+  return citaAbiertaDelPaciente(patientId, date, hasta);
+}
+
+/* La fecha de atencion que se propone al anotar una deuda: la cita mas
+   reciente del paciente hasta hoy, mirando una semana atras. Cubre al que se
+   atendio ayer y recien hoy se recuerda que debia; mas atras se propone hoy,
+   para no colgar una deuda nueva de una atencion de hace un mes. Se puede
+   cambiar a mano. */
+function fechaDeAtencionSugerida(patientId) {
+  const hoy = todayISO();
+  const desde = addDaysISO(hoy, -7);
+  const fechas = state.appointments
+    .filter((appointment) => {
+      if (String(appointment.patientId) !== String(patientId)) return false;
+      if (appointment.date > hoy || appointment.date < desde) return false;
+      const status = String(appointment.status || "").toUpperCase();
+      return !["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(status);
+    })
+    .map((appointment) => appointment.date)
+    .sort();
+  return fechas.length ? fechas[fechas.length - 1] : hoy;
+}
+
+/* La cita que se pone en verde al anotar la deuda de quien se atendio. Con las
+   reglas del cobro: si ese dia ya tiene una cita atendida no se toca nada -el
+   que se atendio ayer en S/ 0 y hoy se le anota lo que debe-, una cita que
+   todavia no empieza no se da por atendida, y una fecha futura nunca. */
+function citaParaLaDeuda(patientId, date) {
+  const hoy = todayISO();
+  if (!patientId || !date || date > hoy) return null;
+  const yaAtendida = state.appointments.some((appointment) =>
+    String(appointment.patientId) === String(patientId) && appointment.date === date &&
+    String(appointment.status || "").toUpperCase() === "ATENDIDA");
+  if (yaAtendida) return null;
+  return citaAbiertaDelPaciente(patientId, date, date === hoy ? new Date().toTimeString().slice(0, 5) : "");
+}
+
+/* Aviso, nada mas: si el paciente elegido ya tiene una cuenta por cobrar ese
+   dia, se le recuerda a quien escribe la nota. La deuda ya lleva el monto; si
+   en la nota se vuelve a poner, el paciente quedaria debiendo dos veces. */
+function avisoDeDeudaDelDia() {
+  const form = $("#historyForm");
+  const aviso = $("#historyDebtNotice");
+  if (!form || !aviso) return;
+  const patientId = form.elements.namedItem("patientId")?.value || "";
+  const date = form.elements.namedItem("date")?.value || "";
+  const deudas = state.clinicalHistory.filter((entry) =>
+    entry.patientId === patientId && entry.date === date && esSoloDeuda(entry));
+  const total = deudas.reduce((suma, entry) => suma + Number(entry.agreedPrice || 0), 0);
+  aviso.hidden = !deudas.length;
+  aviso.textContent = deudas.length
+    ? `Este paciente ya tiene una cuenta por cobrar de ${money(total)} registrada este día. Si no pagó, deja «Cobro de hoy» en S/ 0: la deuda ya lleva el monto.`
+    : "";
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
 }
@@ -2428,9 +2608,9 @@ const roleLabels = {
 };
 
 const roleViews = {
-  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
-  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
-  DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "tratamientos", "inventario", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
+  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
+  DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
   RECEPCION: ["dashboard", "pacientes", "agenda", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
@@ -2546,7 +2726,6 @@ function setView(view) {
     pacientes: "Registrar paciente",
     historial: "Historial clínico dental",
     odontograma: "Odontograma",
-    tratamientos: "Tratamientos",
     inventario: "Inventario",
     pagos: "Pagos y caja",
     comprobantes: "Comprobantes electrónicos",
@@ -2593,9 +2772,6 @@ function renderActiveView() {
       break;
     case "odontograma":
       renderOdontogram();
-      break;
-    case "tratamientos":
-      renderTreatments();
       break;
     case "inventario":
       renderInventory();
@@ -2646,7 +2822,6 @@ function renderFullApp() {
   renderClinicalHistory();
   renderOdontogramSnapshots();
   renderOdontogram();
-  renderTreatments();
   renderInventory();
   renderPayments();
   renderElectronicReceipts();
@@ -2686,6 +2861,7 @@ function hydrateForms() {
     fillPatientSelect(select, select.value);
   });
   fillAppointmentPatientSelectForDate($('#historyForm select[name="patientId"]'), $('#historyForm input[name="date"]')?.value || todayISO(), $('#historyForm select[name="patientId"]')?.value || "");
+  avisoDeDeudaDelDia();
   fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), $('#paymentForm select[name="patientId"]')?.value || "");
   fillPatientSelect($("#historyPatientFilter"), $("#historyPatientFilter").value);
   $$('select[name="tooth"]').forEach((select) => fillSelect(select, teeth, select.value));
@@ -2697,15 +2873,38 @@ function hydrateForms() {
   toggleMixedPaymentFields();
 }
 
+/* Lo que falta pagar de cada tratamiento del paciente, para cobrarlo como
+   una atencion mas. */
+function opcionesDeCobroDeTratamiento(patientId) {
+  return tratamientosDelPaciente(patientId)
+    .filter((t) => t.porPagar > 0)
+    .map((t) => `<option value="trat:${escapeHtml(t.entry.id)}">Tratamiento ${escapeHtml(t.entry.plan)} - por pagar ${money(t.porPagar)}</option>`)
+    .join("");
+}
+
 function renderTreatmentPaymentOptions() {
   const patientSelect = $('#paymentForm select[name="patientId"]');
   const historySelect = $('#paymentForm select[name="historyId"]');
   if (!patientSelect || !historySelect) return;
+  /* La lista se vuelve a armar en cada dibujo y lo elegido no debe perderse,
+     pero solo mientras siga el mismo paciente o cita: al pasar de cobrar el
+     tratamiento a la cita del dia, quedaba marcado el cobro del tratamiento. */
+  const mismaSeleccion = historySelect.dataset.seleccion === patientSelect.value;
+  const previo = mismaSeleccion ? historySelect.value : "";
+  historySelect.dataset.seleccion = patientSelect.value;
+  const existe = (valor) => [...historySelect.options].some((option) => option.value === valor);
   const appointment = appointmentFromPaymentSelection(patientSelect.value);
   if (appointment) {
     const amount = Number(serviceByName(appointment.service)?.price || 0);
-    historySelect.innerHTML = `<option value="">Cita del dia - ${escapeHtml(appointment.service || "Servicio")}</option>`;
-    historySelect.disabled = true;
+    const cobros = opcionesDeCobroDeTratamiento(appointment.patientId);
+    historySelect.innerHTML = `<option value="">Cita del dia - ${escapeHtml(appointment.service || "Servicio")}</option>${cobros}`;
+    // con un tratamiento por pagar se puede elegir cobrarlo en vez de la cita
+    historySelect.disabled = !cobros;
+    if (previo && existe(previo)) historySelect.value = previo;
+    if (String(historySelect.value).startsWith("trat:")) {
+      updatePaymentDue();
+      return;
+    }
     const form = $("#paymentForm");
     if (form?.amount) form.amount.readOnly = false;
     if (form?.amountDue) form.amountDue.value = amount || 0;
@@ -2719,18 +2918,202 @@ function renderTreatmentPaymentOptions() {
     const clearDebtBtn = $("#clearHistoryDebtBtn");
     if (clearDebtBtn) clearDebtBtn.hidden = true;
     updatePaymentChange();
+    aplicarCuadroDeDescuento();
     return;
   }
   const patientId = patientIdFromPaymentSelection(patientSelect.value);
   const pending = pendingCashHistories().filter((entry) => entry.patientId === patientId);
+  const cobros = opcionesDeCobroDeTratamiento(patientId);
   historySelect.disabled = false;
-  historySelect.innerHTML = pending.length
-    ? pending.map((entry) => `<option value="${entry.id}">${formatDate(entry.date)} - ${escapeHtml(entry.reason)} - saldo ${money(historyBalance(entry.id))}</option>`).join("")
+  historySelect.innerHTML = pending.length || cobros
+    ? pending.map((entry) => `<option value="${entry.id}">${formatDate(entry.date)} - ${escapeHtml(entry.reason)} - saldo ${money(historyBalance(entry.id))}</option>`).join("") + cobros
     : `<option value="">Sin atenciones pendientes</option>`;
   if (forcedPaymentHistoryId && pending.some((entry) => entry.id === forcedPaymentHistoryId)) historySelect.value = forcedPaymentHistoryId;
+  else if (previo && existe(previo)) historySelect.value = previo;
   const form = $("#paymentForm");
   if (form) form.dataset.paymentMode = "debt";
   updatePaymentDue();
+}
+
+function updatePaymentDue() {
+  const form = $("#paymentForm");
+  if (!form) return;
+  const clearDebtBtn = $("#clearHistoryDebtBtn");
+  const valor = String(form.historyId.value || "");
+  if (valor.startsWith("trat:")) {
+    /* Cobrar el tratamiento: llega con lo que falta pagar del costo total. Se
+       puede cobrar menos -un adelanto parcial-, no mas. Entra a caja con su
+       boleta, como cualquier cobro. */
+    const tratamiento = tratamientoPorId(valor.slice(5));
+    const porPagar = tratamiento ? tratamiento.porPagar : 0;
+    form.amountDue.value = porPagar;
+    form.amount.value = porPagar || "";
+    form.amount.readOnly = false;
+    form.dataset.paymentMode = "tratamiento";
+    form.dataset.basePaymentAmount = Number(form.amount.value || 0);
+    if (clearDebtBtn) clearDebtBtn.hidden = true;
+    applyProductTotalToPaymentForm();
+    updatePaymentChange();
+    aplicarCuadroDeDescuento();
+    return;
+  }
+  if (appointmentFromPaymentSelection(form.patientId.value)) {
+    // se dejo de cobrar el tratamiento: vuelve el precio de la cita
+    if (form.dataset.paymentMode === "tratamiento") {
+      renderTreatmentPaymentOptions();
+      return;
+    }
+    form.amount.readOnly = false;
+    form.dataset.basePaymentAmount = Number(form.amount.value || 0);
+    applyProductTotalToPaymentForm();
+    updatePaymentChange();
+    aplicarCuadroDeDescuento();
+    return;
+  }
+  const due = historyBalance(form.historyId.value);
+  form.amountDue.value = due || 0;
+  form.amount.value = due || "";
+  form.dataset.paymentMode = "debt";
+  form.dataset.basePaymentAmount = Number(form.amount.value || 0);
+  /* Llega con la deuda entera puesta, que es lo mas comun, pero se puede
+     cambiar: el paciente que debe 110 y trae 30 abona esos 30 y queda debiendo
+     80. El saldo no es un numero guardado -se saca de lo acordado menos lo que
+     ya pago-, asi que va bajando solo hasta que la cuenta desaparece de la
+     lista. Lo que no deja el guardado es pasarse del saldo ni poner cero. */
+  form.amount.readOnly = false;
+  if (clearDebtBtn) clearDebtBtn.hidden = !isAdmin() || !form.historyId.value || due <= 0;
+  applyProductTotalToPaymentForm();
+  updatePaymentChange();
+  aplicarCuadroDeDescuento();
+}
+
+/* El check "Descontar del tratamiento". Solo aparece si el paciente tiene
+   dinero pagado de un tratamiento que todavia no se uso, y si hay algo que
+   descontar: una cita del dia o una atencion pendiente. Marcado, se van los
+   campos de dinero -no se recibe nada- y el boton dice cuanto se descuenta. */
+function aplicarCuadroDeDescuento() {
+  const form = $("#paymentForm");
+  const caja = $("#treatmentDiscountBox");
+  const info = $("#treatmentDiscountInfo");
+  if (!form || !caja || !info) return;
+  const check = form.elements.namedItem("descontarTratamiento");
+  const seleccion = form.patientId.value;
+  const valor = String(form.historyId.value || "");
+  // cobrar el tratamiento y descontar de el a la vez no tiene sentido
+  const hayAtencion = !valor.startsWith("trat:") && Boolean(appointmentFromPaymentSelection(seleccion) || valor);
+  const tratamiento = hayAtencion ? tratamientoParaDescontar(patientIdFromPaymentSelection(seleccion)) : null;
+  caja.hidden = !tratamiento;
+  if (!tratamiento && check) check.checked = false;
+  const activo = Boolean(tratamiento && check?.checked);
+  form.classList.toggle("modo-descuento", activo);
+  ["cashReceived", "change", "method"].forEach((nombre) => {
+    const etiqueta = form.elements.namedItem(nombre)?.closest("label");
+    if (etiqueta) etiqueta.hidden = activo;
+  });
+  const mixto = $("#mixedPaymentFields");
+  if (mixto && activo) mixto.hidden = true;
+  else if (mixto) toggleMixedPaymentFields();
+  const etiquetaMonto = form.amount.closest("label")?.firstChild;
+  if (etiquetaMonto?.nodeType === Node.TEXT_NODE) etiquetaMonto.nodeValue = activo ? "Monto a descontar S/" : "Monto que paga S/";
+  const boton = form.querySelector('button[type="submit"]');
+  if (!activo) {
+    info.hidden = true;
+    if (boton && !paymentSaving) boton.textContent = "Guardar pago";
+    return;
+  }
+  if (Number(form.amount.value || 0) > tratamiento.disponible) form.amount.value = tratamiento.disponible;
+  const monto = Number(form.amount.value || 0);
+  info.hidden = false;
+  info.innerHTML = `<strong>${escapeHtml(tratamiento.entry.plan)}</strong>` +
+    `<span>Disponible ${money(tratamiento.disponible)} → queda ${money(Math.max(0, tratamiento.disponible - monto))}</span>` +
+    `<span>No entra a caja · sin boleta</span>`;
+  if (boton && !paymentSaving) boton.textContent = `Descontar ${money(monto)}`;
+}
+
+async function guardarDescuentoDeTratamiento({ form, data, restorePaymentButton }) {
+  const appointment = appointmentFromPaymentSelection(data.patientId);
+  const patientId = patientIdFromPaymentSelection(data.patientId);
+  const patient = patientById(patientId);
+  const tratamiento = tratamientoParaDescontar(patientId);
+  const monto = Math.round(Number(data.amount || 0) * 100) / 100;
+  const fallar = (mensaje) => {
+    alert(mensaje);
+    restorePaymentButton();
+    aplicarCuadroDeDescuento();
+  };
+  if (!tratamiento) return fallar("Este paciente ya no tiene saldo disponible en su tratamiento.");
+  if ((selectedProductSaleItems || []).some((item) => Number(item.quantity || 0) > 0)) {
+    return fallar("Los productos se cobran aparte: quítalos o desmarca el descuento.");
+  }
+  if (monto <= 0 || monto > tratamiento.disponible) {
+    return fallar(`El monto debe ser mayor a cero y no pasar de lo disponible (${money(tratamiento.disponible)}).`);
+  }
+  const historyId = appointment ? "" : String(data.historyId || "");
+  const pendiente = appointment ? Number(form.amountDue.value || 0) : historyBalance(historyId);
+  if (!appointment && monto > pendiente) return fallar("El monto no puede superar el saldo de la atención.");
+  const resto = Math.max(0, pendiente - monto);
+  const payment = {
+    id: uid("pay"),
+    patientId,
+    historyId,
+    appointmentId: appointment?.id || "",
+    date: appointment?.date || operatingDate(),
+    amount: 0,
+    productAmount: 0,
+    cashReceived: 0,
+    change: 0,
+    method: "TRATAMIENTO",
+    cashAmount: 0,
+    yapeAmount: 0,
+    plinAmount: 0,
+    cardAmount: 0,
+    transferAmount: 0,
+    tipo: DESCUENTO_TRATAMIENTO,
+    treatmentId: tratamiento.entry.id,
+    descontado: monto,
+    // la cita se da por atendida solo si el descuento la cubre entera
+    marcarCita: Boolean(appointment) && resto <= 0,
+    productItems: [],
+    receipt: String(data.receipt || "").trim() || `Descontado de ${tratamiento.entry.plan}`,
+    registeredBy: currentUser()?.name || ""
+  };
+  try {
+    await savePaymentApi(payment);
+  } catch (error) {
+    return fallar(error.message);
+  }
+  upsert(state.payments, payment);
+  addLocalAuditEvent("TRATAMIENTO_DESCUENTO", `Descontó ${money(monto)} de ${tratamiento.entry.plan}: ${patient?.name || "Paciente"}`, patientId);
+  if (appointment && resto <= 0 && state.config.enableAgendaPayments !== false) {
+    appointment.status = "ATENDIDA";
+    addLocalAuditEvent(
+      "APPOINTMENT_ATTENDED",
+      `Marco atendida desde descuento de tratamiento: ${patient?.name || "Paciente"} ${appointment.date} ${appointment.time}`,
+      patientId
+    );
+  }
+  if (!API_ENABLED) saveState();
+  restorePaymentButton();
+  /* Si el control cuesta mas de lo que quedaba, la cita sigue en la lista y el
+     formulario queda listo para cobrar el resto como un pago normal. */
+  if (resto > 0) {
+    form.elements.namedItem("descontarTratamiento").checked = false;
+    render();
+    if (appointment) form.amount.value = resto;
+    else if (form.historyId) {
+      form.historyId.value = historyId;
+      updatePaymentDue();
+    }
+    aplicarCuadroDeDescuento();
+    updatePaymentChange();
+    alert(`Se descontaron ${money(monto)} del tratamiento. Falta cobrar ${money(resto)} como pago normal.`);
+    return;
+  }
+  form.reset();
+  selectedProductSaleItems = [];
+  renderPaymentProductSummary();
+  form.date.value = operatingDate();
+  render();
 }
 
 function renderInventory() {
@@ -2762,32 +3145,6 @@ function renderInventory() {
       <td>${escapeHtml(movement.detail || "")}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="6">Sin movimientos de inventario.</td></tr>`;
-}
-
-function updatePaymentDue() {
-  const form = $("#paymentForm");
-  if (!form) return;
-  if (appointmentFromPaymentSelection(form.patientId.value)) {
-    form.amount.readOnly = false;
-    form.dataset.basePaymentAmount = Number(form.amount.value || 0);
-    applyProductTotalToPaymentForm();
-    updatePaymentChange();
-    return;
-  }
-  const due = historyBalance(form.historyId.value);
-  form.amountDue.value = due || 0;
-  form.amount.value = due || "";
-  form.dataset.basePaymentAmount = Number(form.amount.value || 0);
-  /* Llega con la deuda entera puesta, que es lo mas comun, pero se puede
-     cambiar: el paciente que debe 110 y trae 30 abona esos 30 y queda debiendo
-     80. El saldo no es un numero guardado -se saca de lo acordado menos lo que
-     ya pago-, asi que va bajando solo hasta que la cuenta desaparece de la
-     lista. Lo que no deja el guardado es pasarse del saldo ni poner cero. */
-  form.amount.readOnly = false;
-  const clearDebtBtn = $("#clearHistoryDebtBtn");
-  if (clearDebtBtn) clearDebtBtn.hidden = !isAdmin() || !form.historyId.value || due <= 0;
-  applyProductTotalToPaymentForm();
-  updatePaymentChange();
 }
 
 function applyProductTotalToPaymentForm() {
@@ -3055,7 +3412,10 @@ function receivableEntryFromForm(data) {
   return {
     id: uid("h"),
     patientId: data.patientId,
-    date: todayISO(),
+    /* La fecha de la atencion, no la de hoy. Antes siempre era hoy: la deuda de
+       quien se atendio ayer quedaba colgando del dia equivocado, y si ese
+       paciente tenia cita hoy lo sacaba de la lista de Historial de hoy. */
+    date: data.attentionDate || todayISO(),
     attendedBy: patient?.doctor || currentUser()?.name || "",
     attended: true,
     reason: "Cuenta por cobrar",
@@ -3091,6 +3451,7 @@ function selectReceivablePatient(patient) {
   if (!form || !patient) return;
   form.patientId.value = patient.id;
   form.patientSearch.value = patientOptionLabel(patient);
+  if (form.attentionDate) form.attentionDate.value = fechaDeAtencionSugerida(patient.id);
   const suggestions = $("#receivablePatientSuggestions");
   if (suggestions) suggestions.innerHTML = "";
 }
@@ -3419,47 +3780,289 @@ function renderPatients() {
   $("#patientsTable").innerHTML = rows.join("") || `<tr><td colspan="6">No hay pacientes para mostrar.</td></tr>`;
 }
 
-function renderTreatments() {
-  $("#treatmentsList").innerHTML = state.treatments.map((treatment) => {
-    const patient = patientById(treatment.patientId);
-    const paid = state.payments.filter((payment) => payment.treatmentId === treatment.id).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const balance = Math.max(0, Number(treatment.budget || 0) - paid);
-    return `<article class="treatment-card">
-      <div class="card-title">
-        <strong>${escapeHtml(patient?.name || "Paciente")}</strong>
-        <span class="status">${escapeHtml(treatment.status)}</span>
+/* ============ Historia clinica del paciente ============
+   Antes el historial era una tira de tarjetas sueltas: sin orden y sin forma
+   de entregarsela al paciente. Ahora es una hoja con secciones -datos,
+   tratamiento en curso, odontograma, atenciones y deudas- que se ve igual en
+   pantalla y en papel: lo que se mira es lo que se imprime. */
+
+const numeroDeHistoria = (numero) => `HC N.° ${String(numero).padStart(4, "0")}`;
+
+let vistaDeLaHoja = null;
+let lienzoDeLaHoja = null;
+
+/* El dibujo sale del mismo modulo del odontograma, en una copia de solo
+   lectura fuera de la vista, igual que hace su propia hoja de impresion. Asi
+   no se toca odontograma.js, que esta copiado a mano en los dos sistemas. Se
+   usa la ultima copia guardada; si no hay ninguna, el odontograma actual. */
+function odontogramaParaLaHoja(patientId) {
+  if (typeof Odontograma === "undefined" || !patientId) return null;
+  const copia = copiasDelOdontograma(patientId)[0] || null;
+  const ficha = copia
+    ? Odontograma.normalizarFicha(parseFindings(copia.ficha))
+    : odontogramFichaFor(patientId, "inicial");
+  const compacta = fichaCompacta(ficha);
+  if (!Object.keys(compacta.dientes).length && !compacta.spans.length && !compacta.esp) return null;
+  if (!vistaDeLaHoja) {
+    const caja = document.createElement("div");
+    caja.className = "hc-odontograma-oculto";
+    caja.setAttribute("aria-hidden", "true");
+    const cabecera = document.createElement("div");
+    lienzoDeLaHoja = document.createElement("div");
+    caja.append(cabecera, lienzoDeLaHoja);
+    document.body.appendChild(caja);
+    vistaDeLaHoja = Odontograma.crear({ barra: null, cabecera, lienzo: lienzoDeLaHoja, rutaImagenes: "assets/dientes/" });
+    vistaDeLaHoja.setPacientes([], "");
+    vistaDeLaHoja.setSoloLectura(true);
+  }
+  vistaDeLaHoja.cargar(ficha);
+  const arco = lienzoDeLaHoja.querySelector(".odo-arco");
+  return {
+    html: arco ? arco.innerHTML : "",
+    hallazgos: (Odontograma.PIEZAS || [])
+      .map((pieza) => ({ pieza, texto: vistaDeLaHoja.resumenPieza(pieza) }))
+      .filter((item) => item.texto),
+    especificaciones: ficha.esp || "",
+    origen: copia
+      ? `copia del ${formatDate(copia.date)}${copia.sheet === "evolucion" ? " · evolución" : ""}${copia.doctor ? ` · ${copia.doctor}` : ""}`
+      : "odontograma actual, sin copia guardada"
+  };
+}
+
+/* El grafico mide lo mismo que en la pantalla del odontograma, mas ancho que
+   la hoja: se reduce hasta que entre. Sin ancho -la pantalla oculta- no se
+   toca, porque quedaria en cero. */
+function ajustarGraficos(raiz) {
+  raiz.querySelectorAll(".hc-grafico").forEach((caja) => {
+    const lienzo = caja.firstElementChild;
+    if (!lienzo || !caja.clientWidth) return;
+    lienzo.style.zoom = "1";
+    const ancho = lienzo.scrollWidth;
+    if (ancho) lienzo.style.zoom = String(Math.min(1, caja.clientWidth / ancho));
+  });
+}
+
+function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
+  const patient = patientById(patientId);
+  if (!patient) return `<p class="muted">Elige un paciente para ver su historia.</p>`;
+  const config = state.config || {};
+  const edad = ageFromBirthDate(patient.birthDate);
+  const notas = state.clinicalHistory
+    .filter((entry) => entry.patientId === patientId)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const atenciones = notas.filter((entry) => !esSoloDeuda(entry));
+  const deudas = notas.filter((entry) => historyBalance(entry.id) > 0);
+  const tratamientos = tratamientosDelPaciente(patientId);
+  const odontograma = odontogramaParaLaHoja(patientId);
+  const dato = (titulo, valor) => `<div><span>${titulo}</span><strong>${escapeHtml(valor || "-")}</strong></div>`;
+
+  const cabecera = `<header class="hc-cabecera">
+      <div class="hc-clinica">
+        <img class="hc-logo" src="assets/logo-cm.png" alt="" onerror="this.remove()" />
+        <div>
+          <h3>${escapeHtml(config.clinicName || "CM Odontología Estética")}</h3>
+          <p>Historia clínica odontológica${config.issuerAddress ? ` · ${escapeHtml(config.issuerAddress)}` : ""}</p>
+        </div>
       </div>
-      <p class="muted">${escapeHtml(treatment.service)} | Piezas: ${escapeHtml(treatment.teeth || "-")}</p>
-      <p>Presupuesto: <strong>${money(treatment.budget)}</strong> | Pagado: <strong>${money(paid)}</strong> | Saldo: <strong>${money(balance)}</strong></p>
-      <p class="muted">${escapeHtml(treatment.notes || "")}</p>
-      <button class="small-btn" data-edit-treatment="${treatment.id}">Editar</button>
-    </article>`;
-  }).join("") || `<p class="muted">Aun no hay tratamientos.</p>`;
+      <div class="hc-numero">
+        ${patient.historiaNumero
+          ? `<strong>${numeroDeHistoria(patient.historiaNumero)}</strong><p>Abierta el ${formatDate(patient.historiaDesde || todayISO())}</p>`
+          : pantalla ? `<strong>Sin N.° de historia</strong><p>Se asigna al imprimirla por primera vez</p>` : ""}
+        ${pantalla ? "" : `<p>Impresa el ${formatDate(todayISO())}</p>`}
+      </div>
+    </header>`;
+
+  const datos = `<section class="hc-seccion">
+      <h4>1. Datos del paciente</h4>
+      <div class="hc-datos">
+        ${dato("Nombre", patient.name)}
+        ${dato("DNI", patient.dni)}
+        ${dato("Edad", edad === null ? "" : `${edad} años`)}
+        ${dato("Fecha de nacimiento", patient.birthDate ? formatDate(patient.birthDate) : "")}
+        ${dato("Celular", patient.phone)}
+        ${dato("Doctor(a)", patient.doctor)}
+        ${dato("Tratamiento principal", patient.mainTreatment)}
+        ${dato("Paciente desde", patient.createdAt ? formatDate(patient.createdAt) : "")}
+      </div>
+      ${String(patient.notes || "").trim() ? `<p class="hc-observacion"><span>Observaciones:</span> ${escapeHtml(patient.notes)}</p>` : ""}
+    </section>`;
+
+  const tratamiento = `<section class="hc-seccion">
+      <h4>2. Tratamiento en curso</h4>
+      ${tratamientos.length ? tratamientos.map((t) => {
+        const pagadoPct = t.presupuesto ? Math.min(100, Math.round((t.pagado / t.presupuesto) * 100)) : 0;
+        const usadoPct = t.presupuesto ? Math.min(100, Math.round((t.usado / t.presupuesto) * 100)) : 0;
+        return `<div class="hc-tratamiento">
+          <div class="hc-tratamiento-cabeza">
+            <strong>${escapeHtml(t.entry.plan)} <small>desde el ${formatDate(t.entry.date)}</small></strong>
+            <span class="status ${t.terminado ? "" : "warn"}">${t.terminado ? "TERMINADO" : "EN CURSO"}</span>
+          </div>
+          <div class="hc-tratamiento-montos">
+            <span>Presupuesto <strong>${money(t.presupuesto)}</strong></span>
+            <span>Pagado <strong>${money(t.pagado)}</strong></span>
+            <span>Usado <strong>${money(t.usado)}</strong></span>
+            <span>Disponible <strong>${money(t.disponible)}</strong></span>
+            ${t.porPagar > 0 ? `<span>Por pagar <strong class="hc-falta">${money(t.porPagar)}</strong></span>` : ""}
+          </div>
+          <div class="hc-barra" role="img" aria-label="Pagado ${pagadoPct}%, usado ${usadoPct}%"><i class="hc-barra-pagado" style="width:${pagadoPct}%"></i><i class="hc-barra-usado" style="width:${usadoPct}%"></i></div>
+        </div>`;
+      }).join("") : `<p class="muted">Sin tratamiento. Se abre escribiendo plan y costo total en la nota clínica.</p>`}
+    </section>`;
+
+  const odonto = `<section class="hc-seccion hc-seccion-odontograma">
+      <h4>3. Odontograma${odontograma ? ` <small>· ${escapeHtml(odontograma.origen)}</small>` : ""}</h4>
+      ${odontograma
+        ? `<div class="hc-grafico"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${odontograma.html}</div></div></div>
+          ${odontograma.hallazgos.length ? `<ul class="hc-hallazgos">${odontograma.hallazgos.map((item) => `<li><strong>${escapeHtml(item.pieza)}</strong> ${escapeHtml(item.texto)}</li>`).join("")}</ul>` : ""}
+          ${odontograma.especificaciones ? `<p class="hc-observacion"><span>Especificaciones:</span> ${escapeHtml(odontograma.especificaciones)}</p>` : ""}`
+        : `<p class="muted">Sin odontograma registrado.</p>`}
+    </section>`;
+
+  const filas = atenciones.map((entry) => {
+    const precio = Number(entry.agreedPrice || 0);
+    const saldo = historyBalance(entry.id);
+    const detalle = [
+      entry.reason ? `<strong>${escapeHtml(entry.reason)}</strong>` : "",
+      entry.procedure ? escapeHtml(entry.procedure) : "",
+      entry.plan ? `<em>Plan: ${escapeHtml(entry.plan)}${Number(entry.planBudget || 0) > 0 ? ` · costo total ${money(entry.planBudget)}` : ""}</em>` : "",
+      String(entry.instructions || "").trim() ? `<em>Presupuesto: ${escapeHtml(entry.instructions)}</em>` : ""
+    ].filter(Boolean).join("<br>");
+    const delTratamiento = state.payments.some((payment) => payment.historyId === entry.id && esDescuentoDeTratamiento(payment));
+    const pago = saldo > 0 ? `<span class="status warn">Debe ${money(saldo)}</span>` : precio > 0 ? (delTratamiento ? "Del tratamiento" : "Pagado") : "-";
+    return `<tr>
+        <td class="hc-fecha">${formatDate(entry.date)}</td>
+        <td>${escapeHtml(entry.attendedBy || "-")}</td>
+        <td>${detalle || "-"}</td>
+        <td class="num">${money(precio)}</td>
+        <td class="num">${pago}</td>
+        ${pantalla ? `<td class="num"><button class="small-btn" type="button" data-edit-history="${entry.id}">Editar</button></td>` : ""}
+      </tr>`;
+  }).join("");
+
+  const tablaAtenciones = `<section class="hc-seccion">
+      <h4>4. Atenciones</h4>
+      ${atenciones.length
+        ? `<div class="table-wrap"><table class="hc-tabla"><thead><tr><th>Fecha</th><th>Atendió</th><th>Motivo y procedimiento</th><th class="num">Precio</th><th class="num">Pago</th>${pantalla ? "<th></th>" : ""}</tr></thead><tbody>${filas}</tbody></table></div>`
+        : `<p class="muted">Todavía no tiene atenciones registradas.</p>`}
+    </section>`;
+
+  const totalDeudas = deudas.reduce((suma, entry) => suma + historyBalance(entry.id), 0);
+  const tablaDeudas = `<section class="hc-seccion">
+      <h4>5. Deudas pendientes</h4>
+      ${deudas.length
+        ? `<div class="table-wrap"><table class="hc-tabla"><thead><tr><th>Fecha</th><th>Concepto</th><th>Paga hasta</th><th class="num">Saldo</th></tr></thead><tbody>${deudas.map((entry) => `<tr>
+            <td class="hc-fecha">${formatDate(entry.date)}</td>
+            <td>${esSoloDeuda(entry) ? `Cuenta por cobrar${entry.creditNote ? ` · ${escapeHtml(entry.creditNote)}` : ""}` : escapeHtml(entry.reason || "Atención")}</td>
+            <td>${entry.creditDueDate ? formatDate(entry.creditDueDate) : "-"}</td>
+            <td class="num"><strong>${money(historyBalance(entry.id))}</strong></td>
+          </tr>`).join("")}</tbody><tfoot><tr><td colspan="3">Total</td><td class="num"><strong>${money(totalDeudas)}</strong></td></tr></tfoot></table></div>`
+        : `<p>Ninguna.</p>`}
+    </section>`;
+
+  const firma = `<footer class="hc-firma">
+      <div>Firma y sello del cirujano dentista<br>COP N.°</div>
+      <div>Firma del paciente</div>
+    </footer>`;
+
+  return `<article class="hc-hoja">${cabecera}${datos}${tratamiento}${odonto}${tablaAtenciones}${tablaDeudas}${firma}</article>`;
 }
 
 function renderClinicalHistory() {
-  const filter = $("#historyPatientFilter").value || state.patients[0]?.id;
   if (!$('#historyForm input[name="date"]').value) $('#historyForm input[name="date"]').value = todayISO();
-  const items = state.clinicalHistory
-    .filter((entry) => !filter || entry.patientId === filter)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  $("#historyTimeline").innerHTML = items.map((entry) => {
-    const patient = patientById(entry.patientId);
-    const balance = historyBalance(entry.id);
-    return `<details class="timeline-item">
-      <summary>
-        <strong>${formatDate(entry.date)} | ${escapeHtml(patient?.name || "")}</strong>
-        <span class="status ${balance > 0 ? "warn" : ""}">${balance > 0 ? "PENDIENTE" : "PAGADO"}</span>
-      </summary>
-      <p><strong>Atendido por:</strong> ${escapeHtml(entry.attendedBy || "-")} | <strong>Precio pactado:</strong> ${money(entry.agreedPrice)} | <strong>Saldo:</strong> ${money(balance)}</p>
-      <p><strong>Motivo:</strong> ${escapeHtml(entry.reason)}</p>
-      <p><strong>Plan:</strong> ${escapeHtml(entry.plan || "-")}</p>
-      <p class="muted">${escapeHtml(entry.procedure || "")}</p>
-      <p><strong>Presupuesto:</strong> ${escapeHtml(entry.instructions || "-")}</p>
-      ${entry.creditPending ? `<p><strong>Pago pendiente:</strong> ${money(historyBalance(entry.id))} | <strong>Fecha compromiso:</strong> ${entry.creditDueDate ? formatDate(entry.creditDueDate) : "-"}</p>` : ""}
-      <button class="small-btn" data-edit-history="${entry.id}">Editar</button>
-    </details>`;
-  }).join("") || `<p class="muted">Este paciente aun no tiene historial registrado.</p>`;
+  // el tratamiento se elige del catalogo de servicios, sin impedir escribir otro
+  const sugerencias = $("#historyPlanOptions");
+  if (sugerencias) {
+    sugerencias.innerHTML = (state.services || [])
+      .filter((servicio) => servicio.active !== false && servicio.name)
+      .map((servicio) => `<option value="${escapeHtml(servicio.name)}"></option>`)
+      .join("");
+  }
+  const caja = $("#historyTimeline");
+  if (!caja) return;
+  const patientId = $("#historyPatientFilter").value || state.patients[0]?.id || "";
+  caja.innerHTML = hojaDeLaHistoria(patientId, { pantalla: true });
+  ajustarGraficos(caja);
+}
+
+/* El numero de historia se da la primera vez que se imprime: no todos los
+   pacientes la piden, y asi el correlativo cuenta solo las historias que de
+   verdad se entregaron. Lo asigna el servidor, para que dos equipos no den el
+   mismo numero. */
+async function imprimirHistoria(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) {
+    alert("Elige primero un paciente.");
+    return;
+  }
+  const esPrimera = !patient.historiaNumero;
+  if (esPrimera && !confirm(`Es la primera vez que se imprime la historia de ${patient.name}. Se le asigna su número de historia clínica y ese número queda fijo. ¿Continuar?`)) return;
+  // la ventana se abre antes de cualquier espera: despues el navegador la bloquea
+  const ventana = window.open("", "_blank", "width=900,height=1100");
+  if (!ventana) {
+    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    return;
+  }
+  if (esPrimera) {
+    ventana.document.write(`<p style="font-family:sans-serif;padding:24px">Preparando la historia clínica…</p>`);
+    try {
+      if (API_ENABLED && apiToken) {
+        const resultado = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify({ id: patient.id, asignarHistoria: true }) });
+        patient.historiaNumero = Number(resultado.historiaNumero || 0);
+        patient.historiaDesde = resultado.historiaDesde || todayISO();
+      } else {
+        patient.historiaNumero = Math.max(0, ...state.patients.map((item) => Number(item.historiaNumero || 0))) + 1;
+        patient.historiaDesde = todayISO();
+        saveState();
+      }
+      addLocalAuditEvent("HISTORIA_CLINICA_NUMERO", `Abrió la ${numeroDeHistoria(patient.historiaNumero)} de ${patient.name}`, patient.id);
+    } catch (error) {
+      ventana.close();
+      alert(error.message);
+      return;
+    }
+  }
+  const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
+    .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
+    .join("");
+  ventana.document.open();
+  ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+    <base href="${escapeHtml(location.href)}">
+    <title>Historia clínica ${escapeHtml(patient.name)}</title>
+    ${hojasDeEstilo}
+    <style>
+      @page { size: A4; margin: 12mm; }
+      html, body { background: #fff !important; }
+      body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .hc-hoja { border: 0 !important; border-radius: 0 !important; padding: 0 !important; max-width: 186mm; margin: 0 auto; }
+      .hc-seccion-odontograma, .hc-tratamiento, .hc-firma, tr { break-inside: avoid; }
+      .table-wrap { overflow: visible !important; }
+    </style></head><body>
+    ${hojaDeLaHistoria(patient.id, { pantalla: false })}
+    <script>
+      (function () {
+        var impreso = false;
+        function ajustar() {
+          document.querySelectorAll(".hc-grafico").forEach(function (caja) {
+            var lienzo = caja.firstElementChild;
+            if (!lienzo || !caja.clientWidth) return;
+            lienzo.style.zoom = "1";
+            var ancho = lienzo.scrollWidth;
+            if (ancho) lienzo.style.zoom = String(Math.min(1, caja.clientWidth / ancho));
+          });
+        }
+        function imprimir() {
+          if (impreso) return;
+          impreso = true;
+          ajustar();
+          window.focus();
+          window.print();
+        }
+        window.addEventListener("load", function () { setTimeout(imprimir, 300); });
+        setTimeout(imprimir, 2500);
+      })();
+    <\/script></body></html>`);
+  ventana.document.close();
+  renderClinicalHistory();
 }
 
 /* ============ Odontograma (Norma Tecnica del Odontograma - MINSA) ============
@@ -3606,9 +4209,19 @@ function odontogramPatientList() {
 
 let odontogramSnapshotId = "";
 
+/* Una copia por hoja y dia, la ultima guardada. Las repetidas de antes siguen
+   en la base -no se borran-, pero no se muestran. */
 function copiasDelOdontograma(patientId) {
-  return (state.odontogramSnapshots || [])
+  const ultima = new Map();
+  (state.odontogramSnapshots || [])
     .filter((copia) => copia.patientId === patientId)
+    .forEach((copia) => {
+      const llave = `${copia.sheet}|${copia.date}`;
+      const previa = ultima.get(llave);
+      const orden = (item) => `${item.savedAt || ""}|${item.id || ""}`;
+      if (!previa || orden(copia) > orden(previa)) ultima.set(llave, copia);
+    });
+  return [...ultima.values()]
     .sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
 }
 
@@ -3663,14 +4276,19 @@ async function guardarCopiaDelOdontograma(nota) {
     alert("El odontograma está vacío: no hay nada que guardar.");
     return false;
   }
+  /* Una copia por paciente, hoja y dia: guardar otra vez hoy reemplaza la
+     copia de hoy. La nota nueva manda, y si viene vacia se conserva la que ya
+     tenia. */
+  const hoy = todayISO();
+  const delDia = copiasDelOdontograma(odontogramPatientId).find((item) => item.sheet === odontogramSheet && item.date === hoy);
   const copia = {
-    id: uid("odocopia"),
+    id: delDia?.id || uid("odocopia"),
     patientId: odontogramPatientId,
     sheet: odontogramSheet,
-    date: todayISO(),
+    date: hoy,
     savedAt: new Date().toISOString(),
     doctor: currentUser()?.name || "",
-    note: String(nota || "").trim(),
+    note: String(nota || "").trim() || delDia?.note || "",
     ficha: JSON.stringify(ficha)
   };
   try {
@@ -3679,7 +4297,10 @@ async function guardarCopiaDelOdontograma(nota) {
     alert(error.message);
     return false;
   }
-  state.odontogramSnapshots.push(copia);
+  // el servidor devuelve el id de la copia del dia que actualizo
+  const previa = (state.odontogramSnapshots || []).find((item) => item.id === copia.id) || delDia;
+  if (previa) Object.assign(previa, copia);
+  else state.odontogramSnapshots.push(copia);
   if (!API_ENABLED) saveState();
   return true;
 }
@@ -3886,8 +4507,8 @@ function renderPayments() {
       return `<tr>
         <td>${formatDate(payment.date || cashDate)}</td>
         <td>${escapeHtml(patient?.name || "Paciente")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
-        <td>${escapeHtml(paymentMethodLabel(payment))}</td>
-        <td><strong>${money(payment.amount)}</strong>${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
+        <td>${esDescuentoDeTratamiento(payment) ? `<span class="payment-discount-tag">Tratamiento</span>` : escapeHtml(paymentMethodLabel(payment))}</td>
+        <td><strong>${money(payment.amount)}</strong>${esDescuentoDeTratamiento(payment) ? `<br><span class="muted">Descontado ${money(payment.descontado)} · no entra a caja</span>` : ""}${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}${payment.comprobante ? `<br><span class="muted">${escapeHtml(payment.comprobante)}</span>` : ""}</td>
         ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
       </tr>`;
@@ -3904,7 +4525,7 @@ function descripcionPorDefecto(payment) {
   const patient = patientById(payment?.patientId);
   const history = historyById(payment?.historyId);
   const appointment = state.appointments.find((item) => item.id === payment?.appointmentId);
-  return history?.reason || appointment?.service || patient?.mainTreatment || "Servicio odontologico";
+  return descripcionDelTratamiento(payment) || history?.reason || appointment?.service || patient?.mainTreatment || "Servicio odontologico";
 }
 
 function buildElectronicReceiptFromPayment(payment, formDataValues) {
@@ -4592,7 +5213,7 @@ function abonosDeLaCuenta(historyId) {
     .slice()
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   if (!abonos.length) return "";
-  return abonos.map((pago) => `<br><span class="muted">Abonó ${money(pago.amount)} el ${escapeHtml(formatDate(pago.date))}${pago.registeredBy ? ` — ${escapeHtml(pago.registeredBy)}` : ""}</span>`).join("");
+  return abonos.map((pago) => `<br><span class="muted">${esDescuentoDeTratamiento(pago) ? `Se descontó ${money(pago.descontado)} del tratamiento` : `Abonó ${money(pago.amount)}`} el ${escapeHtml(formatDate(pago.date))}${pago.registeredBy ? ` — ${escapeHtml(pago.registeredBy)}` : ""}</span>`).join("");
 }
 
 function renderReceivables() {
@@ -4601,6 +5222,7 @@ function renderReceivables() {
   const form = $("#manualReceivableForm");
   if (form) {
     if (form.creditDueDate && !form.creditDueDate.value) form.creditDueDate.value = todayISO();
+    if (form.attentionDate && !form.attentionDate.value) form.attentionDate.value = todayISO();
   }
   const rows = receivableEntries();
   const today = todayISO();
@@ -5225,7 +5847,6 @@ function renderReports() {
   const appointments = metrics.appointments;
   $("#reportAppointments").textContent = appointments.length;
   $("#reportIncome").textContent = money(metrics.income);
-  $("#reportTreatments").textContent = state.treatments.filter((treatment) => treatment.status === "EN_PROCESO").length;
   $("#reportNewPatients").textContent = metrics.newPatients.length;
   $("#reportReceptionNewPatients").textContent = metrics.receptionNewPatients.length;
   $("#reportOldPatients").textContent = metrics.oldPatients;
@@ -6342,8 +6963,12 @@ function bindEvents() {
   on('#appointmentForm select[name="patientId"]', "change", syncAppointmentDoctor);
   on('#historyForm input[name="date"]', "change", () => {
     fillAppointmentPatientSelectForDate($('#historyForm select[name="patientId"]'), $('#historyForm input[name="date"]').value, $('#historyForm select[name="patientId"]').value);
+    avisoDeDeudaDelDia();
   });
-  on('#historyForm select[name="patientId"]', "change", syncAssignedDoctor);
+  on('#historyForm select[name="patientId"]', "change", () => {
+    syncAssignedDoctor();
+    avisoDeDeudaDelDia();
+  });
   on('#historyForm input[name="creditPending"]', "change", (event) => {
     if (event.target.checked) openCreditDialog();
     else {
@@ -6896,6 +7521,9 @@ function bindEvents() {
       return;
     }
     const entry = receivableEntryFromForm(data);
+    // la cita que se pone en verde; el servidor la marca junto con la deuda
+    const citaDeLaDeuda = citaParaLaDeuda(entry.patientId, entry.date);
+    entry.appointmentId = citaDeLaDeuda?.id || "";
     try {
       await saveReceivableApi(entry);
     } catch (error) {
@@ -6903,8 +7531,17 @@ function bindEvents() {
       return;
     }
     upsert(state.clinicalHistory, entry);
+    if (citaDeLaDeuda) {
+      citaDeLaDeuda.status = "ATENDIDA";
+      addLocalAuditEvent(
+        "APPOINTMENT_ATTENDED",
+        `Marcó atendida desde cuenta por cobrar: ${patient?.name || "Paciente"} ${citaDeLaDeuda.date} ${citaDeLaDeuda.time}`,
+        citaDeLaDeuda.patientId
+      );
+    }
     form.reset();
     form.creditDueDate.value = todayISO();
+    if (form.attentionDate) form.attentionDate.value = todayISO();
     const suggestions = $("#receivablePatientSuggestions");
     if (suggestions) suggestions.innerHTML = "";
     if (!API_ENABLED) saveState();
@@ -6922,41 +7559,6 @@ function bindEvents() {
     if (!button) return;
     const patient = patientById(button.dataset.selectReceivablePatient);
     selectReceivablePatient(patient);
-  });
-
-  $("#treatmentForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = formData(event.currentTarget);
-    const treatment = {
-      id: data.id || uid("t"),
-      patientId: data.patientId,
-      service: data.service,
-      teeth: data.teeth,
-      budget: Number(data.budget || 0),
-      status: data.status,
-      notes: data.notes,
-      createdAt: todayISO()
-    };
-    try {
-      await saveTreatmentApi(treatment);
-    } catch (error) {
-      alert(error.message);
-      return;
-    }
-    upsert(state.treatments, treatment);
-    event.currentTarget.reset();
-    if (!API_ENABLED) saveState();
-    render();
-  });
-
-  $("#treatmentsList").addEventListener("click", (event) => {
-    const edit = event.target.closest("[data-edit-treatment]");
-    if (!edit) return;
-    const treatment = treatmentById(edit.dataset.editTreatment);
-    const form = $("#treatmentForm");
-    Object.entries(treatment).forEach(([key, value]) => {
-      if (form[key]) form[key].value = value;
-    });
   });
 
   $("#historyForm").addEventListener("submit", async (event) => {
@@ -6981,6 +7583,19 @@ function bindEvents() {
         submitButton.disabled = false;
         submitButton.textContent = "Guardar historial";
       }
+      return;
+    }
+    // un costo sin nombre no abre ningun tratamiento y nadie se enteraria
+    if (Number(data.planBudget || 0) > 0 && !String(data.plan || "").trim()) {
+      alert("Escribe qué tratamiento es, por ejemplo Ortodoncia.");
+      historySaving = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Guardar historial";
+      }
+      const pliegue = form.querySelector(".form-more");
+      if (pliegue) pliegue.open = true;
+      form.elements.namedItem("plan")?.focus();
       return;
     }
     const creditPending = data.creditPending === "on";
@@ -7009,11 +7624,15 @@ function bindEvents() {
       procedure: data.procedure || "",
       instructions: data.instructions || "",
       agreedPrice: Number(data.agreedPrice || 0),
+      planBudget: Number(data.planBudget || 0),
       creditPending,
       creditAmount,
       creditDueDate: data.creditDueDate || "",
       creditNote: data.creditNote || ""
     };
+    // la cita de esta nota; el servidor marca solo esa
+    const citaDeLaNota = citaParaLaNota(data.patientId, data.date, data.id || "");
+    entry.appointmentId = citaDeLaNota?.id || "";
     const attendedPatient = patientById(data.patientId);
     const activePatient = attendedPatient ? { ...attendedPatient, status: "ACTIVO" } : null;
     try {
@@ -7030,13 +7649,9 @@ function bindEvents() {
     }
     upsert(state.clinicalHistory, entry);
     if (activePatient) upsert(state.patients, activePatient);
-    const appointment = state.appointments
-      .filter((item) => item.patientId === data.patientId && item.date === data.date)
-      .sort((a, b) => a.time.localeCompare(b.time))[0];
-    if (appointment) appointment.status = "ATENDIDA";
+    if (citaDeLaNota) citaDeLaNota.status = "ATENDIDA";
     $("#historyPatientFilter").value = data.patientId;
     form.reset();
-    form.attended.checked = false;
     form.creditPending.checked = false;
     form.creditAmount.value = "";
     form.creditDueDate.value = "";
@@ -7052,6 +7667,47 @@ function bindEvents() {
     }
   });
 
+  $("#printHistoryBtn")?.addEventListener("click", () => imprimirHistoria($("#historyPatientFilter")?.value || ""));
+  // plan y presupuesto se abre desde un boton junto al titulo de la nota
+  $("#historyForm .hn-plan-toggle")?.addEventListener("click", () => {
+    const pliegue = $("#historyForm .form-more");
+    if (pliegue) pliegue.open = !pliegue.open;
+  });
+  // el boton dice si esta abierto, lo abra el boton, Editar o Limpiar
+  $("#historyForm .form-more")?.addEventListener("toggle", (event) => {
+    const boton = $("#historyForm .hn-plan-toggle");
+    if (!boton) return;
+    const abierto = event.currentTarget.open;
+    boton.setAttribute("aria-expanded", String(abierto));
+    boton.textContent = abierto ? "− Plan y presupuesto" : "+ Plan y presupuesto";
+  });
+  /* Con costo total, el cobro de hoy queda en S/ 0: el tratamiento ya se cobra
+     en Pagos, y poner el mismo monto en los dos lados lo cobraba dos veces. Si
+     la persona escribe un cobro de hoy -la consulta aparte-, se respeta. */
+  const ajustarCobroDeHoy = () => {
+    const form = $("#historyForm");
+    if (!form) return;
+    const costo = Number(form.elements.namedItem("planBudget")?.value || 0);
+    const cobro = form.elements.namedItem("agreedPrice");
+    if (costo > 0 && cobro && !cobro.dataset.manual) cobro.value = "0";
+    const aviso = $("#historyChargeHint");
+    if (aviso) aviso.hidden = !(costo > 0);
+  };
+  $('#historyForm input[name="planBudget"]')?.addEventListener("input", ajustarCobroDeHoy);
+  $('#historyForm input[name="agreedPrice"]')?.addEventListener("input", (event) => {
+    event.target.dataset.manual = event.target.value !== "" ? "1" : "";
+  });
+  $("#historyForm")?.addEventListener("reset", () => {
+    const masDetalles = $("#historyForm .form-more");
+    if (masDetalles) masDetalles.open = false;
+    const cobro = $('#historyForm input[name="agreedPrice"]');
+    if (cobro) cobro.dataset.manual = "";
+    const avisoCobro = $("#historyChargeHint");
+    if (avisoCobro) avisoCobro.hidden = true;
+    const avisoDeuda = $("#historyDebtNotice");
+    if (avisoDeuda) avisoDeuda.hidden = true;
+  });
+
   $("#historyTimeline").addEventListener("click", (event) => {
     const edit = event.target.closest("[data-edit-history]");
     if (!edit) return;
@@ -7064,6 +7720,12 @@ function bindEvents() {
       else form[key].value = value;
     });
     updateCreditSummary();
+    const masDetalles = form.querySelector(".form-more");
+    if (masDetalles) masDetalles.open = Boolean(String(entry.plan || "").trim() || Number(entry.planBudget || 0) > 0 || String(entry.instructions || "").trim());
+    // una nota guardada ya tiene su cobro de hoy decidido: no se pisa
+    if (form.agreedPrice) form.agreedPrice.dataset.manual = "1";
+    const avisoCobro = $("#historyChargeHint");
+    if (avisoCobro) avisoCobro.hidden = !(Number(entry.planBudget || 0) > 0);
   });
 
   // El odontograma se maneja por completo dentro de odontograma.js: sus
@@ -7087,7 +7749,9 @@ function bindEvents() {
     const form = $("#paymentForm");
     if (form) form.dataset.basePaymentAmount = Math.max(0, Number(form.amount.value || 0) - paymentProductTotal());
     updatePaymentChange();
+    aplicarCuadroDeDescuento();
   });
+  $('#paymentForm input[name="descontarTratamiento"]')?.addEventListener("change", aplicarCuadroDeDescuento);
   $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
   $('#paymentForm select[name="method"]').addEventListener("change", () => {
     toggleMixedPaymentFields();
@@ -7191,10 +7855,16 @@ function bindEvents() {
       return;
     }
     const data = formData(form);
+    // descontar del tratamiento no es un cobro: no pide boleta ni toca caja
+    if (data.descontarTratamiento === "on") {
+      await guardarDescuentoDeTratamiento({ form, data, restorePaymentButton });
+      return;
+    }
     const appointment = appointmentFromPaymentSelection(data.patientId);
     const cashDate = appointment?.date || operatingDate();
     const paymentPatientId = patientIdFromPaymentSelection(data.patientId);
-    const due = appointment ? 0 : historyBalance(data.historyId);
+    const tratamientoCobrado = String(data.historyId || "").startsWith("trat:") ? tratamientoPorId(String(data.historyId).slice(5)) : null;
+    const due = tratamientoCobrado ? tratamientoCobrado.porPagar : appointment ? 0 : historyBalance(data.historyId);
     const amount = Number(data.amount || 0);
     const productsTotal = paymentProductTotal();
     const hasProducts = productsTotal > 0 && selectedProductSaleItems.length > 0;
@@ -7222,7 +7892,7 @@ function bindEvents() {
       }
       return;
     }
-    if (amount <= 0 || (!appointment && data.historyId && (careAmount <= 0 || careAmount > due))) {
+    if (amount <= 0 || ((tratamientoCobrado || (!appointment && data.historyId)) && (careAmount <= 0 || careAmount > due))) {
       alert(appointment ? "El monto debe ser mayor a cero." : "El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
       restorePaymentButton();
       return;
@@ -7239,8 +7909,9 @@ function bindEvents() {
     const payment = {
       id: data.id || uid("pay"),
       patientId: paymentPatientId,
-      historyId: appointment ? "" : data.historyId,
+      historyId: appointment || tratamientoCobrado ? "" : data.historyId,
       appointmentId: appointment?.id || "",
+      treatmentId: tratamientoCobrado?.entry.id || "",
       date: cashDate,
       amount,
       productAmount: productsTotal,
@@ -7254,7 +7925,9 @@ function bindEvents() {
         quantity: Number(item.quantity || 0),
         price: Number(item.price || 0)
       })),
-      receipt: buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
+      receipt: tratamientoCobrado && !String(data.receipt || "").trim()
+        ? `Tratamiento: ${tratamientoCobrado.entry.plan}`
+        : buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
       /* El servidor guarda quien cobro tomandolo de la sesion, no de aqui. Se
          anota igual en la copia local para que la fila lo muestre al momento y
          no recien despues de recargar; es el mismo usuario, asi que coincide. */
@@ -7268,6 +7941,7 @@ function bindEvents() {
       renderPaymentProductSummary();
       const form = $("#paymentForm");
       if (form) form.dataset.basePaymentAmount = "";
+      aplicarCuadroDeDescuento();
     }, 0);
   });
 
@@ -7692,7 +8366,6 @@ function bindEvents() {
     exportCsv(`pacientes-por-llamar-${todayISO()}.csv`, filas);
   });
 
-  $("#exportTreatmentsBtn").addEventListener("click", () => exportCsv("tratamientos.csv", state.treatments));
   $("#exportPaymentsBtn").addEventListener("click", () => {
     const cashDate = cashViewDate();
     exportCsv(`pagos-${cashDate}.csv`, visiblePaymentsForCashView(cashDate).map((payment) => ({

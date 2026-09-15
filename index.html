@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260912-descripcion" />
+    <link rel="stylesheet" href="styles.css?v=20260915-historia" />
     <link rel="stylesheet" href="odontograma.css?v=20260821-seguimiento" />
   </head>
   <body class="locked">
@@ -43,7 +43,6 @@
         <button class="nav-item" data-view="agenda">Agenda</button>
         <button class="nav-item" data-view="historial">Historial clínico</button>
         <button class="nav-item" data-view="odontograma">Odontograma</button>
-        <button class="nav-item" data-view="tratamientos">Tratamientos</button>
         <button class="nav-item" data-view="inventario">Inventario</button>
         <button class="nav-item" data-view="pagos">Pagos y caja</button>
         <button class="nav-item" data-view="comprobantes">Comprobantes</button>
@@ -191,41 +190,53 @@
       </section>
 
       <section id="historial" class="view">
-        <div class="content-grid form-and-list">
-          <form class="panel form" id="historyForm">
+        <div class="content-grid form-and-list history-layout">
+          <form class="panel form history-note-form" id="historyForm">
             <div class="panel-head">
-              <h2>Nota clinica</h2>
-              <button type="reset" class="ghost">Limpiar</button>
+              <h2>Nota clínica</h2>
+              <div class="hn-acciones"><button type="button" class="ghost hn-plan-toggle" aria-expanded="false">+ Plan y presupuesto</button><button type="reset" class="ghost">Limpiar</button></div>
             </div>
             <input type="hidden" name="id" />
-            <label>Fecha<input name="date" type="date" required /></label>
-            <label>Paciente<select name="patientId" required></select></label>
-            <label>Atendido por<input name="attendedBy" readonly required /></label>
-            <label>Motivo de consulta<textarea name="reason" rows="2" required></textarea></label>
-            <label>Plan de tratamiento<textarea name="plan" rows="2"></textarea></label>
-            <label>Procedimiento realizado<textarea name="procedure" rows="3"></textarea></label>
-            <label>Presupuesto<textarea name="instructions" rows="2"></textarea></label>
-            <label>Precio pactado del dia S/<input name="agreedPrice" type="number" min="0" step="0.01" required /></label>
-            <div class="check-grid">
-              <label class="check-row"><input name="attended" type="checkbox" /> Atendido</label>
-              <label class="check-row"><input name="creditPending" type="checkbox" /> Pago pendiente</label>
+            <label class="hn-c1">Fecha<input name="date" type="date" required /></label>
+            <label class="hn-c2">Paciente<select name="patientId" required></select></label>
+            <label class="hn-c2">Atendido por<input name="attendedBy" readonly required /></label>
+            <label class="hn-c1">Cobro de hoy S/<input name="agreedPrice" type="number" min="0" step="0.01" placeholder="0" /></label>
+            <p class="notice subtle hn-completo" id="historyDebtNotice" hidden></p>
+            <label class="hn-c2">Motivo de consulta<textarea name="reason" rows="1" required></textarea></label>
+            <label class="hn-c2">Procedimiento realizado<textarea name="procedure" rows="1"></textarea></label>
+            <details class="form-more">
+              <summary>Plan y presupuesto</summary>
+              <div class="hn-plan-fila">
+                <label>Tratamiento<input name="plan" list="historyPlanOptions" placeholder="Ej. Ortodoncia" autocomplete="off" /></label>
+                <label>Costo total del tratamiento S/<input name="planBudget" type="number" min="0" step="0.01" placeholder="Ej. 2000" /></label>
+              </div>
+              <datalist id="historyPlanOptions"></datalist>
+              <p class="form-more-hint" id="historyChargeHint" hidden>El tratamiento se cobra en Pagos. Pon un monto en «Cobro de hoy» solo si hoy se cobra algo aparte, como la consulta.</p>
+              <input type="hidden" name="instructions" />
+            </details>
+            <div class="hn-checks hn-c1">
+              <label class="hn-check"><input name="attended" type="checkbox" checked /> Atendido</label>
+              <label class="hn-check"><input name="creditPending" type="checkbox" /> Pago pendiente</label>
             </div>
             <input type="hidden" name="creditAmount" />
             <input type="hidden" name="creditDueDate" />
             <input type="hidden" name="creditNote" />
-            <p class="notice subtle" id="creditSummary" hidden></p>
-            <button class="primary" type="submit">Guardar historial</button>
+            <button class="primary hn-guardar hn-c1" type="submit">Guardar historial</button>
+            <p class="notice subtle hn-completo" id="creditSummary" hidden></p>
           </form>
 
-          <section class="panel">
+          <section class="panel history-sheet-panel">
             <div class="panel-head">
-              <h2>Historial del paciente</h2>
-              <select id="historyPatientFilter"></select>
+              <h2>Historia del paciente</h2>
+              <div class="history-sheet-actions">
+                <select id="historyPatientFilter"></select>
+                <button class="ghost" type="button" id="printHistoryBtn">Imprimir historia</button>
+              </div>
             </div>
-            <div id="historyTimeline" class="timeline"></div>
+            <div id="historyTimeline"></div>
           </section>
 
-          <section class="panel">
+          <section class="panel odontogram-copies-panel">
             <div class="panel-head">
               <h2>Copias del odontograma</h2>
               <span class="muted">Se guardan desde la pantalla del Odontograma</span>
@@ -245,39 +256,12 @@
           <div class="odontogram-copy-bar" id="odontogramSaveCopy" hidden>
             <input id="odontogramCopyNote" type="text" maxlength="120" placeholder="Qué se hizo hoy (opcional)" />
             <button class="small-btn" type="button" id="saveOdontogramCopyBtn">Guardar en la historia</button>
-            <span class="muted">Queda una copia fechada; la pantalla no se borra.</span>
+            <span class="muted">Una copia por día: si guardas otra vez hoy, reemplaza la de hoy. La pantalla no se borra.</span>
           </div>
           <div class="odontogram-copy-notice" id="odontogramViewingCopy" hidden></div>
           <div id="odontogramToolbar" class="odontogram-toolbar" aria-label="Herramientas del odontograma"></div>
           <div id="odontogramGrid" class="odontogram-grid"></div>
         </section>
-      </section>
-
-      <section id="tratamientos" class="view">
-        <div class="content-grid form-and-list">
-          <form class="panel form" id="treatmentForm">
-            <div class="panel-head">
-              <h2>Plan de tratamiento</h2>
-              <button type="reset" class="ghost">Limpiar</button>
-            </div>
-            <input type="hidden" name="id" />
-            <label>Paciente<select name="patientId" required></select></label>
-            <label>Servicio<select name="service" required></select></label>
-            <label>Piezas dentales<input name="teeth" placeholder="Ej. 11, 12, 21" /></label>
-            <label>Presupuesto S/<input name="budget" type="number" min="0" step="0.01" required /></label>
-            <label>Estado<select name="status"></select></label>
-            <label>Notas clinicas<textarea name="notes" rows="3"></textarea></label>
-            <button class="primary" type="submit">Guardar tratamiento</button>
-          </form>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Seguimiento clínico</h2>
-              <button class="ghost" id="exportTreatmentsBtn">CSV</button>
-            </div>
-            <div id="treatmentsList" class="stack"></div>
-          </section>
-        </div>
       </section>
 
       <section id="pagos" class="view">
@@ -297,7 +281,11 @@
               <button class="icon product-picker-button" id="openProductSaleBtn" type="button" title="Agregar producto">+</button>
             </div>
             <div id="paymentProductSummary" class="product-sale-summary" hidden></div>
-            <label>Atencion pendiente<select name="historyId"></select></label>
+            <div class="payment-attention-row">
+              <label>Atencion pendiente<select name="historyId"></select></label>
+              <label class="treatment-discount" id="treatmentDiscountBox" hidden title="Descuenta del dinero que el paciente ya pagó por su tratamiento. No entra a caja ni genera boleta."><input type="checkbox" name="descontarTratamiento" />Descontar del tratamiento</label>
+            </div>
+            <p class="treatment-discount-info" id="treatmentDiscountInfo" hidden></p>
             <button type="button" class="ghost danger-btn admin-only-action" id="clearHistoryDebtBtn" hidden>Quitar deuda</button>
             <label>Saldo a pagar<input name="amountDue" type="number" readonly /></label>
             <label>Fecha<input name="date" type="date" required /></label>
@@ -636,6 +624,9 @@
               <input name="patientId" type="hidden" />
               <div class="patient-suggestions" id="receivablePatientSuggestions"></div>
             </label>
+            <label>Fecha de atención
+              <input name="attentionDate" type="date" required />
+            </label>
             <label>Fecha de pago
               <input name="creditDueDate" type="date" required />
             </label>
@@ -788,10 +779,6 @@
           <article class="kpi">
             <span>Ingresos</span>
             <strong id="reportIncome">S/ 0</strong>
-          </article>
-          <article class="kpi">
-            <span>Tratamientos activos</span>
-            <strong id="reportTreatments">0</strong>
           </article>
           <article class="kpi">
             <span>Pacientes nuevos</span>
@@ -1209,6 +1196,6 @@
     </dialog>
 
     <script src="odontograma.js?v=20260907-copias-odontograma"></script>
-    <script src="app.js?v=20260912-descripcion"></script>
+    <script src="app.js?v=20260915-historia"></script>
   </body>
 </html>

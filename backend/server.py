@@ -282,6 +282,17 @@ def migrate_db(conn):
     # decir de donde salio cada abono: esos cobros los hace recepcion y quien
     # no lo registro no tenia como saber si ese dinero entro.
     ensure_column(conn, "payments", "registered_by", "TEXT")
+    # Tratamiento con costo total que nace de la nota clinica. El dinero se
+    # maneja en Pagos: cobros con treatment_id que entran a caja, y descuentos de
+    # cada control (tipo DESCUENTO_TRATAMIENTO) que van en S/ 0 y llevan lo
+    # descontado aparte, para que ninguna suma de caja los cuente.
+    ensure_column(conn, "clinical_history", "plan_budget", "REAL NOT NULL DEFAULT 0")
+    ensure_column(conn, "payments", "treatment_id", "TEXT")
+    ensure_column(conn, "payments", "tipo", "TEXT")
+    ensure_column(conn, "payments", "descontado", "REAL NOT NULL DEFAULT 0")
+    # Numero de historia clinica: se asigna la primera vez que se imprime.
+    ensure_column(conn, "patients", "historia_numero", "INTEGER")
+    ensure_column(conn, "patients", "historia_desde", "TEXT")
     mudar_numeros_de_comprobante(conn)
     ensure_column(conn, "appointments", "follow_up_status", "TEXT")
     ensure_column(conn, "appointments", "follow_up_comment", "TEXT")
@@ -1443,6 +1454,41 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         item_id,
                     )
                 return send_json(self, {"ok": True, "id": item_id})
+            if data.get("asignarHistoria"):
+                # Numero de historia clinica: se da la primera vez que se imprime la
+                # historia del paciente. Lo calcula el servidor para que dos equipos
+                # no entreguen el mismo numero; si ya tenia uno, se devuelve ese.
+                item_id = data.get("id")
+                if not item_id:
+                    return send_json(self, {"error": "Paciente no indicado."}, 400)
+                with db() as conn:
+                    fila = conn.execute(
+                        "SELECT id, name, historia_numero, historia_desde FROM patients WHERE id = ?",
+                        (item_id,),
+                    ).fetchone()
+                    if not fila:
+                        return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                    if fila["historia_numero"]:
+                        return send_json(self, {
+                            "ok": True,
+                            "historiaNumero": int(fila["historia_numero"]),
+                            "historiaDesde": fila["historia_desde"] or "",
+                        })
+                    ultimo = conn.execute("SELECT COALESCE(MAX(historia_numero), 0) AS n FROM patients").fetchone()["n"]
+                    siguiente = int(ultimo or 0) + 1
+                    desde = today_lima()
+                    conn.execute(
+                        "UPDATE patients SET historia_numero = ?, historia_desde = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (siguiente, desde, item_id),
+                    )
+                    add_audit_event(
+                        conn,
+                        user,
+                        "HISTORIA_CLINICA_NUMERO",
+                        f"Abrio la historia clinica N.{siguiente:04d} de {fila['name']}",
+                        item_id,
+                    )
+                return send_json(self, {"ok": True, "historiaNumero": siguiente, "historiaDesde": desde})
             if data.get("delete"):
                 if not require_role(self, {"ADMIN", "DOCTOR"}):
                     return
@@ -1676,9 +1722,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     INSERT INTO clinical_history (
                       id, patient_id, date, attended_by, attended, reason, anamnesis,
                       exam, diagnosis, plan, procedure_done, instructions, agreed_price,
-                      credit_pending, credit_amount, credit_due_date, credit_note
+                      credit_pending, credit_amount, credit_due_date, credit_note, plan_budget
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_id=excluded.patient_id, date=excluded.date,
                       attended_by=excluded.attended_by, attended=excluded.attended,
@@ -1688,6 +1734,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                       instructions=excluded.instructions, agreed_price=excluded.agreed_price,
                       credit_pending=excluded.credit_pending, credit_amount=excluded.credit_amount,
                       credit_due_date=excluded.credit_due_date, credit_note=excluded.credit_note,
+                      plan_budget=excluded.plan_budget,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -1708,6 +1755,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         float(data.get("creditAmount") or data.get("agreedPrice") or 0),
                         data.get("creditDueDate", ""),
                         data.get("creditNote", ""),
+                        float(data.get("planBudget") or 0),
                     ),
                 )
                 if data.get("attended", True):
@@ -1719,24 +1767,49 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         """,
                         (data["patientId"],),
                     )
-                    conn.execute(
-                        """
-                        UPDATE appointments
-                        SET status = 'ATENDIDA', updated_at = CURRENT_TIMESTAMP
-                        WHERE patient_id = ? AND date = ?
-                        """,
-                        (data["patientId"], data["date"]),
-                    )
-                    conn.execute(
-                        """
-                        UPDATE appointments
-                        SET follow_up_status = 'CERRADO', updated_at = CURRENT_TIMESTAMP
-                        WHERE new_appointment_id IN (
-                          SELECT id FROM appointments WHERE patient_id = ? AND date = ?
+                    if "appointmentId" in data:
+                        # El navegador elige la cita que corresponde a esta nota. Antes se
+                        # marcaban todas las del paciente ese dia: una cancelada volvia como
+                        # atendida, y con dos citas el mismo dia se marcaban las dos.
+                        cita = str(data.get("appointmentId") or "").strip()
+                        if cita:
+                            conn.execute(
+                                """
+                                UPDATE appointments
+                                SET status = 'ATENDIDA', updated_at = CURRENT_TIMESTAMP
+                                WHERE id = ? AND patient_id = ?
+                                """,
+                                (cita, data["patientId"]),
+                            )
+                            conn.execute(
+                                """
+                                UPDATE appointments
+                                SET follow_up_status = 'CERRADO', updated_at = CURRENT_TIMESTAMP
+                                WHERE new_appointment_id = ?
+                                """,
+                                (cita,),
+                            )
+                    else:
+                        # una pantalla que todavia no se recargo no manda la cita: se
+                        # mantiene lo de antes para no dejar su nota sin marcar
+                        conn.execute(
+                            """
+                            UPDATE appointments
+                            SET status = 'ATENDIDA', updated_at = CURRENT_TIMESTAMP
+                            WHERE patient_id = ? AND date = ?
+                            """,
+                            (data["patientId"], data["date"]),
                         )
-                        """,
-                        (data["patientId"], data["date"]),
-                    )
+                        conn.execute(
+                            """
+                            UPDATE appointments
+                            SET follow_up_status = 'CERRADO', updated_at = CURRENT_TIMESTAMP
+                            WHERE new_appointment_id IN (
+                              SELECT id FROM appointments WHERE patient_id = ? AND date = ?
+                            )
+                            """,
+                            (data["patientId"], data["date"]),
+                        )
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/receivables":
@@ -1786,6 +1859,15 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("creditNote", ""),
                     ),
                 )
+                # Anotar la deuda de quien se atendio pone su cita en verde, igual
+                # que guardar su nota o cobrarle. El navegador elige la cita con las
+                # mismas reglas del cobro; al corregir el monto no se toca.
+                cita = str(data.get("appointmentId") or "").strip()
+                if cita and not existing:
+                    conn.execute(
+                        "UPDATE appointments SET status = 'ATENDIDA', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND patient_id = ?",
+                        (cita, data["patientId"]),
+                    )
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/treatments":
@@ -1847,8 +1929,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": row["id"] if row else item_id})
 
         if parsed.path == "/api/odontogram-snapshots":
-            # Una copia no se corrige: si el odontograma cambia se guarda otra.
-            # Por eso aqui solo se inserta, nunca se actualiza lo ya guardado.
+            # Una copia por paciente, hoja y dia: guardar otra vez el mismo dia
+            # reemplaza la copia de ese dia con lo ultimo. Antes cada guardado
+            # sumaba una fila y el historial se llenaba de copias iguales. Las
+            # repetidas que ya estaban no se borran: la pantalla muestra la ultima.
             if not require_role(self, {"ADMIN", "DOCTOR"}):
                 return
             data = read_json(self)
@@ -1856,24 +1940,42 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not data.get("patientId") or not ficha:
                 return send_json(self, {"error": "Falta el paciente o la ficha."}, 400)
             item_id = data.get("id") or now_id("odocopia")
+            hoja = "evolucion" if data.get("sheet") == "evolucion" else "inicial"
+            fecha = data.get("date") or today_lima()
+            guardada = data.get("savedAt") or datetime.now().isoformat()
+            nota = str(data.get("note") or "").strip()
             with db() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO odontogram_snapshots
-                      (id, patient_id, sheet, date, saved_at, doctor, note, ficha)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        item_id,
-                        data["patientId"],
-                        "evolucion" if data.get("sheet") == "evolucion" else "inicial",
-                        data.get("date") or today_lima(),
-                        data.get("savedAt") or datetime.now().isoformat(),
-                        data.get("doctor", ""),
-                        data.get("note", ""),
-                        ficha,
-                    ),
-                )
+                previa = conn.execute(
+                    "SELECT id, note FROM odontogram_snapshots "
+                    "WHERE patient_id = ? AND sheet = ? AND date = ? "
+                    "ORDER BY saved_at DESC LIMIT 1",
+                    (data["patientId"], hoja, fecha),
+                ).fetchone()
+                if previa:
+                    # la nota nueva manda; si viene vacia se conserva la que tenia
+                    conn.execute(
+                        "UPDATE odontogram_snapshots SET saved_at = ?, doctor = ?, note = ?, ficha = ? WHERE id = ?",
+                        (guardada, data.get("doctor", ""), nota or (previa["note"] or ""), ficha, previa["id"]),
+                    )
+                    item_id = previa["id"]
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO odontogram_snapshots
+                          (id, patient_id, sheet, date, saved_at, doctor, note, ficha)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            item_id,
+                            data["patientId"],
+                            hoja,
+                            fecha,
+                            guardada,
+                            data.get("doctor", ""),
+                            nota,
+                            ficha,
+                        ),
+                    )
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/inventory-products":
@@ -1980,6 +2082,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 amount = float(data.get("amount") or 0)
                 method = str(data.get("method") or "").upper()
                 product_items = data.get("productItems") if isinstance(data.get("productItems"), list) else []
+                # Tratamiento con costo total: los cobros llevan treatment_id y entran a
+                # caja. El descuento de cada control (DESCUENTO_TRATAMIENTO) no es un
+                # cobro: va en S/ 0, sin metodo de dinero, y lleva aparte lo descontado.
+                treatment_id = str(data.get("treatmentId") or "").strip()
+                es_descuento = str(data.get("tipo") or "").strip().upper() == "DESCUENTO_TRATAMIENTO"
+                descontado = round(float(data.get("descontado") or 0), 2) if es_descuento else 0.0
+                if es_descuento:
+                    amount = 0.0
+                    method = "TRATAMIENTO"
+                    product_items = []
                 products_total = sum(float(item.get("quantity") or 0) * float(item.get("price") or item.get("unitPrice") or 0) for item in product_items)
                 split = {
                     "cash_amount": float(data.get("cashAmount") or 0),
@@ -2028,17 +2140,46 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             400,
                         )
                     history_id = str(data.get("historyId") or "").strip()
+                    if treatment_id:
+                        tratamiento = conn.execute(
+                            "SELECT patient_id, plan_budget FROM clinical_history WHERE id = ?",
+                            (treatment_id,),
+                        ).fetchone()
+                        if not tratamiento or float(tratamiento["plan_budget"] or 0) <= 0 or tratamiento["patient_id"] != data.get("patientId"):
+                            return send_json(self, {"error": "El tratamiento no existe o no es de este paciente."}, 400)
+                        pagado = float(conn.execute(
+                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0)), 0) AS total FROM payments "
+                            "WHERE treatment_id = ? AND COALESCE(tipo, '') <> 'DESCUENTO_TRATAMIENTO' AND id <> ?",
+                            (treatment_id, item_id),
+                        ).fetchone()["total"] or 0)
+                        if es_descuento:
+                            usado = float(conn.execute(
+                                "SELECT COALESCE(SUM(descontado), 0) AS total FROM payments "
+                                "WHERE treatment_id = ? AND tipo = 'DESCUENTO_TRATAMIENTO' AND id <> ?",
+                                (treatment_id, item_id),
+                            ).fetchone()["total"] or 0)
+                            disponible = round(pagado - usado, 2)
+                            if descontado <= 0 or descontado > disponible:
+                                return send_json(self, {"error": f"El descuento debe ser mayor a cero y no pasar de lo disponible (S/ {disponible:.2f})."}, 400)
+                        else:
+                            por_pagar = round(float(tratamiento["plan_budget"] or 0) - pagado, 2)
+                            cobro = round(amount - products_total, 2)
+                            if cobro <= 0 or cobro > por_pagar:
+                                return send_json(self, {"error": f"El cobro del tratamiento debe ser mayor a cero y no pasar de lo que falta pagar (S/ {por_pagar:.2f})."}, 400)
+                    elif es_descuento:
+                        return send_json(self, {"error": "Indica de que tratamiento se descuenta."}, 400)
                     if history_id:
                         history = conn.execute("SELECT agreed_price FROM clinical_history WHERE id = ?", (history_id,)).fetchone()
                         if not history:
                             return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
+                        # lo descontado del tratamiento tambien cubre la atencion
                         paid = conn.execute(
-                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0)), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
+                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0) + COALESCE(descontado, 0)), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
                             (history_id, item_id),
                         ).fetchone()["total"]
                         due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
-                        care_amount = amount - products_total
-                        if amount <= 0 or care_amount <= 0 or care_amount > due:
+                        care_amount = descontado if es_descuento else amount - products_total
+                        if (amount <= 0 and not es_descuento) or care_amount <= 0 or care_amount > due:
                             return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
                     elif data.get("appointmentId"):
                         appointment = conn.execute(
@@ -2049,11 +2190,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             return send_json(self, {"error": "Selecciona una cita valida del dia para registrar el pago."}, 400)
                         if str(appointment["status"] or "").upper() in {"CANCELADA", "NO_ASISTIO", "REPROGRAMADA"}:
                             return send_json(self, {"error": "No se puede cobrar una cita cancelada, no asistida o reprogramada."}, 400)
-                        if amount <= 0:
+                        if amount <= 0 and not es_descuento:
                             return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
                     elif product_items:
                         if amount <= 0:
                             return send_json(self, {"error": "El monto debe ser mayor a cero."}, 400)
+                    elif treatment_id:
+                        pass  # el cobro o el descuento del tratamiento ya se valido arriba
                     else:
                         return send_json(self, {"error": "Selecciona una atencion pendiente, una cita del dia o un producto."}, 400)
                     receipt_value = data.get("receipt", "")
@@ -2080,9 +2223,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           id, patient_id, history_id, appointment_id, date, amount, product_total, cash_received,
                           change_amount, cash_amount, yape_amount, plin_amount,
                           card_amount, transfer_amount, method, receipt, comprobante,
-                          registered_by, closed
+                          registered_by, closed, treatment_id, tipo, descontado
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           patient_id=excluded.patient_id, history_id=excluded.history_id,
                           appointment_id=excluded.appointment_id,
@@ -2100,7 +2243,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           -- quien cobro se anota una sola vez: corregir el pago
                           -- despues no debe cambiar de quien era el cobro
                           registered_by=COALESCE(payments.registered_by, excluded.registered_by),
-                          closed=excluded.closed
+                          closed=excluded.closed,
+                          treatment_id=excluded.treatment_id,
+                          tipo=excluded.tipo,
+                          descontado=excluded.descontado
                         """,
                         (
                             item_id,
@@ -2122,9 +2268,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             str(data.get("comprobante") or "").strip(),
                             quien_cobra["name"] or None,
                             1 if data.get("closed") else 0,
+                            treatment_id or None,
+                            "DESCUENTO_TRATAMIENTO" if es_descuento else None,
+                            descontado,
                         ),
                     )
-                    if data.get("appointmentId"):
+                    # un descuento que no cubre toda la cita la deja abierta para
+                    # cobrar el resto como pago normal
+                    if data.get("appointmentId") and (not es_descuento or data.get("marcarCita")):
                         conn.execute(
                             "UPDATE appointments SET status = 'ATENDIDA' WHERE id = ?",
                             (data.get("appointmentId"),),
