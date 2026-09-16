@@ -1834,6 +1834,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       agreed_price=excluded.agreed_price,
+                      credit_pending=excluded.credit_pending,
                       credit_amount=excluded.credit_amount,
                       credit_due_date=excluded.credit_due_date,
                       credit_note=excluded.credit_note,
@@ -1853,8 +1854,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("procedure", ""),
                         data.get("instructions", ""),
                         float(data.get("agreedPrice") or data.get("creditAmount") or 0),
-                        1,
-                        float(data.get("creditAmount") or data.get("agreedPrice") or 0),
+                        # Anular la deuda la deja de pendiente. Solo un false
+                        # expreso la anula: si el dato no viene, sigue pendiente
+                        # como siempre, y una deuda anulada guarda monto 0.
+                        0 if data.get("creditPending") is False else 1,
+                        0.0 if data.get("creditPending") is False else float(data.get("creditAmount") or data.get("agreedPrice") or 0),
                         data.get("creditDueDate", ""),
                         data.get("creditNote", ""),
                     ),

@@ -3482,6 +3482,17 @@ async function updateReceivableAmount(entry, amount) {
   render();
 }
 
+/* Anular una deuda que ya no corresponde -anotada por error, perdonada-. No
+   se borra: la ficha queda, solo deja de estar pendiente y sale de la agenda
+   de cobro. Lo que ya se abono sigue en caja. */
+async function voidReceivable(entry) {
+  const updated = { ...entry, creditPending: false, creditAmount: 0 };
+  await saveReceivableApi(updated, { editAmount: true });
+  upsert(state.clinicalHistory, updated);
+  if (!API_ENABLED) saveState();
+  render();
+}
+
 function openCreditDialog() {
   const historyForm = $("#historyForm");
   const creditForm = $("#creditForm");
@@ -5243,6 +5254,7 @@ function renderReceivables() {
       <td class="row-actions">
         <a class="small-btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>
         <button class="small-btn" data-pay-history="${entry.id}">Registrar pago</button>
+        ${canEditReceivableAmount() ? `<button class="small-btn danger-btn" data-void-receivable="${entry.id}" title="Anular esta deuda">Anular</button>` : ""}
       </td>
     </tr>`;
   }).join("") || `<tr><td colspan="7">No hay cuentas por cobrar pendientes.</td></tr>`;
@@ -7491,6 +7503,18 @@ function bindEvents() {
       }
       const newAgreedPrice = currentPaid + amount;
       updateReceivableAmount(entry, newAgreedPrice).catch((error) => alert(error.message));
+      return;
+    }
+    const voidBtn = event.target.closest("[data-void-receivable]");
+    if (voidBtn) {
+      if (!canEditReceivableAmount()) {
+        alert("Solo doctores y administrador pueden anular una deuda.");
+        return;
+      }
+      const entry = historyById(voidBtn.dataset.voidReceivable);
+      if (!entry) return;
+      if (!confirm("¿Anular esta deuda? El paciente dejará de aparecer en cuentas por cobrar.")) return;
+      voidReceivable(entry).catch((error) => alert(error.message));
       return;
     }
     const pay = event.target.closest("[data-pay-history]");
