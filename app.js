@@ -5510,15 +5510,24 @@ function renderStaffPanel() {
 function renderReminders() {
   const startDate = todayISO();
   const endDate = addDaysISO(startDate, 2);
-  const upcoming = state.appointments
+  const pendientes = state.appointments
     .filter((appointment) =>
       appointment.date >= startDate &&
       appointment.date <= endDate &&
       !appointment.reminderSentAt &&
       isSlotBlockingAppointment(appointment)
     )
-    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
-    .slice(0, 60);
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  /* Se cortaba en 60 tarjetas para tres dias. Aqui se atienden unos 20
+     pacientes diarios, asi que el corte dejaba fuera a los del final -los de
+     pasado manana- sin avisar que faltaban. */
+  const upcoming = pendientes.slice(0, 200);
+  const resumen = $("#remindersSummary");
+  if (resumen) {
+    const porDia = (fecha) => pendientes.filter((appointment) => appointment.date === fecha).length;
+    resumen.hidden = !pendientes.length;
+    resumen.textContent = `Por enviar: hoy ${porDia(startDate)} · mañana ${porDia(addDaysISO(startDate, 1))} · pasado mañana ${porDia(endDate)}. Total ${pendientes.length}.`;
+  }
   $("#remindersList").innerHTML = upcoming.map((appointment) => {
     const patient = patientById(appointment.patientId);
     const text = appointmentReminderMessage(appointment, patient);
