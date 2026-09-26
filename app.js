@@ -7032,16 +7032,35 @@ function bindEvents() {
       const cita = state.appointments.find((item) => item.id === confirmar.dataset.confirmAppointment);
       if (!cita) return;
       const antes = Boolean(cita.confirmada);
-      cita.confirmada = !antes;
+      const marcada = !antes;
+      /* Se pinta al instante y recien despues se guarda. Antes se esperaba la
+         respuesta del servidor -el viaje a Render y de ahi a la base- y el
+         boton se quedaba gris varios segundos: parecia que el clic no habia
+         entrado y se volvia a pulsar, que es justo lo que lo deshace. */
+      const pintar = (valor) => {
+        confirmar.classList.toggle("confirmada", valor);
+        confirmar.setAttribute("aria-pressed", String(valor));
+        confirmar.title = valor ? "El paciente confirmó. Clic para deshacer." : "Marcar que el paciente confirmó";
+      };
+      cita.confirmada = marcada;
+      pintar(marcada);
+      confirmar.disabled = true;
       try {
         await saveAppointmentApi(cita);
       } catch (error) {
         // si el servidor no lo acepta se deshace: la agenda no puede decir que
         // el paciente confirmo cuando eso no quedo guardado en ningun lado
         cita.confirmada = antes;
+        pintar(antes);
+        confirmar.disabled = false;
         alert(error.message || "No se pudo guardar la confirmacion.");
         return;
       }
+      confirmar.disabled = false;
+      /* Mientras se guardaba pudo entrar un refresco por rango y reemplazar la
+         cita por la copia del servidor, que todavia no tenia la confirmacion. */
+      const vigente = state.appointments.find((item) => item.id === cita.id);
+      if (vigente) vigente.confirmada = marcada;
       if (!API_ENABLED) saveState();
       renderAgenda();
       return;
