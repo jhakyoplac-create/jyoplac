@@ -5510,11 +5510,15 @@ function renderStaffPanel() {
 function renderReminders() {
   const startDate = todayISO();
   const endDate = addDaysISO(startDate, 2);
+  /* Salen todas las citas de estos tres dias, tambien las que ya recibieron un
+     recordatorio. El aviso se manda la noche anterior a todo el que tenga cita,
+     y una cita reprogramada arrastraba el envio de la fecha vieja: el paciente
+     quedaba sin aviso del dia nuevo y recepcion no tenia como mandarselo. La
+     tarjeta dice cuando se envio el ultimo, para no repetir el mismo dia. */
   const pendientes = state.appointments
     .filter((appointment) =>
       appointment.date >= startDate &&
       appointment.date <= endDate &&
-      !appointment.reminderSentAt &&
       isSlotBlockingAppointment(appointment)
     )
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
@@ -5526,12 +5530,14 @@ function renderReminders() {
   if (resumen) {
     const porDia = (fecha) => pendientes.filter((appointment) => appointment.date === fecha).length;
     resumen.hidden = !pendientes.length;
-    resumen.textContent = `Por enviar: hoy ${porDia(startDate)} · mañana ${porDia(addDaysISO(startDate, 1))} · pasado mañana ${porDia(endDate)}. Total ${pendientes.length}.`;
+    resumen.textContent = `Citas: hoy ${porDia(startDate)} · mañana ${porDia(addDaysISO(startDate, 1))} · pasado mañana ${porDia(endDate)}. Total ${pendientes.length}.`;
   }
   $("#remindersList").innerHTML = upcoming.map((appointment) => {
     const patient = patientById(appointment.patientId);
     const text = appointmentReminderMessage(appointment, patient);
     const wa = `https://wa.me/51${patient?.phone || ""}?text=${encodeURIComponent(text)}`;
+    const enviado = String(appointment.reminderSentAt || "").slice(0, 10);
+    const hoyMismo = enviado === todayISO();
     return `<article class="campaign-card">
       <div class="card-title">
         <strong>${formatDate(appointment.date)} ${reminderTimeLabel(appointment.time)}</strong>
@@ -5539,9 +5545,10 @@ function renderReminders() {
       </div>
       <p>${escapeHtml(friendlyName(patient?.name || ""))}</p>
       <p class="muted">${escapeHtml(appointment.service)} | ${escapeHtml(appointment.doctor)}</p>
-      <button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>
+      ${enviado ? `<p class="muted">Último aviso: ${hoyMismo ? "hoy" : formatDate(enviado)}</p>` : ""}
+      <button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">${enviado ? "Enviar de nuevo" : "Enviar recordatorio"}</button>
     </article>`;
-  }).join("") || `<p class="muted">No hay recordatorios pendientes para hoy, mañana o pasado mañana.</p>`;
+  }).join("") || `<p class="muted">No hay citas para hoy, mañana o pasado mañana.</p>`;
 }
 
 function monthLabel(month) {
