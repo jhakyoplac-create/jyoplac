@@ -49,6 +49,11 @@ body.locked {
   grid-template-columns: 1fr;
 }
 
+/* Con la sesion cerrada solo se ve el ingreso. La cabecera entra en la lista
+   desde que el logo salio del menu y vive en ella: si no, se asomaba por
+   debajo del recuadro de ingreso con el nombre del consultorio y el titulo de
+   la pantalla. */
+body.locked .topbar,
 body.locked .sidebar,
 body.locked .app {
   display: none;
