@@ -4995,9 +4995,9 @@ function imprimirOdontogramas(patientId) {
   const edad = ageFromBirthDate(patient.birthDate);
   const cabecera = `<header class="odo-impreso-cabecera">
       <div class="hc-clinica">
-        ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+        <img class="hc-logo" src="assets/logo-cm.png" alt="" onerror="this.remove()" />
         <div>
-          <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+          <h3>${escapeHtml(config.clinicName || "CM Odontología Estética")}</h3>
           <p>${escapeHtml(config.issuerAddress || "")}</p>
         </div>
       </div>
@@ -5388,9 +5388,9 @@ function hojaDelConsentimiento(patientId) {
     ? `<div class="ci-hoja">
         <header class="hc-cabecera">
           <div class="hc-clinica">
-            ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+            <img class="hc-logo" src="assets/logo-cm.png" alt="" onerror="this.remove()" />
             <div>
-              <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+              <h3>${escapeHtml(config.clinicName || "CM Odontología Estética")}</h3>
               <p>${escapeHtml(config.issuerAddress || "")}</p>
             </div>
           </div>
@@ -5439,9 +5439,9 @@ function imprimirConsentimiento(patientId, clave) {
     <div class="ci-hoja">
       <header class="hc-cabecera">
         <div class="hc-clinica">
-          ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+          <img class="hc-logo" src="assets/logo-cm.png" alt="" onerror="this.remove()" />
           <div>
-            <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+            <h3>${escapeHtml(config.clinicName || "CM Odontología Estética")}</h3>
             <p>${escapeHtml(config.issuerAddress || "")}</p>
           </div>
         </div>
@@ -5709,9 +5709,9 @@ function hojaDeLaProforma(proforma) {
   return `<article class="hc-hoja proforma-hoja">
     <header class="hc-cabecera">
       <div class="hc-clinica">
-        ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+        <img class="hc-logo" src="assets/logo-cm.png" alt="" onerror="this.remove()" />
         <div>
-          <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+          <h3>${escapeHtml(config.clinicName || "CM Odontología Estética")}</h3>
           <p>${escapeHtml(config.issuerAddress || "")}${config.phone ? ` · ${escapeHtml(config.phone)}` : ""}</p>
         </div>
       </div>
@@ -6153,9 +6153,9 @@ function hojaDelPlan(patientId) {
      mismo en pantalla que en el papel que se lleva el paciente. */
   const cuadroDelTotal = `<div class="plan-caja">
       <div class="plan-membrete">
-        ${config.logoDataUrl ? `<img class="plan-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+        <img class="plan-logo" src="assets/logo-cm.png" alt="" onerror="this.remove()" />
         <div>
-          <strong>${escapeHtml(config.clinicName || "Consultorio dental")}</strong>
+          <strong>${escapeHtml(config.clinicName || "CM Odontología Estética")}</strong>
           <span>Presupuesto para ${escapeHtml(patient.name)}</span>
         </div>
       </div>
