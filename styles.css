@@ -1536,6 +1536,48 @@ tr.followup-pending td:first-child {
   color: var(--muted);
 }
 
+/* El aviso de la busqueda por DNI va debajo, a lo ancho y en letra chica. Sin
+   texto no ocupa nada: si no, reserva su renglon y empuja toda la ficha hacia
+   abajo aunque no diga nada. */
+#patientDniLookupHint {
+  margin: 0;
+  font-size: 11.5px;
+}
+
+#patientDniLookupHint:empty {
+  display: none;
+}
+
+/* Los campos de medida conocida no tienen por que ocupar media ficha: el
+   celular son nueve digitos y la fecha, dd/mm/aaaa. Se les da su ancho justo y
+   la ficha deja de verse medio vacia. */
+#patientForm input[name="phone"] {
+  max-width: 150px;
+}
+
+#patientForm input[name="birthDate"] {
+  max-width: 170px;
+}
+
+/* La lista de pacientes llega hasta abajo, a la par de la ficha. Su cuadro ya
+   se estiraba -es la otra columna de la misma fila-, pero la tabla se quedaba
+   con el alto de la pantalla y dejaba un palmo en blanco debajo. Ahora crece
+   con el cuadro: caben mas pacientes de un vistazo y las dos columnas
+   terminan parejas. */
+/* solo el cuadro de la lista: la ficha tambien lleva la clase panel y con un
+   selector suelto se le pisaba su grilla de dos columnas */
+body.ficha-en-dos-columnas .content-grid.form-and-list > section.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+body.ficha-en-dos-columnas .patients-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
 /* ---- La cabecera: el logo y el nombre, al lado del titulo ----
    El logo, «CM Odontologia» y «Sistema dental» salen del menu y viven en la
    cabecera. Ocupan exactamente el ancho del menu, asi que quedan alineados con
