@@ -1077,6 +1077,11 @@ function focoEnCapturaDeDatos({ incluirSelect }) {
   const activo = document.activeElement;
   if (!activo) return false;
   if (FILTROS_DE_VISTA.has(activo.id)) return false;
+  /* Las rayas de la historia clinica se escriben encima: no son un input, son
+     el propio texto de la hoja. Sin esto el refresco automatico redibujaba la
+     hoja a media frase y se perdia lo escrito, que desde fuera parecia que el
+     campo no dejaba escribir. */
+  if (activo.isContentEditable) return true;
   const etiquetas = incluirSelect ? ["INPUT", "TEXTAREA", "SELECT"] : ["INPUT", "TEXTAREA"];
   return etiquetas.includes(activo.tagName);
 }
