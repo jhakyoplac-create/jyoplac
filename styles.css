@@ -1613,7 +1613,7 @@ body {
   align-self: stretch;
   padding: 14px 16px;
   margin: 0;
-  background: linear-gradient(180deg, #c9f4ff 0%, #e6fff8 100%);
+  /* sin fondo propio: la cabecera es una sola franja, del color del titulo */
   border-right: 1px solid var(--line);
 }
 
