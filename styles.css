@@ -5737,6 +5737,14 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   margin-left: auto;
 }
 
+/* Imprimir y Editar odontograma van al extremo derecho de su hoja: son lo
+   ultimo que se hace, cuando ya se leyo todo. A la izquierda se mezclaban con
+   la firma del paciente. */
+.hc-editar-odontograma {
+  margin: 4px 0 0;
+  text-align: right;
+}
+
 /* ---- El sello del profesional ----
    Se sube en su usuario y sale bajo su firma en la historia. Es de la
    persona, no del consultorio: con varios doctores, cada hoja lleva el
