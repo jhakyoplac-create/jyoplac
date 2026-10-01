@@ -102,6 +102,7 @@ const seedData = {
   odontogramSnapshots: [],
   proformas: [],
   consentimientos: [],
+  profesionales: [],
   // lo que el consultorio escribe en la ventana de Precios
   listaDePrecios: [],
   odontogram: [
@@ -232,6 +233,7 @@ function normalizeState(data) {
   const defaults = seedData.config;
   if (!Array.isArray(data.proformas)) data.proformas = [];
   if (!Array.isArray(data.consentimientos)) data.consentimientos = [];
+  if (!Array.isArray(data.profesionales)) data.profesionales = [];
   if (!Array.isArray(data.listaDePrecios)) data.listaDePrecios = [];
   data.config = { ...defaults, ...(data.config || {}) };
   if (!Array.isArray(data.services) || !data.services.length) data.services = structuredClone(seedData.services);
@@ -284,7 +286,11 @@ function normalizeState(data) {
     username: String(user.username || "").trim(),
     password: String(user.password || ""),
     role: ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(user.role) ? user.role : "RECEPCION",
-    active: user.active !== false
+    active: user.active !== false,
+    /* Lo que sale impreso bajo su firma. Va aqui a proposito: esta lista se
+       rehace campo por campo, y lo que no se nombre se pierde. */
+    cop: String(user.cop || "").trim(),
+    sello: String(user.sello || "")
   })).filter((user) => user.username);
   return data;
 }
@@ -726,7 +732,10 @@ function mapApiUser(row) {
     username: row.username || "",
     password: "",
     role: row.role || "RECEPCION",
-    active: row.active !== 0 && row.active !== false
+    active: row.active !== 0 && row.active !== false,
+    // lo que sale impreso bajo su firma
+    cop: row.cop || "",
+    sello: row.sello || ""
   };
 }
 
@@ -785,6 +794,10 @@ function applyApiBootstrap(payload) {
   if (Array.isArray(payload.users) && payload.users.length) {
     state.users = payload.users.map(mapApiUser);
   }
+  /* Los que pueden firmar una hoja, con su colegiatura y su sello. Van aparte
+     de los usuarios porque esos solo los ve el administrador, y el COP tiene
+     que salir impreso lo mire quien lo mire. */
+  state.profesionales = (payload.profesionales || []).map(mapApiUser);
   if (payload.config) {
     state.config.generalCashOpening = Number(payload.config.generalCashOpening ?? state.config.generalCashOpening);
     state.config.generalBankOpening = Number(payload.config.generalBankOpening ?? state.config.generalBankOpening);
@@ -1329,7 +1342,9 @@ async function saveUserApi(user) {
     username: user.username,
     password: user.password,
     role: user.role,
-    active: user.active
+    active: user.active,
+    cop: user.cop || "",
+    sello: user.sello || ""
   };
   const result = await apiFetch("/api/users", { method: "POST", body: JSON.stringify(payload) });
   if (result.id) user.id = result.id;
@@ -2918,6 +2933,68 @@ function medirCabecera() {
 
 window.addEventListener("resize", medirCabecera);
 window.addEventListener("scroll", medirCabecera, { passive: true });
+
+
+/* El sello del profesional se sube en su usuario y se guarda con el. Antes de
+   guardarlo se encoge: una foto de camara pesa megas y aqui viaja dentro del
+   usuario, asi que la llevamos a 480 px de ancho, que es mas de lo que ocupa
+   un sello en la hoja. */
+function ponerSelloDelUsuario(input) {
+  if (!isAdmin()) {
+    alert("Solo el administrador puede cambiar el sello.");
+    input.value = "";
+    return;
+  }
+  const archivo = input.files?.[0];
+  if (!archivo) return;
+  if (!archivo.type.startsWith("image/")) {
+    alert("Selecciona una imagen válida para el sello.");
+    input.value = "";
+    return;
+  }
+  const lector = new FileReader();
+  lector.onload = () => {
+    const imagen = new Image();
+    imagen.onload = () => {
+      const escala = Math.min(1, 480 / (imagen.width || 480));
+      const lienzo = document.createElement("canvas");
+      lienzo.width = Math.max(1, Math.round((imagen.width || 480) * escala));
+      lienzo.height = Math.max(1, Math.round((imagen.height || 240) * escala));
+      const pincel = lienzo.getContext("2d");
+      pincel.imageSmoothingQuality = "high";
+      pincel.drawImage(imagen, 0, 0, lienzo.width, lienzo.height);
+      const webp = lienzo.toDataURL("image/webp", 0.85);
+      const png = lienzo.toDataURL("image/png");
+      mostrarSelloDelUsuario(webp.startsWith("data:image/webp") && webp.length < png.length ? webp : png);
+      input.value = "";
+    };
+    imagen.onerror = () => {
+      alert("No se pudo procesar esa imagen (suele pasar con fotos HEIC de iPhone). Toma una captura de pantalla de la foto y sube esa captura.");
+      input.value = "";
+    };
+    imagen.src = String(lector.result || "");
+  };
+  lector.onerror = () => {
+    alert("No se pudo leer esa imagen.");
+    input.value = "";
+  };
+  lector.readAsDataURL(archivo);
+}
+
+
+/* El sello vive en el formulario hasta que se guarda el usuario: asi se puede
+   cambiar de idea y salir sin dejarlo puesto. */
+function mostrarSelloDelUsuario(imagen) {
+  const form = $("#userForm");
+  if (form?.sello) form.sello.value = imagen || "";
+  const muestra = $("#userSealPreview");
+  const vacio = $("#userSealEmpty");
+  if (muestra) {
+    muestra.src = imagen || "";
+    muestra.hidden = !imagen;
+  }
+  if (vacio) vacio.hidden = Boolean(imagen);
+}
 
 
 function setView(view) {
@@ -5185,7 +5262,11 @@ function usuarioDelDoctor(etiqueta) {
   const corto = String(etiqueta || "").trim();
   if (!corto) return null;
   const enMinusculas = (texto) => String(texto || "").trim().toLocaleLowerCase("es");
-  const usuarios = (state.users || []).filter((usuario) => usuario.active !== false && String(usuario.name || "").trim());
+  /* El administrador tiene la lista entera de usuarios; los demas solo la de
+     firmantes. Se miran las dos, sin repetir a nadie. */
+  const todos = [...(state.users || []), ...(state.profesionales || [])]
+    .filter((usuario, i, lista) => lista.findIndex((otro) => otro.id === usuario.id) === i);
+  const usuarios = todos.filter((usuario) => usuario.active !== false && String(usuario.name || "").trim());
   const exacto = usuarios.find((usuario) => enMinusculas(usuario.name) === enMinusculas(corto));
   if (exacto) return exacto;
   const clinicos = ["DOCTOR", "DOCTOR_TRABAJADOR", "ADMIN"];
@@ -11075,7 +11156,10 @@ function bindEvents() {
       username,
       password: data.password || existing?.password || "",
       role: data.role,
-      active: data.active === "on"
+      active: data.active === "on",
+      // lo que sale impreso bajo su firma
+      cop: String(data.cop || "").trim(),
+      sello: data.sello || ""
     };
     if (existing?.id === "u-admin") user.active = true;
     try {
@@ -11086,8 +11170,14 @@ function bindEvents() {
     }
     user.password = "";
     upsert(state.users, user);
-    event.currentTarget.reset();
-    event.currentTarget.active.checked = true;
+    /* El formulario se busca otra vez: despues de esperar al servidor,
+       event.currentTarget ya es null y limpiarlo reventaba ahi mismo, asi que
+       el usuario se guardaba pero el formulario se quedaba lleno. */
+    const form = $("#userForm");
+    form.reset();
+    form.id.value = "";
+    form.active.checked = true;
+    mostrarSelloDelUsuario("");
     if (!API_ENABLED) saveState();
     render();
   });
@@ -11096,7 +11186,15 @@ function bindEvents() {
     form.reset();
     form.id.value = "";
     form.active.checked = true;
+    mostrarSelloDelUsuario("");
   });
+  $("#userSealFile")?.addEventListener("change", (event) => {
+    ponerSelloDelUsuario(event.currentTarget);
+  });
+  $("#clearUserSealBtn")?.addEventListener("click", () => {
+    mostrarSelloDelUsuario("");
+  });
+
   $("#usersTable").addEventListener("click", (event) => {
     if (!isAdmin()) return;
     const edit = event.target.closest("[data-edit-user]");
@@ -11110,6 +11208,8 @@ function bindEvents() {
       form.password.value = "";
       form.role.value = user.role;
       form.active.checked = user.active;
+      if (form.cop) form.cop.value = user.cop || "";
+      mostrarSelloDelUsuario(user.sello || "");
     }
     if (toggle) {
       const user = state.users.find((item) => item.id === toggle.dataset.toggleUser);

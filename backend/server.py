@@ -269,6 +269,11 @@ def migrate_db(conn):
     # propuesta, no un cobro: lo cobrado vive en payments.
     ensure_column(conn, "patients", "presupuesto", "TEXT")
     # La hora en que se abrio la historia: la hoja la pide al lado de la fecha.
+    # El numero de colegiatura y el sello de cada profesional: salen bajo su
+    # firma en la historia, en el consentimiento y en la proforma. Son de la
+    # persona, no del consultorio: con varios doctores, cada hoja lleva el suyo.
+    ensure_column(conn, "users", "cop", "TEXT")
+    ensure_column(conn, "users", "sello", "TEXT")
     ensure_column(conn, "patients", "historia_hora", "TEXT")
     # Lo que pide el formato de historia clinica del Colegio y la nota no
     # guardaba: la enfermedad actual, los antecedentes, los signos vitales,
@@ -1188,7 +1193,25 @@ def list_users():
         return [
             row_to_dict(row)
             for row in conn.execute(
-                "SELECT id, name, username, role, active, created_at, updated_at FROM users ORDER BY name ASC"
+                "SELECT id, name, username, role, active, cop, sello, created_at, updated_at FROM users ORDER BY name ASC"
+            ).fetchall()
+        ]
+
+
+def list_signers():
+    """Quien puede firmar una hoja, con lo que sale impreso bajo su firma: su
+    nombre, su colegiatura y su sello. No es la lista de usuarios -no lleva
+    usuario ni nada de la cuenta- y la ve cualquiera, porque la doctora que
+    imprime su propia historia necesita su COP ahi."""
+    with db() as conn:
+        return [
+            row_to_dict(row)
+            for row in conn.execute(
+                """
+                SELECT id, name, role, cop, sello FROM users
+                WHERE active = 1 AND role IN ('ADMIN', 'DOCTOR', 'DOCTOR_TRABAJADOR')
+                ORDER BY name ASC
+                """
             ).fetchall()
         ]
 
@@ -1365,6 +1388,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
                 "auditEvents": list_audit_events(),
                 "users": list_users() if user["role"] == "ADMIN" else [],
+                # quien puede firmar una hoja, para que su COP y su sello salgan
+                # impresos aunque quien mire no sea el administrador
+                "profesionales": list_signers(),
                 "config": app_config(),
             })
         if parsed.path == "/api/cash-state":
@@ -1475,12 +1501,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 try:
                     conn.execute(
                         """
-                        INSERT INTO users (id, name, username, password_hash, role, active)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO users (id, name, username, password_hash, role, active, cop, sello)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           name=excluded.name, username=excluded.username,
                           password_hash=excluded.password_hash, role=excluded.role,
-                          active=excluded.active, updated_at=CURRENT_TIMESTAMP
+                          active=excluded.active, cop=excluded.cop, sello=excluded.sello,
+                          updated_at=CURRENT_TIMESTAMP
                         """,
                         (
                             item_id,
@@ -1489,6 +1516,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             password_hash,
                             normalize_role(data["role"]),
                             1 if data.get("active", True) else 0,
+                            str(data.get("cop", "") or "").strip(),
+                            str(data.get("sello", "") or "").strip(),
                         ),
                     )
                 except sqlite3.IntegrityError:

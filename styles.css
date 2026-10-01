@@ -5736,3 +5736,58 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
 .hcf-imprimir {
   margin-left: auto;
 }
+
+/* ---- El sello del profesional ----
+   Se sube en su usuario y sale bajo su firma en la historia. Es de la
+   persona, no del consultorio: con varios doctores, cada hoja lleva el
+   sello de quien la firma. */
+
+.sello-caja {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.sello-rotulo {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sello-muestra {
+  display: block;
+  max-width: 100%;
+  max-height: 110px;
+  margin-bottom: 8px;
+}
+
+.sello-vacio {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sello-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sello-subir {
+  font-size: 12px;
+}
+
+/* El sello va debajo del nombre del profesional, como se estampa en el papel */
+.hcf-sello-imagen {
+  display: block;
+  max-width: 190px;
+  max-height: 80px;
+  margin: 8px 0 0;
+}
+
+#userForm .sello-caja {
+  margin: 4px 0;
+}

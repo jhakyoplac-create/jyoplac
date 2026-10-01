@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261001-la-nota-es-lo-de-hoy" />
-    <link rel="stylesheet" href="odontograma.css?v=20261001-la-nota-es-lo-de-hoy" />
+    <link rel="stylesheet" href="styles.css?v=20261001-cop-y-sello" />
+    <link rel="stylesheet" href="odontograma.css?v=20261001-cop-y-sello" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -1071,6 +1071,19 @@
                 <option value="ADMIN">Administrador</option>
               </select>
             </label>
+            <label>COP N.&ordm; <span class="muted">(opcional, solo para doctores)</span><input name="cop" maxlength="20" placeholder="Sale bajo su firma en la historia y los consentimientos" /></label>
+            <!-- El sello es de cada profesional, no del consultorio: con varios
+                 doctores, cada historia lleva el sello de quien la firma. -->
+            <div class="sello-caja">
+              <span class="sello-rotulo">Sello del profesional <span class="muted">(opcional, solo para doctores)</span></span>
+              <img id="userSealPreview" class="sello-muestra" alt="" hidden />
+              <p class="sello-vacio" id="userSealEmpty">Todav&iacute;a no hay sello. Estampa el sello en un papel blanco, t&oacute;male una foto y s&uacute;bela.</p>
+              <div class="sello-acciones">
+                <label class="sello-subir">Subir imagen<input id="userSealFile" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+                <button class="ghost" id="clearUserSealBtn" type="button">Quitar</button>
+              </div>
+              <input type="hidden" name="sello" />
+            </div>
             <label class="check"><input name="active" type="checkbox" checked /> Usuario activo</label>
             <button class="primary" type="submit">Guardar usuario</button>
           </form>
@@ -1304,7 +1317,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20261001-la-nota-es-lo-de-hoy"></script>
-    <script src="app.js?v=20261001-la-nota-es-lo-de-hoy"></script>
+    <script src="odontograma.js?v=20261001-cop-y-sello"></script>
+    <script src="app.js?v=20261001-cop-y-sello"></script>
   </body>
 </html>
