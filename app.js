@@ -4466,14 +4466,6 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
 
 function renderClinicalHistory() {
   if (!$('#historyForm input[name="date"]').value) $('#historyForm input[name="date"]').value = todayISO();
-  // el tratamiento se elige del catalogo de servicios, sin impedir escribir otro
-  const sugerencias = $("#historyPlanOptions");
-  if (sugerencias) {
-    sugerencias.innerHTML = (state.services || [])
-      .filter((servicio) => servicio.active !== false && servicio.name)
-      .map((servicio) => `<option value="${escapeHtml(servicio.name)}"></option>`)
-      .join("");
-  }
   const caja = $("#historyTimeline");
   if (!caja) return;
   const patientId = $("#historyPatientFilter").value || state.patients[0]?.id || "";
@@ -9825,19 +9817,6 @@ function bindEvents() {
       }
       return;
     }
-    // un costo sin nombre no abre ningun tratamiento y nadie se enteraria
-    if (Number(data.planBudget || 0) > 0 && !String(data.plan || "").trim()) {
-      alert("Escribe qué tratamiento es, por ejemplo Ortodoncia.");
-      historySaving = false;
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.textContent = "Guardar historial";
-      }
-      const pliegue = form.querySelector(".form-more");
-      if (pliegue) pliegue.open = true;
-      form.elements.namedItem("plan")?.focus();
-      return;
-    }
     const creditPending = data.creditPending === "on";
     const creditAmount = Number(data.creditAmount || data.agreedPrice || 0);
     if (creditPending && !data.creditDueDate) {
@@ -9850,6 +9829,10 @@ function bindEvents() {
       openCreditDialog();
       return;
     }
+    /* La historia clinica se escribe sobre su hoja, no aqui; el tratamiento y
+       su costo, en la pestana Plan de tratamiento. La nota los arrastra tal
+       cual para no borrarlos al corregir el motivo o el cobro. */
+    const anterior = data.id ? state.clinicalHistory.find((item) => item.id === data.id) : null;
     const entry = {
       id: data.id || uid("h"),
       patientId: data.patientId,
@@ -9857,14 +9840,17 @@ function bindEvents() {
       attendedBy: data.attendedBy,
       attended: true,
       reason: data.reason || "",
-      anamnesis: data.anamnesis || "",
-      exam: data.exam || "",
-      diagnosis: data.diagnosis || "",
-      plan: data.plan || "",
+      ...Object.fromEntries(CAMPOS_CLINICOS.map((campo) => [campo, anterior?.[campo] || ""])),
+      discharged: Boolean(anterior?.discharged),
+      firma: anterior?.firma || "",
+      firmadaPor: anterior?.firmadaPor || "",
+      firmadaEl: anterior?.firmadaEl || "",
+      professional: anterior?.professional || "",
+      plan: anterior?.plan || "",
       procedure: data.procedure || "",
-      instructions: data.instructions || "",
+      instructions: anterior?.instructions || "",
       agreedPrice: Number(data.agreedPrice || 0),
-      planBudget: Number(data.planBudget || 0),
+      planBudget: Number(anterior?.planBudget || 0),
       creditPending,
       creditAmount,
       creditDueDate: data.creditDueDate || "",
@@ -9907,44 +9893,14 @@ function bindEvents() {
     }
   });
 
-  // plan y presupuesto se abre desde un boton junto al titulo de la nota
-  $("#historyForm .hn-plan-toggle")?.addEventListener("click", () => {
-    const pliegue = $("#historyForm .form-more");
-    if (pliegue) pliegue.open = !pliegue.open;
-  });
-  // el boton dice si esta abierto, lo abra el boton, Editar o Limpiar
-  $("#historyForm .form-more")?.addEventListener("toggle", (event) => {
-    const boton = $("#historyForm .hn-plan-toggle");
-    if (!boton) return;
-    const abierto = event.currentTarget.open;
-    boton.setAttribute("aria-expanded", String(abierto));
-    boton.textContent = abierto ? "− Plan y presupuesto" : "+ Plan y presupuesto";
-  });
-  /* Con costo total, el cobro de hoy queda en S/ 0: el tratamiento ya se cobra
-     en Pagos, y poner el mismo monto en los dos lados lo cobraba dos veces. Si
-     la persona escribe un cobro de hoy -la consulta aparte-, se respeta. */
-  const ajustarCobroDeHoy = () => {
-    const form = $("#historyForm");
-    if (!form) return;
-    const costo = Number(form.elements.namedItem("planBudget")?.value || 0);
-    const cobro = form.elements.namedItem("agreedPrice");
-    if (costo > 0 && cobro && !cobro.dataset.manual) cobro.value = "0";
-    const aviso = $("#historyChargeHint");
-    if (aviso) aviso.hidden = !(costo > 0);
-  };
-  $('#historyForm input[name="planBudget"]')?.addEventListener("input", ajustarCobroDeHoy);
   $('#historyForm input[name="agreedPrice"]')?.addEventListener("input", (event) => {
     event.target.dataset.manual = event.target.value !== "" ? "1" : "";
     // el aviso de la deuda del dia mira este campo: solo estorba si hay cobro
     avisoDeDeudaDelDia();
   });
   $("#historyForm")?.addEventListener("reset", () => {
-    const masDetalles = $("#historyForm .form-more");
-    if (masDetalles) masDetalles.open = false;
     const cobro = $('#historyForm input[name="agreedPrice"]');
     if (cobro) cobro.dataset.manual = "";
-    const avisoCobro = $("#historyChargeHint");
-    if (avisoCobro) avisoCobro.hidden = true;
     const avisoDeuda = $("#historyDebtNotice");
     if (avisoDeuda) avisoDeuda.hidden = true;
   });
@@ -10253,13 +10209,9 @@ function bindEvents() {
       else form[key].value = value;
     });
     updateCreditSummary();
-    const masDetalles = form.querySelector(".form-more");
-    if (masDetalles) masDetalles.open = Boolean(String(entry.plan || "").trim() || Number(entry.planBudget || 0) > 0 || String(entry.instructions || "").trim());
     // una nota guardada ya tiene su cobro de hoy decidido: no se pisa
     if (form.agreedPrice) form.agreedPrice.dataset.manual = "1";
     avisoDeDeudaDelDia();
-    const avisoCobro = $("#historyChargeHint");
-    if (avisoCobro) avisoCobro.hidden = !(Number(entry.planBudget || 0) > 0);
   });
 
   // El odontograma se maneja por completo dentro de odontograma.js: sus

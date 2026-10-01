@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261001-dni-del-representante" />
-    <link rel="stylesheet" href="odontograma.css?v=20261001-dni-del-representante" />
+    <link rel="stylesheet" href="styles.css?v=20261001-la-nota-es-lo-de-hoy" />
+    <link rel="stylesheet" href="odontograma.css?v=20261001-la-nota-es-lo-de-hoy" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -285,7 +285,9 @@
           <form class="panel form history-note-form" id="historyForm">
             <div class="panel-head">
               <h2>Nota clínica</h2>
-              <div class="hn-acciones"><button type="button" class="ghost hn-plan-toggle" aria-expanded="false">+ Plan y presupuesto</button><button type="reset" class="ghost">Limpiar</button></div>
+              <!-- El tratamiento y su costo se escriben en la pestana Plan de
+                   tratamiento, no aqui: la nota es lo que paso hoy. -->
+              <div class="hn-acciones"><button type="reset" class="ghost">Limpiar</button></div>
             </div>
             <input type="hidden" name="id" />
             <label class="hn-c1">Fecha<input name="date" type="date" required /></label>
@@ -295,16 +297,6 @@
             <p class="notice subtle hn-completo" id="historyDebtNotice" hidden></p>
             <label class="hn-c2">Motivo de consulta<textarea name="reason" rows="1" required></textarea></label>
             <label class="hn-c2">Procedimiento realizado<textarea name="procedure" rows="1"></textarea></label>
-            <details class="form-more">
-              <summary>Plan y presupuesto</summary>
-              <div class="hn-plan-fila">
-                <label>Tratamiento<input name="plan" list="historyPlanOptions" placeholder="Ej. Ortodoncia" autocomplete="off" /></label>
-                <label>Costo total del tratamiento S/<input name="planBudget" type="number" min="0" step="0.01" placeholder="Ej. 2000" /></label>
-              </div>
-              <datalist id="historyPlanOptions"></datalist>
-              <p class="form-more-hint" id="historyChargeHint" hidden>El tratamiento se cobra en Pagos. Pon un monto en «Cobro de hoy» solo si hoy se cobra algo aparte, como la consulta.</p>
-              <input type="hidden" name="instructions" />
-            </details>
             <div class="hn-checks hn-c1">
               <label class="hn-check"><input name="attended" type="checkbox" checked /> Atendido</label>
               <label class="hn-check"><input name="creditPending" type="checkbox" /> Pago pendiente</label>
@@ -1312,7 +1304,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20261001-dni-del-representante"></script>
-    <script src="app.js?v=20261001-dni-del-representante"></script>
+    <script src="odontograma.js?v=20261001-la-nota-es-lo-de-hoy"></script>
+    <script src="app.js?v=20261001-la-nota-es-lo-de-hoy"></script>
   </body>
 </html>
