@@ -256,6 +256,10 @@ def migrate_db(conn):
     ensure_column(conn, "patients", "created_by_name", "TEXT")
     ensure_column(conn, "patients", "created_by_role", "TEXT")
     ensure_column(conn, "patients", "hide_from_reception_new", "INTEGER NOT NULL DEFAULT 0")
+    # El presupuesto del paciente: el precio que el doctor dejo en cada linea,
+    # el descuento y los tratamientos elegidos a mano. Va en JSON porque es una
+    # propuesta, no un cobro: lo cobrado vive en payments.
+    ensure_column(conn, "patients", "presupuesto", "TEXT")
     # Resultado de la llamada de seguimiento. contact_snooze evita que el mismo
     # paciente reaparezca al dia siguiente cuando ya se le llamo y quedo en algo.
     ensure_column(conn, "patients", "contact_date", "TEXT")
@@ -1285,6 +1289,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 # queda la ficha entera de un dia, con quien la guardo y una nota,
                 # para poder mirar atras o volver a ese estado.
                 "odontogramSnapshots": list_table("odontogram_snapshots", "saved_at DESC"),
+                # Los presupuestos entregados: se guardan congelados, con su
+                # numero y la fecha en que se dieron.
+                "proformas": list_table("proformas", "numero DESC"),
                 "payments": list_table("payments", "date DESC, created_at DESC"),
                 "electronicReceipts": list_electronic_receipts(),
                 "expenses": list_table("expenses", "date DESC, created_at DESC"),
@@ -1522,15 +1529,17 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """
                     INSERT INTO patients (
                       id, dni, name, phone, birth_date, doctor, main_treatment, status, notes,
-                      created_by_id, created_by_name, created_by_role, hide_from_reception_new
+                      created_by_id, created_by_name, created_by_role, hide_from_reception_new,
+                      presupuesto
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       dni=excluded.dni, name=excluded.name, phone=excluded.phone,
                       birth_date=excluded.birth_date,
                       doctor=excluded.doctor, main_treatment=excluded.main_treatment,
                       status=excluded.status, notes=excluded.notes,
                       hide_from_reception_new=excluded.hide_from_reception_new,
+                      presupuesto=excluded.presupuesto,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -1547,6 +1556,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         user["name"],
                         normalize_role(user["role"]),
                         hidden_from_reception_new,
+                        json.dumps(data.get("presupuesto"), ensure_ascii=False) if data.get("presupuesto") else None,
                     ),
                 )
                 action = "PATIENT_CREATED" if not existing_patient else "PATIENT_UPDATED"
@@ -2527,6 +2537,48 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     conn.execute("UPDATE cash_sessions SET opening_cash=? WHERE id=?", (amount, session["id"]))
             return send_json(self, {"ok": True})
 
+        if parsed.path == "/api/proformas":
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id")
+            if not item_id or not data.get("patientId"):
+                return send_json(self, {"error": "Proforma incompleta."}, 400)
+            if data.get("borrar"):
+                with db() as conn:
+                    conn.execute("DELETE FROM proformas WHERE id = ?", (item_id,))
+                return send_json(self, {"ok": True, "id": item_id})
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO proformas (
+                      id, patient_id, patient_name, numero, date, lineas, descuento,
+                      doctor, cop, aceptada_el, tratamiento_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      patient_name=excluded.patient_name, numero=excluded.numero,
+                      date=excluded.date, lineas=excluded.lineas,
+                      descuento=excluded.descuento, doctor=excluded.doctor, cop=excluded.cop,
+                      aceptada_el=excluded.aceptada_el, tratamiento_id=excluded.tratamiento_id,
+                      updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (
+                        item_id,
+                        data.get("patientId"),
+                        data.get("patientName", ""),
+                        int(data.get("numero") or 0),
+                        data.get("date", ""),
+                        json.dumps(data.get("lineas") or [], ensure_ascii=False),
+                        float(data.get("descuento") or 0),
+                        data.get("doctor", ""),
+                        data.get("cop", ""),
+                        data.get("aceptadaEl", "") or None,
+                        data.get("tratamientoId", "") or None,
+                    ),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
         if parsed.path == "/api/config":
             if not require_role(self, {"ADMIN"}):
                 return
@@ -2549,6 +2601,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 values["services"] = data["services"]
             if "servicesCustomized" in data:
                 values["servicesCustomized"] = data["servicesCustomized"]
+            # La lista de precios que el consultorio escribe a mano en la
+            # ventana de Precios: tratamiento y cuanto cobra por el.
+            if "listaDePrecios" in data:
+                values["listaDePrecios"] = data["listaDePrecios"]
             set_config(values)
             return send_json(self, {"ok": True})
 

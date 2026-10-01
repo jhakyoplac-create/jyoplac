@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20260927-recordatorio-dia" />
-    <link rel="stylesheet" href="odontograma.css?v=20260821-seguimiento" />
+    <link rel="stylesheet" href="styles.css?v=20261001-odontograma-norma" />
+    <link rel="stylesheet" href="odontograma.css?v=20261001-odontograma-norma" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -234,6 +234,16 @@
               </div>
             </div>
             <div id="historyTimeline"></div>
+          </section>
+
+          <!-- El plan de tratamiento: el presupuesto que sale del odontograma,
+               la ventana de precios y las proformas entregadas. -->
+          <section class="panel plan-panel">
+            <div class="panel-head">
+              <h2>Plan de tratamiento</h2>
+              <span class="muted">Sale del paciente elegido arriba</span>
+            </div>
+            <div id="planTimeline"></div>
           </section>
 
           <section class="panel odontogram-copies-panel">
@@ -1196,7 +1206,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20260907-copias-odontograma"></script>
-    <script src="app.js?v=20260927-recordatorio-dia"></script>
+    <script src="odontograma.js?v=20261001-odontograma-norma"></script>
+    <script src="app.js?v=20261001-odontograma-norma"></script>
   </body>
 </html>

@@ -3829,3 +3829,583 @@ menu {
   font-size: 11px;
   font-weight: 700;
 }
+
+/* ==================== PLAN DE TRATAMIENTO ====================
+   El presupuesto, la proforma y la ventana de precios. Vienen del sistema
+   dental de EmpresaFacil, para que los dos se vean igual.
+   ============================================================ */
+
+/* El paso del historial al odontograma: abajo a la derecha del dibujo, donde
+   termina de leerse. Solo existe en pantalla; la hoja impresa no lo lleva. */
+/* Las pestañas de la historia del paciente. Van debajo del titulo y encima de
+   la hoja: son formas de mirar al mismo paciente, no pantallas distintas. */
+.hc-pestanas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.hc-pestana {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Las opciones de dentro de una pestaña -los consentimientos- se ven como
+   hijas: sin la linea de abajo y algo mas chicas que las de arriba. */
+.hc-pestanas-hijas {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 8px;
+}
+
+.hc-pestanas-hijas .hc-pestana {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
+.hc-pestana.activa {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.hc-tratamiento {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d9e2e4;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.hc-tratamiento-cabeza,
+.hc-tratamiento-montos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 14px;
+}
+
+.hc-falta {
+  color: #93231c;
+}
+
+.hc-barra {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #e7eef0;
+}
+
+/* claro: lo pagado; oscuro encima: lo que ya se uso */
+.hc-barra i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+}
+
+.hc-barra .hc-barra-pagado {
+  background: #9fd8c2;
+}
+
+.hc-barra .hc-barra-usado {
+  background: #1d9e75;
+}
+
+.hc-tratamiento-cabeza small {
+  margin-left: 6px;
+  color: #5b6b70;
+  font-weight: 400;
+}
+
+/* ---- Presupuesto armado desde el odontograma ---- */
+.presupuesto-tabla .presupuesto-precio {
+  width: 90px;
+  min-height: 30px;
+  padding: 4px 8px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.presupuesto-fuera td {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.presupuesto-fuera .small-btn {
+  text-decoration: none;
+}
+
+.presupuesto-descuento {
+  width: 72px;
+  min-height: 30px;
+  padding: 4px 8px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---- Proformas entregadas ---- */
+.presupuesto-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.proforma-fila {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.proforma-cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  font-size: 13px;
+}
+
+.proforma-monto {
+  margin-left: auto;
+  font-size: 15px;
+}
+
+.proforma-ver > summary {
+  cursor: pointer;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.proforma-ver .hc-hoja {
+  margin-top: 8px;
+}
+
+.proforma-titulo {
+  margin: 14px 0 12px;
+  text-align: center;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.proforma-paciente {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.proforma-paciente > span {
+  color: var(--muted);
+}
+
+.proforma-total strong {
+  font-size: 15px;
+}
+
+.proforma-nota {
+  margin: 12px 0 0;
+  color: #46555c;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* ---- Plan de tratamiento: presupuesto a la izquierda, boca a la derecha ----
+   Se marca una caries en el odontograma y se ve aparecer su linea en el
+   presupuesto sin cambiar de pantalla, que es como se arma un presupuesto
+   delante del paciente. */
+.plan-columnas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.plan-caja {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7fbfd;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.plan-descuento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.presupuesto-descuento {
+  width: 64px;
+  min-height: 30px;
+  padding: 4px 8px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.plan-caja-linea {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 4px;
+  font-size: 12.5px;
+}
+
+.plan-caja-linea > span {
+  color: var(--muted);
+}
+
+.plan-guardar {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* la x de quitar: pequena y al final de su linea, como en el papel */
+.plan-quitar {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  width: 26px;
+  height: 26px;
+  color: #a33;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.plan-quitar:hover {
+  border-color: #a33;
+}
+
+.plan-volver {
+  color: #0f6e56;
+}
+
+.plan-volver:hover {
+  border-color: #0f6e56;
+}
+
+/* El boton de los precios va debajo de la pestaña del plan, empezando donde
+   esa pestaña termina -el desplazamiento lo mide el JS, porque las pestañas
+   viven en otro contenedor- y lleva el color del consultorio. */
+.plan-precios-boton {
+  position: relative;
+  display: flex;
+  justify-content: flex-start;
+  margin: -4px 0 8px;
+}
+
+.plan-precios-boton > .hc-pestana {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.plan-precios-boton > .hc-pestana.activa {
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+/* La ventana de precios: cuelga del propio boton, a su altura y a la derecha,
+   medio transparente para que se siga leyendo el plan por detras. Letra chica,
+   que son cuatro columnas cortas. */
+.plan-precios-ventana {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(420px, 100%);
+  max-height: 60vh;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .82);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .18);
+  font-size: 12px;
+}
+
+.plan-precios-ventana .servicio-campo,
+.plan-precios-ventana .small-btn {
+  background: rgba(255, 255, 255, .72);
+}
+
+.plan-precios-ventana .hc-tabla th {
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.plan-precios-ventana .hc-tabla td {
+  padding: 3px 6px;
+  vertical-align: middle;
+}
+
+.servicio-campo {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+
+.servicio-campo:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+.servicio-num {
+  text-align: right;
+}
+
+.servicios-tabla th:first-child,
+.servicios-tabla td:first-child {
+  min-width: 130px;
+}
+
+.servicios-tabla th:nth-child(2),
+.servicios-tabla td:nth-child(2) {
+  width: 62px;
+}
+
+.servicios-tabla th:nth-child(3),
+.servicios-tabla td:nth-child(3) {
+  width: 84px;
+}
+
+/* La pieza se escribe como la dice el doctor -1.5, 4.8- y es texto, no un
+   contador: sin los triangulitos de subir y bajar, que ahi no sirven. */
+.servicio-pieza {
+  text-align: center;
+}
+
+/* El tratamiento ya guardado deja de ser un campo y pasa a ser una opcion: se
+   pulsa y baja una linea para ponerle la pieza. */
+.precio-opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  /* el borde se ve siempre, no solo al pasar por encima: si no, no hay como
+     adivinar que el tratamiento se pulsa para bajar su linea */
+  border: 1px dashed var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .55);
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.precio-opcion-mas {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--blue);
+}
+
+.precio-opcion:hover,
+.precio-opcion:focus-visible {
+  border-style: solid;
+  border-color: var(--blue);
+  background: rgba(255, 255, 255, .9);
+  outline: none;
+}
+
+/* La linea de trabajo cuelga de su opcion: va corrida y en gris, para que se
+   lea de un vistazo cual salio de cual. */
+.precio-trabajo {
+  display: block;
+  padding: 3px 6px 3px 18px;
+  color: var(--muted, #6b7280);
+}
+
+.plan-precios-ventana input[type="number"]::-webkit-outer-spin-button,
+.plan-precios-ventana input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.servicios-tabla th:nth-child(4),
+.servicios-tabla td:nth-child(4),
+.servicios-tabla th:last-child,
+.servicios-tabla td:last-child {
+  width: 30px;
+}
+
+.plan-precios-ventana .check {
+  margin: 0;
+  justify-content: center;
+}
+
+.plan-precios-ventana .plan-quitar {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+
+/* Los dos botones de la ventana, debajo de la tabla. */
+.plan-precios-pie {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+/* El catalogo de tratamientos que no salen del odontograma. Nace plegado: el
+   presupuesto se lee primero, y esto es para cuando hay que agregarle algo. */
+.plan-catalogo {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 14px;
+}
+
+.plan-catalogo > summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 2px 0;
+}
+
+.plan-catalogo-grupo {
+  margin-top: 10px;
+}
+
+.plan-catalogo-grupo h5 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted, #6b7280);
+}
+
+.plan-catalogo-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 66px;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-catalogo-item:last-child {
+  border-bottom: 0;
+}
+
+/* El nombre entero, aunque doble de linea: "Instalación de Brackets Zafiro" y
+   "Orthometric" solo se distinguen por el final. */
+.plan-catalogo-item > input[type="checkbox"] {
+  margin: 0;
+}
+
+.plan-catalogo-item > label {
+  display: block;
+  margin: 0;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.plan-catalogo-precio {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #6b7280);
+}
+
+.plan-catalogo-cantidad {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+  text-align: right;
+}
+
+.plan-derecha .hc-grafico {
+  overflow: hidden;
+}
+
+/* El membrete del presupuesto: el mismo logo y nombre que vera el paciente en
+   la proforma impresa, para que lo que se le muestra en pantalla y lo que se
+   lleva en la mano sean la misma cosa. */
+.plan-membrete {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-logo {
+  max-width: 56px;
+  max-height: 56px;
+}
+
+.plan-membrete strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.plan-membrete span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-caja-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.plan-caja-total strong {
+  font-size: 22px;
+}
+
+.plan-caja .table-wrap {
+  margin-top: 4px;
+}
+
+/* aceptar es la accion importante de la fila: se nota sin gritar */
+.proforma-aceptar {
+  border-color: #1d9e75;
+  color: #0f6e56;
+  font-weight: 700;
+}

@@ -227,6 +227,26 @@ CREATE TABLE IF NOT EXISTS petty_cash_allocations (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- El presupuesto congelado del dia en que se dio: el paciente se la lleva y el
+-- consultorio sabe que precio le dijo. No se recalcula nunca mas aunque cambien
+-- la lista de precios o el odontograma.
+CREATE TABLE IF NOT EXISTS proformas (
+  id TEXT PRIMARY KEY,
+  patient_id TEXT NOT NULL,
+  patient_name TEXT,
+  numero INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  lineas TEXT NOT NULL,
+  descuento REAL NOT NULL DEFAULT 0,
+  doctor TEXT,
+  cop TEXT,
+  aceptada_el TEXT,
+  tratamiento_id TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS app_config (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

@@ -118,6 +118,14 @@
   font: inherit; font-size: 12.5px; font-weight: 700;
 }
 
+/* El interruptor de las piezas de leche, al lado del selector de hoja. */
+.odo-nino {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0;
+  font-size: 12.5px; font-weight: 700; color: var(--ink, #17323d);
+  white-space: nowrap; cursor: pointer;
+}
+.odo-nino input { width: 16px !important; height: 16px !important; min-height: 0 !important; margin: 0; }
+
 /* ---------- disposicion ---------- */
 .odo-layout { display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: 14px; align-items: start; }
 /* Cuando el panel es angosto el lateral pasa debajo y la arcada usa todo el
@@ -239,6 +247,11 @@
   color: var(--ink, #17323d); margin-top: 8px;
 }
 .odo-btn:hover { border-color: var(--aqua, #00a6d6); }
+/* Del bloque de la pieza quedan su etiqueta y sus dos botones, en una sola
+   franja: lo que manda arriba son las especificaciones y las observaciones. */
+.odo-selbox { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.odo-selbox .odo-selsub { margin: 0; flex: 1 1 auto; }
+.odo-selbox .odo-btn { width: auto; margin: 0; flex: 0 0 auto; padding: 6px 12px; }
 .odo-esp {
   width: 100%; min-height: 74px; border: 1px solid var(--line, #c8eaf2);
   border-radius: 8px; padding: 8px; background: var(--aqua-soft, #dff7ff);

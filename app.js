@@ -100,6 +100,9 @@ const seedData = {
     { id: "h2", patientId: "p2", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Consulta inicial", anamnesis: "Niega alergias.", exam: "Evaluacion intraoral inicial.", diagnosis: "Evaluacion pendiente", plan: "Solicitar radiografia.", procedure: "Revision clinica general.", instructions: "Tomar radiografia panoramica.", agreedPrice: 50 }
   ],
   odontogramSnapshots: [],
+  proformas: [],
+  // lo que el consultorio escribe en la ventana de Precios
+  listaDePrecios: [],
   odontogram: [
     { patientId: "p1", tooth: "11", condition: "Obturado", note: "Control ortodontico" },
     { patientId: "p1", tooth: "26", condition: "Cariado", note: "Revisar restauracion" },
@@ -226,6 +229,8 @@ function loadState() {
 
 function normalizeState(data) {
   const defaults = seedData.config;
+  if (!Array.isArray(data.proformas)) data.proformas = [];
+  if (!Array.isArray(data.listaDePrecios)) data.listaDePrecios = [];
   data.config = { ...defaults, ...(data.config || {}) };
   if (!Array.isArray(data.services) || !data.services.length) data.services = structuredClone(seedData.services);
   if (!data.config.servicesCustomized && !data.services.some((service) => String(service.name || "").toLowerCase() === "retiro de brackets")) {
@@ -332,6 +337,63 @@ async function lookupExternalRuc(ruc) {
   return apiFetch(`/api/external/ruc?numero=${encodeURIComponent(ruc)}`);
 }
 
+function parsePresupuesto(valor) {
+  if (!valor) return null;
+  if (typeof valor === "object") return valor;
+  try {
+    return JSON.parse(valor);
+  } catch (error) {
+    return null;
+  }
+}
+
+
+/* La proforma llega con sus lineas en texto JSON: se congelaron el dia en que
+   se entrego y no se vuelven a calcular. */
+function mapApiProforma(row) {
+  let lineas = row.lineas;
+  if (typeof lineas === "string") {
+    try {
+      lineas = JSON.parse(lineas);
+    } catch (error) {
+      lineas = [];
+    }
+  }
+  return {
+    id: row.id,
+    patientId: row.patient_id || row.patientId || "",
+    patientName: row.patient_name || row.patientName || "",
+    numero: Number(row.numero || 0),
+    date: (row.date || "").slice(0, 10),
+    lineas: Array.isArray(lineas) ? lineas : [],
+    descuento: Number(row.descuento || 0),
+    doctor: row.doctor || "",
+    cop: row.cop || "",
+    aceptadaEl: (row.aceptada_el || row.aceptadaEl || "").slice(0, 10),
+    tratamientoId: row.tratamiento_id || row.tratamientoId || ""
+  };
+}
+
+
+/* La lista de precios son objetos, no textos: parseApiList los volveria
+   "[object Object]". */
+function parseListaDePrecios(value, fallback) {
+  if (!value) return fallback;
+  let lista = value;
+  if (typeof lista === "string") {
+    try {
+      lista = JSON.parse(lista);
+    } catch (error) {
+      return fallback;
+    }
+  }
+  if (!Array.isArray(lista)) return fallback;
+  return lista
+    .filter((linea) => linea && linea.name)
+    .map((linea) => ({ name: String(linea.name).trim(), price: Number(linea.price || 0) }));
+}
+
+
 function mapApiPatient(row) {
   return {
     id: row.id,
@@ -352,6 +414,9 @@ function mapApiPatient(row) {
     contactNote: row.contact_note || row.contactNote || "",
     contactSnooze: (row.contact_snooze || row.contactSnooze || "").slice(0, 10),
     contactBy: row.contact_by || row.contactBy || "",
+    /* El presupuesto del paciente viaja como texto JSON desde el servidor: el
+       precio que se dejo en cada linea, el descuento y lo elegido a mano. */
+    presupuesto: parsePresupuesto(row.presupuesto),
     // calculados por el servidor: el navegador no tiene todas las citas
     lastAttended: (row.last_attended || row.lastAttended || "").slice(0, 10),
     nextAppointment: (row.next_appointment || row.nextAppointment || "").slice(0, 10),
@@ -635,6 +700,7 @@ function applyApiBootstrap(payload) {
   state.treatments = (payload.treatments || []).map(mapApiTreatment);
   state.odontogram = (payload.odontogram || []).map(mapApiOdontogram);
   state.odontogramSnapshots = (payload.odontogramSnapshots || []).map(mapApiOdontogramSnapshot);
+  state.proformas = (payload.proformas || []).map(mapApiProforma);
   state.payments = (payload.payments || []).map(mapApiPayment);
   state.electronicReceipts = (payload.electronicReceipts || []).map(mapApiElectronicReceipt);
   refreshSunatStatus();
@@ -680,6 +746,9 @@ function applyApiBootstrap(payload) {
     } else {
       state = normalizeState(state);
     }
+    /* La lista de precios del consultorio: lo que se escribio en la ventana de
+       Precios. Viaja como texto JSON, igual que los servicios. */
+    state.listaDePrecios = parseListaDePrecios(payload.config.listaDePrecios, state.listaDePrecios || []);
   }
   state = normalizeState(state);
   rememberApiUser(payload.user || apiUser);
@@ -979,11 +1048,24 @@ async function savePatientApi(patient) {
     mainTreatment: patient.mainTreatment,
     status: patient.status || "NUEVO",
     notes: patient.notes,
-    hideFromReceptionNew: Boolean(patient.hideFromReceptionNew)
+    hideFromReceptionNew: Boolean(patient.hideFromReceptionNew),
+    presupuesto: patient.presupuesto || null
   };
   const result = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify(payload) });
   if (result.id) patient.id = result.id;
 }
+
+async function saveProformaApi(proforma) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/proformas", { method: "POST", body: JSON.stringify(proforma) });
+}
+
+
+async function deleteProformaApi(id, patientId) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/proformas", { method: "POST", body: JSON.stringify({ id, patientId, borrar: true }) });
+}
+
 
 async function refreshPatientsApi() {
   if (!API_ENABLED || !apiToken) return;
@@ -1186,6 +1268,8 @@ function blankStateFromCurrent() {
     clinicalHistory: [],
     odontogram: [],
     odontogramSnapshots: [],
+    proformas: [],
+    listaDePrecios: [],
     cashSessions: [],
     dailyClosures: [],
     expenses: [],
@@ -2581,18 +2665,25 @@ function citaParaLaDeuda(patientId, date) {
 /* Aviso, nada mas: si el paciente elegido ya tiene una cuenta por cobrar ese
    dia, se le recuerda a quien escribe la nota. La deuda ya lleva el monto; si
    en la nota se vuelve a poner, el paciente quedaria debiendo dos veces. */
+/* El aviso sale solo cuando el cobro doble esta por ocurrir: el paciente ya
+   tiene una cuenta por cobrar de ese mismo dia y ademas se escribio un cobro en
+   la nota. Antes aparecia apenas se elegia al paciente y estorbaba todo el
+   rato. La nota que se esta corrigiendo no se avisa a si misma. */
 function avisoDeDeudaDelDia() {
   const form = $("#historyForm");
   const aviso = $("#historyDebtNotice");
   if (!form || !aviso) return;
   const patientId = form.elements.namedItem("patientId")?.value || "";
   const date = form.elements.namedItem("date")?.value || "";
+  const cobro = Number(form.elements.namedItem("agreedPrice")?.value || 0);
+  const editando = form.elements.namedItem("id")?.value || "";
   const deudas = state.clinicalHistory.filter((entry) =>
-    entry.patientId === patientId && entry.date === date && esSoloDeuda(entry));
+    entry.patientId === patientId && entry.date === date && entry.id !== editando && esSoloDeuda(entry));
   const total = deudas.reduce((suma, entry) => suma + Number(entry.agreedPrice || 0), 0);
-  aviso.hidden = !deudas.length;
-  aviso.textContent = deudas.length
-    ? `Este paciente ya tiene una cuenta por cobrar de ${money(total)} registrada este día. Si no pagó, deja «Cobro de hoy» en S/ 0: la deuda ya lleva el monto.`
+  const choca = Boolean(deudas.length) && cobro > 0;
+  aviso.hidden = !choca;
+  aviso.textContent = choca
+    ? `Ojo: este paciente ya tiene una cuenta por cobrar de ${money(total)} de hoy. Si este cobro es el mismo, deja «Cobro de hoy» en S/ 0: la deuda ya lleva el monto.`
     : "";
 }
 
@@ -3806,6 +3897,43 @@ let lienzoDeLaHoja = null;
    lectura fuera de la vista, igual que hace su propia hoja de impresion. Asi
    no se toca odontograma.js, que esta copiado a mano en los dos sistemas. Se
    usa la ultima copia guardada; si no hay ninguna, el odontograma actual. */
+/* El dibujo de una ficha cualquiera, no solo la del paciente: el presupuesto
+   lo necesita para poner la boca al lado de los precios. Devuelve el html del
+   arco, los hallazgos y las especificaciones, igual que la hoja. */
+function dibujoDelOdontograma(ficha) {
+  if (typeof Odontograma === "undefined" || !ficha) return null;
+  const compacta = fichaCompacta(ficha);
+  if (!Object.keys(compacta.dientes).length && !compacta.spans.length && !compacta.esp && !compacta.nino) return null;
+  prepararVistaDeLaHoja();
+  vistaDeLaHoja.cargar(ficha);
+  const arco = lienzoDeLaHoja.querySelector(".odo-arco");
+  return {
+    html: arco ? arco.innerHTML : "",
+    hallazgos: (Odontograma.PIEZAS || [])
+      .map((pieza) => ({ pieza, texto: vistaDeLaHoja.resumenPieza(pieza) }))
+      .filter((item) => item.texto),
+    especificaciones: ficha.esp || ""
+  };
+}
+
+
+/* La copia de solo lectura fuera de la vista donde se dibuja: una sola para
+   todo el sistema, que se vuelve a cargar con cada ficha. */
+function prepararVistaDeLaHoja() {
+  if (vistaDeLaHoja) return;
+  const caja = document.createElement("div");
+  caja.className = "hc-odontograma-oculto";
+  caja.setAttribute("aria-hidden", "true");
+  const cabecera = document.createElement("div");
+  lienzoDeLaHoja = document.createElement("div");
+  caja.append(cabecera, lienzoDeLaHoja);
+  document.body.appendChild(caja);
+  vistaDeLaHoja = Odontograma.crear({ barra: null, cabecera, lienzo: lienzoDeLaHoja, rutaImagenes: "assets/dientes/" });
+  vistaDeLaHoja.setPacientes([], "");
+  vistaDeLaHoja.setSoloLectura(true);
+}
+
+
 function odontogramaParaLaHoja(patientId) {
   if (typeof Odontograma === "undefined" || !patientId) return null;
   const copia = copiasDelOdontograma(patientId)[0] || null;
@@ -3993,6 +4121,7 @@ function renderClinicalHistory() {
   const patientId = $("#historyPatientFilter").value || state.patients[0]?.id || "";
   caja.innerHTML = hojaDeLaHistoria(patientId, { pantalla: true });
   ajustarGraficos(caja);
+  renderPlanDeTratamiento();
 }
 
 /* El numero de historia se da la primera vez que se imprime: no todos los
@@ -4248,6 +4377,673 @@ function piezaVacia(diente) {
     && !String(diente?.nota || "").trim();
 }
 
+/* ==================== PLAN DE TRATAMIENTO ====================
+   El presupuesto que sale del odontograma, la ventana de precios donde el
+   consultorio escribe lo que cobra, y las proformas que se le entregan al
+   paciente. Viene del sistema dental de EmpresaFacil, adaptado a esta base:
+   aqui el presupuesto del paciente y la lista de precios viven en el servidor.
+   ============================================================ */
+
+let planSubTab = "plan";
+let serviciosBorrador = null;
+
+/* Arma la proforma de hoy con lo que el presupuesto tiene en pantalla: sus
+   lineas, sus precios y su descuento, mas quien la da. Se congela aqui para que
+   no la mueva nada de lo que cambie despues. */
+function proformaDelPresupuesto(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) return null;
+  const { guardado, lineas: todas } = lineasDelPresupuesto(patientId);
+  const lineas = todas
+    .filter((linea) => !linea.quitada)
+    .map((linea) => ({
+      pieza: linea.pieza,
+      detalle: linea.detalle,
+      servicio: linea.servicio,
+      cantidad: Math.max(1, Number(linea.cantidad || 1)),
+      precio: Number(linea.precio || 0)
+    }));
+  if (!lineas.length) return null;
+  const doctor = patient.doctor || "";
+  return {
+    id: uid("prof"),
+    patientId,
+    patientName: patient.name,
+    date: todayISO(),
+    numero: Math.max(0, ...(state.proformas || []).map((item) => Number(item.numero || 0))) + 1,
+    lineas,
+    descuento: Math.min(100, Math.max(0, guardado.descuento)),
+    doctor,
+    cop: ""
+  };
+}
+
+
+/* Una proforma es el presupuesto congelado del dia en que se dio: el paciente
+   se la lleva y el consultorio sabe que precio le dijo. Por eso guarda sus
+   lineas y sus precios, y no se recalcula nunca mas aunque cambien la lista de
+   servicios o el odontograma. Si otro dia vuelve, la siguiente proforma sale
+   sola con lo que quede pendiente: al hacer el trabajo, el odontograma pasa de
+   rojo a azul y esa linea ya no aparece. */
+function proformasDelPaciente(patientId) {
+  return (state.proformas || [])
+    .filter((item) => item.patientId === patientId)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || String(b.id).localeCompare(String(a.id)));
+}
+
+
+const numeroDeProforma = (numero) => `P-${String(numero || 0).padStart(4, "0")}`;
+
+
+/* Lo que suman las lineas de una proforma. Las dadas antes de que existiera la
+   cantidad no la traen: valen por una, que es lo que decian cuando se
+   imprimieron. */
+const sumaDeLaProforma = (proforma) => (proforma?.lineas || [])
+  .reduce((total, linea) => total + Number(linea.precio || 0) * Math.max(1, Number(linea.cantidad || 1)), 0);
+
+
+/* La hoja que se imprime y se lleva el paciente: el logo del consultorio, sus
+   datos, lo que se le va a hacer con su precio, el total y hasta cuando vale.
+   La misma en pantalla y en papel. */
+function hojaDeLaProforma(proforma) {
+  const patient = patientById(proforma.patientId);
+  const config = state.config || {};
+  const subtotal = sumaDeLaProforma(proforma);
+  const rebaja = Math.round(subtotal * Number(proforma.descuento || 0)) / 100;
+  return `<article class="hc-hoja proforma-hoja">
+    <header class="hc-cabecera">
+      <div class="hc-clinica">
+        ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+        <div>
+          <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+          <p>${escapeHtml(config.issuerAddress || "")}${config.phone ? ` · ${escapeHtml(config.phone)}` : ""}</p>
+        </div>
+      </div>
+      <div class="hc-numero">
+        <strong>Proforma ${escapeHtml(numeroDeProforma(proforma.numero))}</strong>
+        <p>${formatDate(proforma.date)}</p>
+      </div>
+    </header>
+    <h3 class="proforma-titulo">Presupuesto de tratamiento</h3>
+    <p class="proforma-paciente"><span>Paciente</span> <strong>${escapeHtml(patient?.name || proforma.patientName || "")}</strong>${patient?.dni ? ` · DNI ${escapeHtml(patient.dni)}` : ""}</p>
+    <div class="table-wrap"><table class="hc-tabla">
+      <thead><tr><th>Pieza</th><th>Tratamiento</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Total</th></tr></thead>
+      <tbody>${(proforma.lineas || []).map((linea) => {
+        const cantidad = Math.max(1, Number(linea.cantidad || 1));
+        return `<tr>
+        <td><strong>${escapeHtml(linea.pieza || "")}</strong></td>
+        <td>${escapeHtml(linea.detalle || "")}</td>
+        <td class="num">${cantidad}</td>
+        <td class="num">${money(linea.precio || 0)}</td>
+        <td class="num">${money(Number(linea.precio || 0) * cantidad)}</td>
+      </tr>`;
+      }).join("")}</tbody>
+      <tfoot>
+        <tr><td colspan="4">Suma de los tratamientos</td><td class="num">${money(subtotal)}</td></tr>
+        ${Number(proforma.descuento || 0) > 0
+          ? `<tr><td colspan="4">Descuento ${escapeHtml(String(proforma.descuento))} %</td><td class="num">− ${money(rebaja)}</td></tr>`
+          : ""}
+        <tr class="proforma-total"><td colspan="4"><strong>Total</strong></td><td class="num"><strong>${money(subtotal - rebaja)}</strong></td></tr>
+      </tfoot>
+    </table></div>
+    <p class="proforma-nota">Este presupuesto cubre los tratamientos detallados arriba. Los precios se mantienen 30 días desde la fecha de esta proforma. Si durante el tratamiento aparece algo que hoy no se ve, se conversa antes de hacerlo.</p>
+    <footer class="hc-firma">
+      <div>${escapeHtml(proforma.doctor || "")}<br>Cirujano dentista${proforma.cop ? ` · COP N.° ${escapeHtml(proforma.cop)}` : ""}</div>
+      <div>Firma del paciente</div>
+    </footer>
+  </article>`;
+}
+
+
+/* Aceptar la proforma es abrir el tratamiento: desde ese momento el paciente
+   debe ese total y lo va abonando, y cada trabajo que se le hace se descuenta
+   de lo abonado. Es la misma mecanica que ya lleva la ortodoncia, asi que Pagos
+   y caja lo cobra sin aprender nada nuevo. */
+async function aceptarProforma(proformaId) {
+  const proforma = (state.proformas || []).find((item) => item.id === proformaId);
+  if (!proforma || proforma.aceptadaEl || !canManageClinical()) return;
+  const patient = patientById(proforma.patientId);
+  if (!patient) return;
+  const suma = sumaDeLaProforma(proforma);
+  const total = suma - Math.round(suma * Number(proforma.descuento || 0)) / 100;
+  if (!confirm(`${patient.name} acepta la proforma ${numeroDeProforma(proforma.numero)} por ${money(total)}.\n\nSe abre su tratamiento con ese monto: desde ahora se le cobra a cuenta en Pagos y caja y cada trabajo se descuenta de lo abonado. ¿Continuar?`)) return;
+  const tratamiento = {
+    id: uid("h"),
+    patientId: proforma.patientId,
+    date: todayISO(),
+    attendedBy: proforma.doctor || patient.doctor || "",
+    attended: true,
+    reason: `Plan de tratamiento ${numeroDeProforma(proforma.numero)}`,
+    procedure: (proforma.lineas || []).map((linea) => {
+      const cantidad = Math.max(1, Number(linea.cantidad || 1));
+      return `${linea.pieza ? `${linea.pieza} ` : ""}${linea.detalle}${cantidad > 1 ? ` x${cantidad}` : ""}`.trim();
+    }).join(" · "),
+    plan: `Plan ${numeroDeProforma(proforma.numero)}`,
+    planBudget: total,
+    agreedPrice: 0,
+    creditPending: false,
+    creditAmount: 0,
+    creditDueDate: "",
+    creditNote: "",
+    soloDeuda: false
+  };
+  upsert(state.clinicalHistory, tratamiento);
+  proforma.aceptadaEl = todayISO();
+  proforma.tratamientoId = tratamiento.id;
+  try {
+    await saveClinicalHistoryApi(tratamiento);
+    await saveProformaApi(proforma);
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  render();
+}
+
+
+function imprimirProforma(proformaId) {
+  const proforma = (state.proformas || []).find((item) => item.id === proformaId);
+  if (!proforma) return;
+  const patient = patientById(proforma.patientId);
+  const ventana = window.open("", "_blank", "width=900,height=1100");
+  if (!ventana) {
+    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    return;
+  }
+  const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
+    .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
+    .join("");
+  ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+    <base href="${escapeHtml(location.href)}">
+    <title>Proforma ${escapeHtml(numeroDeProforma(proforma.numero))} ${escapeHtml(patient?.name || "")}</title>
+    ${hojasDeEstilo}
+    <style>
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff !important; }
+      body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .hc-hoja { border: 0 !important; border-radius: 0 !important; padding: 16mm 0 !important; max-width: 178mm; margin: 0 auto; }
+      tr, .hc-firma { break-inside: avoid; }
+      .table-wrap { overflow: visible !important; }
+    </style></head><body>
+    ${hojaDeLaProforma(proforma)}
+    <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });<\/script>
+    </body></html>`);
+  ventana.document.close();
+}
+
+
+/* Lo que el odontograma dice que falta por hacer. La norma ya lo deja marcado:
+   lo rojo esta pendiente y lo azul ya se hizo, asi que no hay que inventar
+   nada, solo leer la ficha. Una caries en una cara es una curacion simple; en
+   dos o mas, compuesta, que es como se cobra. */
+const TRABAJO_DEL_ODONTOGRAMA = {
+  curacion_simple: { detalle: "Curación simple", servicio: "Curaciones Simples" },
+  curacion_compuesta: { detalle: "Curación compuesta", servicio: "Curaciones Compuestas" },
+  restauracion_definitiva: { detalle: "Cambiar restauración temporal", servicio: "Restauraciones Estéticas" },
+  extraccion: { detalle: "Extracción", servicio: "Extracción Simple" },
+  extraccion_molar: { detalle: "Extracción de tercer molar", servicio: "Extracción Tercer Molar" },
+  resto_radicular: { detalle: "Extracción de resto radicular", servicio: "Extracción Simple" },
+  corona_definitiva: { detalle: "Cambiar corona temporal por definitiva", servicio: "Corona Porcelana" },
+  fractura: { detalle: "Fractura, el tratamiento lo decide el doctor", servicio: "" }
+};
+
+const TERCEROS_MOLARES = ["18", "28", "38", "48"];
+
+function sinTildes(texto) {
+  return String(texto || "").trim().toLocaleLowerCase("es").normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+function precioDelServicio(nombre) {
+  if (!nombre) return null;
+  const servicio = (state.services || [])
+    .find((item) => item.active !== false && sinTildes(item.name) === sinTildes(nombre));
+  return servicio ? Number(servicio.price || 0) : null;
+}
+
+/* Lee la ficha viva del paciente y devuelve una linea por cada trabajo
+   pendiente, con su precio de la lista de servicios. Es una propuesta: el
+   doctor cambia el precio o quita la linea, porque la boca manda sobre el
+   cuadro. */
+function presupuestoDelOdontograma(patientId) {
+  if (!Odontograma || !patientId) return [];
+  const ficha = odontogramFichaFor(patientId, "inicial");
+  const lineas = [];
+  const agregar = (pieza, clave, nota = "") => {
+    const trabajo = TRABAJO_DEL_ODONTOGRAMA[clave];
+    if (!trabajo) return;
+    lineas.push({
+      clave: `${pieza}:${clave}`,
+      pieza,
+      detalle: trabajo.detalle + (nota ? ` · ${nota}` : ""),
+      servicio: trabajo.servicio,
+      precioLista: precioDelServicio(trabajo.servicio)
+    });
+  };
+  (Odontograma.PIEZAS || []).forEach((pieza) => {
+    const diente = ficha.dientes[pieza];
+    if (!diente) return;
+    const caras = Object.keys(diente.sup || {});
+    const conCaries = caras.filter((cara) => diente.sup[cara] === "caries");
+    if (conCaries.length === 1) agregar(pieza, "curacion_simple", "1 cara");
+    if (conCaries.length > 1) agregar(pieza, "curacion_compuesta", `${conCaries.length} caras`);
+    if (caras.some((cara) => diente.sup[cara] === "rest_temp")) agregar(pieza, "restauracion_definitiva");
+    const de = diente.pieza || {};
+    if ("por_extraer" in de) {
+      agregar(pieza, TERCEROS_MOLARES.includes(pieza) ? "extraccion_molar" : "extraccion");
+    }
+    if ("rr" in de) agregar(pieza, "resto_radicular");
+    if ("corona_tmp" in de) agregar(pieza, "corona_definitiva");
+    if ("fractura" in de) agregar(pieza, "fractura");
+  });
+  return lineas;
+}
+
+
+/* El presupuesto guardado del paciente: el precio que el doctor dejo en cada
+   linea y el descuento del total. Lo demas se vuelve a leer del odontograma
+   cada vez, para que cambiar la boca cambie el presupuesto. */
+function presupuestoGuardado(patient) {
+  const guardado = patient?.presupuesto || {};
+  return {
+    descuento: Number(guardado.descuento || 0),
+    precios: guardado.precios && typeof guardado.precios === "object" ? guardado.precios : {},
+    quitadas: Array.isArray(guardado.quitadas) ? guardado.quitadas : [],
+    /* Lo que no sale del odontograma: brackets, limpieza, endodoncia, una PPR.
+       La boca no los marca en rojo pero se cobran igual, asi que se eligen de
+       la lista de tratamientos y se guardan aqui, con su cantidad. */
+    sueltos: Array.isArray(guardado.sueltos) ? guardado.sueltos : []
+  };
+}
+
+
+/* Las lineas del presupuesto: las que el odontograma propone y las que se
+   eligieron a mano, todas con su cantidad y su precio ya resuelto. Un solo
+   sitio arma la lista, para que la pantalla, la proforma y el papel digan lo
+   mismo. */
+function lineasDelPresupuesto(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) return { guardado: presupuestoGuardado(null), lineas: [] };
+  const guardado = presupuestoGuardado(patient);
+  const delOdontograma = presupuestoDelOdontograma(patientId).map((linea) => {
+    const propio = guardado.precios[linea.clave];
+    return {
+      ...linea,
+      cantidad: 1,
+      aMano: false,
+      precio: Number(propio === undefined || propio === "" ? (linea.precioLista || 0) : propio),
+      quitada: guardado.quitadas.includes(linea.clave)
+    };
+  });
+  const aMano = guardado.sueltos.map((suelto) => {
+    const propio = guardado.precios[suelto.clave];
+    const deLista = precioDelServicio(suelto.servicio);
+    return {
+      clave: suelto.clave,
+      pieza: String(suelto.pieza || "").trim(),
+      detalle: suelto.servicio || suelto.detalle || "Tratamiento",
+      servicio: suelto.servicio || "",
+      cantidad: Math.max(1, Number(suelto.cantidad || 1)),
+      aMano: true,
+      // el precio de la lista puede haber cambiado: manda el que se escribio
+      precio: Number(propio === undefined || propio === "" ? (suelto.precio ?? deLista ?? 0) : propio),
+      quitada: guardado.quitadas.includes(suelto.clave)
+    };
+  });
+  return { guardado, lineas: [...delOdontograma, ...aMano] };
+}
+
+
+/* Lo que suma una linea: en el papel del consultorio la cantidad va en su
+   columna y el total es la multiplicacion, igual que en su talonario. */
+const totalDeLaLinea = (linea) => Number(linea.precio || 0) * Math.max(1, Number(linea.cantidad || 1));
+
+
+/* El plan de tratamiento del paciente: lo que la doctora escribio en su
+   historia y, debajo, el dinero de cada tratamiento abierto -presupuesto, lo
+   pagado, lo ya usado en atenciones y lo que queda-. Vivia en la hoja y se
+   quedo sin sitio cuando la hoja paso a ser el formato del Colegio. */
+/* Las filas de la ventana de precios son de tres clases:
+   - "plantilla": un tratamiento ya guardado, con su precio. Se le escribe la
+     pieza y se marca como cualquier otra; el nombre es ademas un boton, y cada
+     clic baja otra linea igual, para el mismo tratamiento en otra pieza.
+   - "trabajo": esas lineas de mas. Viven solo mientras la ventana esta abierta.
+   - "nueva": la fila en blanco donde se escribe un tratamiento que no estaba;
+     al salir del campo se vuelve plantilla y se guarda.
+   Al cerrar la ventana el borrador se tira, asi que al volver a abrirla estan
+   las plantillas y nada mas: las lineas de trabajo no se acumulan. */
+function borradorDeServicios() {
+  if (!Array.isArray(serviciosBorrador)) {
+    serviciosBorrador = [
+      ...(state.listaDePrecios || []).map((linea) => ({ tipo: "plantilla", name: linea.name, price: linea.price, pz: "" })),
+      { tipo: "nueva", name: "", price: "", pz: "" }
+    ];
+  }
+  return serviciosBorrador;
+}
+
+
+function olvidarBorradorDePrecios() {
+  serviciosBorrador = null;
+}
+
+
+/* El precio se escribe y se lee como en el papel: S/200.00. Se guarda el
+   numero, y al teclear se admite con o sin el S/ y los decimales. */
+const precioEscrito = (valor) => (valor === "" || valor === undefined || valor === null ? "" : `S/${Number(valor || 0).toFixed(2)}`);
+const precioLeido = (texto) => {
+  const limpio = String(texto ?? "").replace(/[^\d.]/g, "");
+  return limpio === "" ? "" : Math.max(0, Number(limpio) || 0);
+};
+
+
+function leerTablaDeServicios() {
+  const cuerpo = $("#servicesTable");
+  const lista = borradorDeServicios();
+  if (!cuerpo) return lista;
+  serviciosBorrador = [...cuerpo.querySelectorAll("tr[data-servicio]")].map((fila) => {
+    const base = lista[Number(fila.dataset.servicio)] || {};
+    return {
+      tipo: fila.dataset.tipo || base.tipo || "nueva",
+      name: String(fila.querySelector('[data-campo="name"]')?.value ?? base.name ?? "").trim(),
+      price: fila.querySelector('[data-campo="price"]') ? precioLeido(fila.querySelector('[data-campo="price"]').value) : (base.price ?? ""),
+      pz: String(fila.querySelector('[data-campo="pz"]')?.value ?? base.pz ?? "").trim()
+    };
+  });
+  return serviciosBorrador;
+}
+
+
+/* Solo las plantillas se guardan: son la lista del consultorio. Las lineas de
+   trabajo son de este paciente y de hoy. */
+function guardarListaDePrecios() {
+  state.listaDePrecios = borradorDeServicios()
+    .filter((linea) => linea.tipo === "plantilla" && linea.name)
+    .map((linea) => ({ name: linea.name, price: linea.price === "" ? 0 : Number(linea.price || 0) }));
+  /* La lista es del consultorio, no de este navegador: se guarda en el
+     servidor para que la vean todos los equipos. Solo el administrador puede
+     tocarla, asi que a los demas se les queda en pantalla sin subirla. */
+  if (!API_ENABLED || !isAdmin()) return;
+  saveConfigApi({ listaDePrecios: state.listaDePrecios }).catch((error) => alert(error.message));
+}
+
+
+function hojaDePrecios(patientId) {
+  const lineas = borradorDeServicios();
+  /* Un mismo tratamiento puede estar en varias piezas, asi que la marca se
+     busca por tratamiento y pieza juntos: si no, marcar el sellante de la 1.5
+     dejaba marcado tambien el de la 2.6. */
+  const puestos = new Set(presupuestoGuardado(patientById(patientId)).sueltos
+    .map((suelto) => `${suelto.servicio}|${String(suelto.pieza || "").trim()}`));
+  const fila = (linea, i) => {
+    const trabajo = linea.tipo === "trabajo";
+    const plantilla = linea.tipo === "plantilla";
+    return `<tr data-servicio="${i}" data-tipo="${linea.tipo}">
+      <td>${plantilla
+        ? `<button class="precio-opcion" type="button" data-usar-precio="${i}" title="Pulsa para agregar una línea y escribir la pieza"><span>${escapeHtml(linea.name)}</span><span class="precio-opcion-mas" aria-hidden="true">+</span></button>`
+        : trabajo
+          ? `<span class="precio-trabajo">${escapeHtml(linea.name)}</span>`
+          : `<input class="servicio-campo" data-campo="name" value="${escapeHtml(linea.name || "")}" />`}</td>
+      <td class="num">${linea.tipo === "nueva"
+        ? ""
+        : `<input class="servicio-campo servicio-num servicio-pieza" data-campo="pz" inputmode="decimal" value="${escapeHtml(String(linea.pz || ""))}" aria-label="Pieza" />`}</td>
+      <td class="num"><input class="servicio-campo servicio-num" data-campo="price" value="${precioEscrito(linea.price)}" aria-label="Precio" /></td>
+      <td class="num">${linea.tipo === "nueva"
+        ? ""
+        : `<label class="check"><input type="checkbox" data-elegir-servicio="${i}" data-paciente="${patientId}"${linea.name && puestos.has(`${linea.name}|${String(linea.pz || "").trim()}`) ? " checked" : ""} aria-label="Poner en el presupuesto" /></label>`}</td>
+      <td class="num">${linea.tipo === "nueva" ? "" : `<button class="plan-quitar" type="button" title="Quitar la línea" data-quitar-precio="${i}">×</button>`}</td>
+    </tr>`;
+  };
+  return `<aside class="plan-precios-ventana">
+      <table class="hc-tabla servicios-tabla">
+        <thead><tr><th>Tratamientos</th><th class="num">Pz</th><th class="num">Precio</th><th></th><th></th></tr></thead>
+        <tbody id="servicesTable">${lineas.map(fila).join("")}</tbody>
+      </table>
+      <p class="plan-precios-pie">
+        <button class="small-btn" type="button" id="addServiceBtn">Añadir</button>
+        <button class="small-btn" type="button" id="exitPricesBtn">Salir</button>
+      </p>
+    </aside>`;
+}
+
+
+/* El boton de los precios se coloca debajo de la pestaña "Plan de tratamiento",
+   empezando justo donde esa pestaña termina. No se puede dejar en el CSS: el
+   boton vive en otro contenedor que las pestañas, y el ancho de estas cambia
+   con el texto. Si no cabe, se queda pegado al borde derecho. */
+function alinearBotonDePrecios(caja) {
+  const fila = caja.querySelector(".plan-precios-boton");
+  if (!fila) return;
+  const pestanas = $("#historySheetTabs");
+  const ultima = pestanas?.querySelector("[data-hoja]:last-of-type");
+  const boton = fila.querySelector("button");
+  if (!ultima || !boton) return;
+  const desde = ultima.getBoundingClientRect().right - caja.getBoundingClientRect().left;
+  const tope = fila.clientWidth - boton.getBoundingClientRect().width;
+  fila.style.paddingLeft = `${Math.max(0, Math.min(desde, tope))}px`;
+}
+
+
+function hojaDelPlan(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) return `<p class="muted">Elige un paciente para ver su plan.</p>`;
+  /* Un solo boton, debajo de la pestaña del plan y pegado a la derecha, como
+     lo pidio el usuario: al pulsarlo se ve la lista de precios del consultorio
+     y al volver a pulsarlo, el presupuesto del paciente. Lleva la misma forma
+     que las pestañas de arriba, y se pinta del color del consultorio cuando
+     los precios estan a la vista. */
+  const subHoja = planSubTab === "precios" ? "precios" : "plan";
+  const botonDePrecios = `<div class="plan-precios-boton">
+      <button class="hc-pestana${subHoja === "precios" ? " activa" : ""}" type="button" data-plan-hoja="${subHoja === "precios" ? "plan" : "precios"}">Precios</button>
+      ${subHoja === "precios" ? hojaDePrecios(patientId) : ""}
+    </div>`;
+  const config = state.config || {};
+  const notas = state.clinicalHistory
+    .filter((entry) => entry.patientId === patientId)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const escrito = notas.find((entry) => String(entry.workPlan || "").trim());
+  const tratamientos = tratamientosDelPaciente(patientId);
+
+  const plan = escrito
+    ? `<section class="hc-seccion">
+        <h4>Plan escrito en la historia</h4>
+        <p class="hc-observacion">${escapeHtml(escrito.workPlan)}</p>
+        <p class="muted">Escrito el ${formatDate(escrito.date)}${escrito.attendedBy ? ` por ${escapeHtml(escrito.attendedBy)}` : ""}. Se cambia en la pestaña Historia clínica.</p>
+      </section>`
+    : `<section class="hc-seccion">
+        <h4>Plan escrito en la historia</h4>
+        <p class="muted">Todavía no hay un plan escrito. Se escribe en la pestaña Historia clínica, en «Plan de tratamiento».</p>
+      </section>`;
+
+  const dinero = `<section class="hc-seccion">
+      <h4>Tratamientos y su dinero</h4>
+      ${tratamientos.length ? tratamientos.map((t) => {
+        const pagadoPct = t.presupuesto ? Math.min(100, Math.round((t.pagado / t.presupuesto) * 100)) : 0;
+        const usadoPct = t.presupuesto ? Math.min(100, Math.round((t.usado / t.presupuesto) * 100)) : 0;
+        return `<div class="hc-tratamiento">
+          <div class="hc-tratamiento-cabeza">
+            <strong>${escapeHtml(t.entry.plan)} <small>desde el ${formatDate(t.entry.date)}</small></strong>
+            <span class="status ${t.terminado ? "" : "warn"}">${t.terminado ? "TERMINADO" : "EN CURSO"}</span>
+          </div>
+          <div class="hc-tratamiento-montos">
+            <span>Presupuesto <strong>${money(t.presupuesto)}</strong></span>
+            <span>Pagado <strong>${money(t.pagado)}</strong></span>
+            <span>Usado <strong>${money(t.usado)}</strong></span>
+            <span>Disponible <strong>${money(t.disponible)}</strong></span>
+            ${t.porPagar > 0 ? `<span>Por pagar <strong class="hc-falta">${money(t.porPagar)}</strong></span>` : ""}
+          </div>
+          <div class="hc-barra" role="img" aria-label="Pagado ${pagadoPct}%, usado ${usadoPct}%"><i class="hc-barra-pagado" style="width:${pagadoPct}%"></i><i class="hc-barra-usado" style="width:${usadoPct}%"></i></div>
+        </div>`;
+      }).join("") : `<p class="muted">Sin tratamiento abierto. Se abre escribiendo el tratamiento y su costo en «Plan y presupuesto», dentro de la nota clínica.</p>`}
+    </section>`;
+
+  /* El presupuesto sale del odontograma: lo que esta marcado en rojo es lo que
+     falta por hacer, y cada cosa tiene su precio en la lista de servicios. Es
+     una propuesta, no una factura: el doctor cambia el precio de la linea o la
+     quita, y el descuento se aplica al total. */
+  const { guardado, lineas } = lineasDelPresupuesto(patientId);
+  const vivas = lineas.filter((linea) => !linea.quitada);
+  const subtotal = vivas.reduce((suma, linea) => suma + totalDeLaLinea(linea), 0);
+  const descuento = Math.min(100, Math.max(0, guardado.descuento));
+  const rebaja = Math.round(subtotal * descuento) / 100;
+  const puedeEditar = canManageClinical();
+
+  /* El odontograma al lado del presupuesto: se marca una caries a la derecha y
+     se ve aparecer su linea a la izquierda, sin cambiar de pantalla. */
+  const dibujo = Odontograma ? dibujoDelOdontograma(odontogramFichaFor(patientId, "inicial")) : null;
+
+  /* El cuadro de la izquierda es ya la proforma: el logo y el nombre del
+     consultorio arriba, para quien esta al otro lado de la mesa, el descuento,
+     la lista de piezas con su monto, el total y el boton de guardarla. Se ve lo
+     mismo en pantalla que en el papel que se lleva el paciente. */
+  const cuadroDelTotal = `<div class="plan-caja">
+      <div class="plan-membrete">
+        ${config.logoDataUrl ? `<img class="plan-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+        <div>
+          <strong>${escapeHtml(config.clinicName || "Consultorio dental")}</strong>
+          <span>Presupuesto para ${escapeHtml(patient.name)}</span>
+        </div>
+      </div>
+      <label class="plan-descuento">Descuento comercial
+        ${puedeEditar
+          ? `<span><input class="presupuesto-descuento" type="number" min="0" max="100" step="1" value="${descuento}" data-descuento="1" data-paciente="${patientId}" /> %</span>`
+          : `<strong>${descuento} %</strong>`}
+      </label>
+      <div class="table-wrap"><table class="hc-tabla presupuesto-tabla">
+        <thead><tr><th>Pieza</th><th>Tratamiento</th><th class="num">Cant.</th><th class="num">P. unitario S/</th><th class="num">Total S/</th>${puedeEditar ? "<th></th>" : ""}</tr></thead>
+        <tbody>${lineas.map((linea) => `<tr class="${linea.quitada ? "presupuesto-fuera" : ""}">
+          <td><strong>${escapeHtml(linea.pieza || "—")}</strong></td>
+          <td>${escapeHtml(linea.detalle)}${linea.servicio && linea.servicio !== linea.detalle ? `<br><span class="muted">${escapeHtml(linea.servicio)}</span>` : ""}</td>
+          <td class="num">${linea.quitada
+            ? `<span class="muted">—</span>`
+            : Math.max(1, Number(linea.cantidad || 1))}</td>
+          <td class="num">${linea.quitada
+            ? `<span class="muted">—</span>`
+            : puedeEditar
+              ? `<input class="presupuesto-precio" type="number" min="0" step="1" value="${Number(linea.precio || 0)}" data-precio="${escapeHtml(linea.clave)}" data-paciente="${patientId}" />`
+              : money(linea.precio || 0)}</td>
+          <td class="num">${linea.quitada ? `<span class="muted">—</span>` : `<strong>${money(totalDeLaLinea(linea))}</strong>`}</td>
+          ${puedeEditar
+            ? `<td class="num"><button class="plan-quitar${linea.quitada ? " plan-volver" : ""}" type="button" title="${linea.quitada ? "Volver a ponerlo" : "Quitar del presupuesto"}" data-quitar-linea="${escapeHtml(linea.clave)}" data-paciente="${patientId}"${linea.aMano ? ` data-suelto="1"` : ""}>${linea.quitada ? "+" : "×"}</button></td>`
+            : ""}
+        </tr>`).join("")}</tbody>
+      </table></div>
+      ${rebaja > 0
+        ? `<p class="plan-caja-linea"><span>Suma de los trabajos</span><strong>${money(subtotal)}</strong></p>
+           <p class="plan-caja-linea"><span>Se le baja</span><strong>− ${money(rebaja)}</strong></p>`
+        : ""}
+      <p class="plan-caja-total"><span>Total</span><strong>${money(subtotal - rebaja)}</strong></p>
+      ${puedeEditar && vivas.length
+        ? `<button class="primary plan-guardar" type="button" data-guardar-proforma="${patientId}">Guardar como proforma</button>`
+        : ""}
+    </div>`;
+
+  /* El odontograma no marca todo lo que se cobra: unos brackets, una limpieza,
+     una endodoncia o una PPR no salen de la boca pintada de rojo. Se eligen de
+     la lista de tratamientos, con su cantidad, igual que en el talonario del
+     consultorio. */
+  const catalogo = (() => {
+    if (!puedeEditar) return "";
+    const activos = (state.services || []).filter((service) => service.active !== false);
+    if (!activos.length) {
+      return `<details class="plan-catalogo"><summary>Agregar tratamientos de la lista</summary>
+        <p class="muted">Todavía no hay tratamientos en la lista.</p>
+      </details>`;
+    }
+    const porCategoria = new Map();
+    activos.forEach((service) => {
+      const grupo = String(service.category || "").trim() || "General";
+      if (!porCategoria.has(grupo)) porCategoria.set(grupo, []);
+      porCategoria.get(grupo).push(service);
+    });
+    return `<details class="plan-catalogo">
+      <summary>Agregar tratamientos de la lista</summary>
+      <p class="muted">Marca lo que se le va a hacer y pon cuántas veces. El precio entra solo, y se puede retocar después línea por línea.</p>
+      ${[...porCategoria.entries()].map(([grupo, servicios]) => `<div class="plan-catalogo-grupo">
+        <h5>${escapeHtml(grupo)}</h5>
+        ${servicios.map((service, i) => {
+          const campo = `svc-${grupo.replace(/\W+/g, "")}-${i}`;
+          return `<div class="plan-catalogo-item">
+          <input type="checkbox" id="${campo}" data-servicio-elegido="${escapeHtml(service.name)}" />
+          <label for="${campo}">${escapeHtml(service.name)}</label>
+          <span class="plan-catalogo-precio">${money(service.price || 0)}</span>
+          <input class="plan-catalogo-cantidad" type="number" min="1" step="1" value="1" aria-label="Cantidad de ${escapeHtml(service.name)}" data-cantidad-de="${escapeHtml(service.name)}" />
+        </div>`;
+        }).join("")}
+      </div>`).join("")}
+      <button class="primary plan-guardar" type="button" data-agregar-tratamientos="${patientId}">Agregar al presupuesto</button>
+    </details>`;
+  })();
+
+  const presupuesto = `<section class="hc-seccion">
+      <h4>Presupuesto del paciente</h4>
+      ${lineas.length
+        ? `<div class="plan-columnas">
+          <div class="plan-izquierda">
+            ${cuadroDelTotal}
+            <p class="muted">Las líneas con número de pieza salen de lo que está marcado en rojo en el odontograma; las demás se eligieron de la lista. Si cambias un precio aquí, se guarda para este paciente.</p>
+            ${catalogo}
+          </div>
+          <div class="plan-derecha">
+            ${dibujo
+              ? `<div class="hc-grafico"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${dibujo.html}</div></div></div>`
+              : ""}
+            ${patientId ? `<p class="hc-editar-odontograma"><button class="small-btn" type="button" data-editar-odontograma="${patientId}">Editar odontograma</button></p>` : ""}
+          </div>
+        </div>`
+        : `<p class="muted">El odontograma de ${escapeHtml(patient.name)} no tiene nada marcado como pendiente. Marca en rojo lo que hay que hacer -caries, piezas por extraer- y el presupuesto se arma solo; lo que no sale de la boca -brackets, limpieza, una prótesis- se agrega aquí abajo.</p>
+          ${catalogo}`}
+    </section>`;
+
+  /* Las proformas ya dadas: cada una con su numero, su fecha y su total, y la
+     hoja entera plegada detras para verla tal como se la llevo el paciente. */
+  const dadas = proformasDelPaciente(patientId);
+  const proformas = `<section class="hc-seccion">
+      <h4>Proformas entregadas</h4>
+      ${dadas.length
+        ? dadas.map((item) => {
+          const suma = sumaDeLaProforma(item);
+          const baja = Math.round(suma * Number(item.descuento || 0)) / 100;
+          return `<div class="proforma-fila">
+            <div class="proforma-cabeza">
+              <strong>${escapeHtml(numeroDeProforma(item.numero))}</strong>
+              <span class="muted">${formatDate(item.date)} · ${(item.lineas || []).length} tratamiento${(item.lineas || []).length === 1 ? "" : "s"}</span>
+              <strong class="proforma-monto">${money(suma - baja)}</strong>
+              ${item.aceptadaEl
+                ? `<span class="status">Aceptada el ${formatDate(item.aceptadaEl)}</span>`
+                : puedeEditar ? `<button class="small-btn proforma-aceptar" type="button" data-aceptar-proforma="${item.id}">Aceptar</button>` : ""}
+              <button class="small-btn" type="button" data-imprimir-proforma="${item.id}">Imprimir</button>
+              ${puedeEditar && !item.aceptadaEl ? `<button class="small-btn" type="button" data-borrar-proforma="${item.id}">Borrar</button>` : ""}
+            </div>
+            <details class="proforma-ver"><summary>Ver la hoja</summary>${hojaDeLaProforma(item)}</details>
+          </div>`;
+        }).join("")
+        : `<p class="muted">Todavía no se le ha entregado ninguna proforma.</p>`}
+    </section>`;
+
+  return `${botonDePrecios}
+  <article class="hc-hoja">
+    <section class="hc-seccion">
+      <h4>Plan de tratamiento · ${escapeHtml(patient.name)}</h4>
+    </section>
+    ${plan}
+    ${presupuesto}
+    ${proformas}
+    ${dinero}
+  </article>`;
+}
+
+
+/* El plan vive en su propio panel, debajo de la historia del paciente. */
+function renderPlanDeTratamiento() {
+  const caja = $("#planTimeline");
+  if (!caja) return;
+  const patientId = $("#historyPatientFilter")?.value || state.patients[0]?.id || "";
+  caja.innerHTML = hojaDelPlan(patientId);
+  alinearBotonDePrecios(caja);
+  ajustarGraficos(caja);
+}
+
+
 /* Se guardan solo las piezas con algo escrito: una ficha entera son 32 dientes
    vacios que ocupan sitio y no dicen nada. normalizarFicha reconstruye el
    resto al abrirla. */
@@ -4260,7 +5056,11 @@ function fichaCompacta(ficha) {
     dientes,
     spans: Array.isArray(ficha?.spans) ? ficha.spans : [],
     arcada: ficha?.arcada || { up: null, down: null },
-    esp: ficha?.esp || ""
+    // si el paciente lleva piezas de leche, la copia guardada lo dice: asi la
+    // historia y el impreso salen con las cuatro filas, como se marco
+    nino: Boolean(ficha?.nino),
+    esp: ficha?.esp || "",
+    obs: ficha?.obs || ""
   };
 }
 
@@ -7756,6 +8556,8 @@ function bindEvents() {
   $('#historyForm input[name="planBudget"]')?.addEventListener("input", ajustarCobroDeHoy);
   $('#historyForm input[name="agreedPrice"]')?.addEventListener("input", (event) => {
     event.target.dataset.manual = event.target.value !== "" ? "1" : "";
+    // el aviso de la deuda del dia mira este campo: solo estorba si hay cobro
+    avisoDeDeudaDelDia();
   });
   $("#historyForm")?.addEventListener("reset", () => {
     const masDetalles = $("#historyForm .form-more");
@@ -7766,6 +8568,204 @@ function bindEvents() {
     if (avisoCobro) avisoCobro.hidden = true;
     const avisoDeuda = $("#historyDebtNotice");
     if (avisoDeuda) avisoDeuda.hidden = true;
+  });
+
+  /* ---------- Plan de tratamiento ---------- */
+  const guardarPresupuesto = async (paciente) => {
+    try {
+      await savePatientApi(paciente);
+    } catch (error) {
+      alert(error.message);
+    }
+    renderPlanDeTratamiento();
+  };
+
+  const presupuestoDeLaFicha = (paciente) => {
+    const guardado = paciente?.presupuesto || {};
+    return {
+      descuento: Number(guardado.descuento || 0),
+      precios: { ...(guardado.precios || {}) },
+      quitadas: Array.isArray(guardado.quitadas) ? [...guardado.quitadas] : [],
+      sueltos: Array.isArray(guardado.sueltos) ? guardado.sueltos.map((suelto) => ({ ...suelto })) : []
+    };
+  };
+
+  $("#planTimeline")?.addEventListener("change", async (event) => {
+    const precio = event.target.closest("[data-precio]");
+    const rebaja = event.target.closest("[data-descuento]");
+    if (precio || rebaja) {
+      const control = precio || rebaja;
+      const paciente = patientById(control.dataset.paciente);
+      if (!paciente || !canManageClinical()) return;
+      const presupuesto = presupuestoDeLaFicha(paciente);
+      if (precio) presupuesto.precios = { ...presupuesto.precios, [precio.dataset.precio]: Number(precio.value || 0) };
+      else presupuesto.descuento = Math.min(100, Math.max(0, Number(rebaja.value || 0)));
+      paciente.presupuesto = presupuesto;
+      await guardarPresupuesto(paciente);
+      return;
+    }
+    // el tratamiento y el precio se graban en cuanto se terminan de escribir
+    const campo = event.target.closest(".servicio-campo[data-campo='name'], .servicio-campo[data-campo='price']");
+    if (campo) {
+      const lineas = leerTablaDeServicios();
+      let cambio = false;
+      lineas.forEach((linea) => {
+        if (linea.tipo === "nueva" && linea.name) { linea.tipo = "plantilla"; cambio = true; }
+      });
+      if (cambio && !lineas.some((linea) => linea.tipo === "nueva")) {
+        lineas.push({ tipo: "nueva", name: "", price: "", pz: "" });
+      }
+      guardarListaDePrecios();
+      if (cambio) renderPlanDeTratamiento();
+      return;
+    }
+    const casilla = event.target.closest("[data-elegir-servicio]");
+    if (!casilla) return;
+    const paciente = patientById(casilla.dataset.paciente);
+    if (!paciente || !canManageClinical()) return;
+    const lineas = leerTablaDeServicios();
+    const linea = lineas[Number(casilla.dataset.elegirServicio)];
+    if (!linea?.name) return;
+    const presupuesto = presupuestoDeLaFicha(paciente);
+    // pz es la pieza a la que se le hace, no cuantas veces: va en su columna
+    const pieza = String(linea.pz || "").trim();
+    const esLaMisma = (suelto) => suelto.servicio === linea.name && String(suelto.pieza || "").trim() === pieza;
+    if (!casilla.checked) {
+      presupuesto.sueltos = presupuesto.sueltos.filter((suelto) => !esLaMisma(suelto));
+    } else {
+      const precioLinea = Number(linea.price || 0);
+      const yaEsta = presupuesto.sueltos.find(esLaMisma);
+      if (yaEsta) Object.assign(yaEsta, { pieza, precio: precioLinea });
+      else {
+        presupuesto.sueltos = [...presupuesto.sueltos, {
+          clave: uid("mano"), pieza, servicio: linea.name, detalle: linea.name, cantidad: 1, precio: precioLinea
+        }];
+      }
+    }
+    paciente.presupuesto = presupuesto;
+    await guardarPresupuesto(paciente);
+  });
+
+  $("#planTimeline")?.addEventListener("click", async (event) => {
+    const subPestana = event.target.closest("[data-plan-hoja]");
+    if (subPestana) {
+      planSubTab = subPestana.dataset.planHoja;
+      if (planSubTab !== "precios") olvidarBorradorDePrecios();
+      renderPlanDeTratamiento();
+      return;
+    }
+    const usar = event.target.closest("[data-usar-precio]");
+    if (usar) {
+      const lineas = leerTablaDeServicios();
+      const i = Number(usar.dataset.usarPrecio);
+      const plantilla = lineas[i];
+      if (!plantilla?.name) return;
+      lineas.splice(i + 1, 0, { tipo: "trabajo", name: plantilla.name, price: plantilla.price, pz: "" });
+      renderPlanDeTratamiento();
+      const nueva = $("#servicesTable")?.querySelectorAll("tr")[i + 1]?.querySelector("[data-campo='pz']");
+      if (nueva) nueva.focus();
+      return;
+    }
+    if (event.target.closest("#addServiceBtn")) {
+      leerTablaDeServicios().push({ tipo: "nueva", name: "", price: "", pz: "" });
+      renderPlanDeTratamiento();
+      const ultima = $("#servicesTable")?.querySelector("tr:last-child [data-campo='name']");
+      if (ultima) ultima.focus();
+      return;
+    }
+    if (event.target.closest("#exitPricesBtn")) {
+      leerTablaDeServicios();
+      guardarListaDePrecios();
+      olvidarBorradorDePrecios();
+      planSubTab = "plan";
+      renderPlanDeTratamiento();
+      return;
+    }
+    const quitarPrecio = event.target.closest("[data-quitar-precio]");
+    if (quitarPrecio) {
+      const lineas = leerTablaDeServicios();
+      const i = Number(quitarPrecio.dataset.quitarPrecio);
+      const fuera = lineas[i];
+      const conSusLineas = fuera?.tipo === "plantilla"
+        ? lineas.filter((linea, j) => j !== i && !(linea.tipo === "trabajo" && linea.name === fuera.name))
+        : lineas.filter((linea, j) => j !== i);
+      serviciosBorrador = conSusLineas.length ? conSusLineas : [{ tipo: "nueva", name: "", price: "", pz: "" }];
+      guardarListaDePrecios();
+      const paciente = patientById($("#historyPatientFilter")?.value || "");
+      if (fuera?.name && paciente && canManageClinical()) {
+        const presupuesto = presupuestoDeLaFicha(paciente);
+        const pieza = String(fuera.pz || "").trim();
+        presupuesto.sueltos = presupuesto.sueltos.filter((suelto) => suelto.servicio !== fuera.name
+          || (fuera.tipo === "trabajo" && String(suelto.pieza || "").trim() !== pieza));
+        paciente.presupuesto = presupuesto;
+        await guardarPresupuesto(paciente);
+        return;
+      }
+      renderPlanDeTratamiento();
+      return;
+    }
+    const quitarLinea = event.target.closest("[data-quitar-linea]");
+    if (quitarLinea) {
+      const paciente = patientById(quitarLinea.dataset.paciente);
+      if (!paciente || !canManageClinical()) return;
+      const presupuesto = presupuestoDeLaFicha(paciente);
+      const clave = quitarLinea.dataset.quitarLinea;
+      if (quitarLinea.dataset.suelto) {
+        presupuesto.sueltos = presupuesto.sueltos.filter((suelto) => suelto.clave !== clave);
+        delete presupuesto.precios[clave];
+      } else {
+        presupuesto.quitadas = presupuesto.quitadas.includes(clave)
+          ? presupuesto.quitadas.filter((item) => item !== clave)
+          : [...presupuesto.quitadas, clave];
+      }
+      paciente.presupuesto = presupuesto;
+      await guardarPresupuesto(paciente);
+      return;
+    }
+    const guardarProf = event.target.closest("[data-guardar-proforma]");
+    if (guardarProf) {
+      if (!canManageClinical()) return;
+      const proforma = proformaDelPresupuesto(guardarProf.dataset.guardarProforma);
+      if (!proforma) {
+        alert("No hay nada en el presupuesto para entregar.");
+        return;
+      }
+      upsert(state.proformas, proforma);
+      try {
+        await saveProformaApi(proforma);
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      renderPlanDeTratamiento();
+      return;
+    }
+    const aceptarProf = event.target.closest("[data-aceptar-proforma]");
+    if (aceptarProf) {
+      await aceptarProforma(aceptarProf.dataset.aceptarProforma);
+      return;
+    }
+    const imprimirProf = event.target.closest("[data-imprimir-proforma]");
+    if (imprimirProf) {
+      imprimirProforma(imprimirProf.dataset.imprimirProforma);
+      return;
+    }
+    const borrarProf = event.target.closest("[data-borrar-proforma]");
+    if (borrarProf) {
+      if (!canManageClinical()) return;
+      const proforma = (state.proformas || []).find((item) => item.id === borrarProf.dataset.borrarProforma);
+      if (!proforma) return;
+      if (!confirm("¿Borrar la proforma " + numeroDeProforma(proforma.numero) + "? Si el paciente ya se la llevó, quedará sin respaldo en el sistema.")) return;
+      state.proformas = state.proformas.filter((item) => item.id !== proforma.id);
+      try {
+        await deleteProformaApi(proforma.id, proforma.patientId);
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      renderPlanDeTratamiento();
+      return;
+    }
   });
 
   $("#historyTimeline").addEventListener("click", (event) => {
@@ -7784,6 +8784,7 @@ function bindEvents() {
     if (masDetalles) masDetalles.open = Boolean(String(entry.plan || "").trim() || Number(entry.planBudget || 0) > 0 || String(entry.instructions || "").trim());
     // una nota guardada ya tiene su cobro de hoy decidido: no se pisa
     if (form.agreedPrice) form.agreedPrice.dataset.manual = "1";
+    avisoDeDeudaDelDia();
     const avisoCobro = $("#historyChargeHint");
     if (avisoCobro) avisoCobro.hidden = !(Number(entry.planBudget || 0) > 0);
   });

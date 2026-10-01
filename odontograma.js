@@ -17,7 +17,12 @@
 
   var UP = ["18", "17", "16", "15", "14", "13", "12", "11", "21", "22", "23", "24", "25", "26", "27", "28"];
   var DOWN = ["48", "47", "46", "45", "44", "43", "42", "41", "31", "32", "33", "34", "35", "36", "37", "38"];
-  var PIEZAS = UP.concat(DOWN);
+  /* Denticion decidua. Van en dos filas propias, entre las permanentes y
+     centradas, como en el grafico de la norma. */
+  var UP_D = ["55", "54", "53", "52", "51", "61", "62", "63", "64", "65"];
+  var DOWN_D = ["85", "84", "83", "82", "81", "71", "72", "73", "74", "75"];
+  var PIEZAS = UP.concat(DOWN).concat(UP_D).concat(DOWN_D);
+  var FILAS = { up: UP, down: DOWN, upd: UP_D, downd: DOWN_D };
   var COLW = 58;
   var ANCHO = 50;
   var CLAVE_FICHA = "__ficha";
@@ -28,6 +33,8 @@
     "incisivo": { archivo: "incisivo.png", w: 150, h: 424 },
     "canino": { archivo: "canino.png", w: 150, h: 483 },
     "premolar": { archivo: "premolar.png", w: 150, h: 371 },
+    "premolar-1r-der": { archivo: "premolar-15.png", w: 150, h: 419 },
+    "premolar-1r-izq": { archivo: "premolar-25.png", w: 150, h: 415 },
     "molar-superior": { archivo: "molar-superior.png", w: 150, h: 283 },
     "molar-inferior": { archivo: "molar-inferior.png", w: 150, h: 292 }
   };
@@ -37,19 +44,52 @@
      y la raiz es beige, asi que el cuello es donde sube la saturacion. */
   var CORONA = {
     "incisivo": 0.390, "canino": 0.387, "premolar": 0.376,
+    "premolar-1r-der": 0.413, "premolar-1r-izq": 0.390,
     "molar-superior": 0.401, "molar-inferior": 0.389
   };
 
+  /* De los ocho premolares, el unico que suele traer dos raices es el primero
+     de arriba (14 y 24). El segundo de arriba (15 y 25) y los cuatro de abajo
+     (34, 35, 44 y 45) tienen una sola, asi que van con su propia ilustracion:
+     dibujarles dos raices es un error anatomico en una historia clinica.
+
+     La de una raiz viene en dos versiones, una por lado, porque la corona no
+     es simetrica: la del 15 sirve a los cuadrantes de la derecha (1 y 4) y la
+     del 25 a los de la izquierda (2 y 3). */
   function tipo(t) {
-    var ult = String(t).slice(-1), sup = UP.indexOf(String(t)) >= 0;
+    var n = String(t), ult = n.slice(-1), sup = arcoDe(t) === "up";
+    /* En la denticion de leche no hay premolares: detras del canino vienen
+       dos molares, que son los que llevan el 4 y el 5. */
+    if (esDecidua(t)) {
+      if (ult === "1" || ult === "2") return "incisivo";
+      if (ult === "3") return "canino";
+      return sup ? "molar-superior" : "molar-inferior";
+    }
     if (ult === "1" || ult === "2") return "incisivo";
     if (ult === "3") return "canino";
-    if (ult === "4" || ult === "5") return "premolar";
+    if (ult === "4" || ult === "5") {
+      if (sup && ult === "4") return "premolar";
+      var derecha = n.charAt(0) === "1" || n.charAt(0) === "4";
+      return derecha ? "premolar-1r-der" : "premolar-1r-izq";
+    }
     return sup ? "molar-superior" : "molar-inferior";
   }
-  function arcoDe(t) { return UP.indexOf(String(t)) >= 0 ? "up" : "down"; }
-  function indiceDe(t) { var l = arcoDe(t) === "up" ? UP : DOWN; return l.indexOf(String(t)); }
-  function centroDe(t) { return indiceDe(t) * COLW + COLW / 2; }
+  // los cuadrantes 5 a 8 son los de leche
+  function esDecidua(t) { var c = String(t).charAt(0); return c >= "5" && c <= "8"; }
+  function arcoDe(t) {
+    var c = String(t).charAt(0);
+    return (c === "1" || c === "2" || c === "5" || c === "6") ? "up" : "down";
+  }
+  // el maxilar dice arriba o abajo; la fila dice ademas si es de leche
+  function filaDe(t) { return arcoDe(t) + (esDecidua(t) ? "d" : ""); }
+  function listaDe(fila) { return FILAS[fila] || UP; }
+  function indiceDe(t) { return listaDe(filaDe(t)).indexOf(String(t)); }
+  function centroDe(t) {
+    var l = listaDe(filaDe(t));
+    // las diez de leche se centran respecto a las dieciseis permanentes
+    var margen = (UP.length - l.length) / 2;
+    return (margen + indiceDe(t)) * COLW + COLW / 2;
+  }
 
   /* --- Tamano de cada pieza ------------------------------------------------
      Hay cinco ilustraciones para treinta y dos piezas, asi que cada una se
@@ -62,27 +102,41 @@
     "11": [8.5, 23.5], "12": [6.5, 22.0], "13": [7.5, 26.5], "14": [7.0, 22.5],
     "15": [6.7, 22.5], "16": [10.0, 20.0], "17": [9.0, 20.0], "18": [8.5, 17.0],
     "31": [5.0, 21.5], "32": [5.5, 23.5], "33": [7.0, 25.5], "34": [7.0, 22.5],
-    "35": [7.1, 22.5], "36": [11.0, 21.0], "37": [10.5, 20.0], "38": [10.0, 18.0]
+    "35": [7.1, 22.5], "36": [11.0, 21.0], "37": [10.5, 20.0], "38": [10.0, 18.0],
+    // las de leche, mas cortas y mas angostas que su sucesora
+    "51": [6.5, 16.0], "52": [5.1, 15.8], "53": [7.0, 19.0], "54": [7.3, 15.2], "55": [8.2, 17.5],
+    "71": [4.2, 14.0], "72": [4.1, 15.0], "73": [5.0, 17.5], "74": [7.7, 15.8], "75": [9.9, 18.8]
   };
   // la ilustracion de cada tipo representa a esta pieza, que sirve de patron
   var PATRON = {
     "incisivo": "11", "canino": "13", "premolar": "14",
+    "premolar-1r-der": "15", "premolar-1r-izq": "15",
     "molar-superior": "16", "molar-inferior": "36"
   };
   function medidaDe(t) {
     // las piezas de la izquierda miden igual que su simetrica de la derecha
     var n = String(t), c = n.charAt(0), u = n.charAt(1);
-    var clave = (c === "1" || c === "2" ? "1" : "3") + u;
-    return MEDIDAS[clave] || MEDIDAS["11"];
+    var lado = (c === "1" || c === "2") ? "1" : (c === "3" || c === "4") ? "3"
+      : (c === "5" || c === "6") ? "5" : "7";
+    return MEDIDAS[lado + u] || MEDIDAS["11"];
   }
+  /* Las cinco primeras ilustraciones salieron del mismo atlas, asi que a igual
+     ancho guardan entre ellas el largo que les toca. Las de los premolares de
+     una raiz vinieron despues y estan dibujadas mas esbeltas: puestas al mismo
+     ancho quedaban un 13 % mas largas que el premolar de dos raices, que mide
+     lo mismo. El calibre las encoge -ancho y largo a la vez, para no
+     deformarlas- hasta que el diente entero mide lo que debe. */
+  var CALIBRE = { "premolar-1r-der": 0.885, "premolar-1r-izq": 0.894 };
+  function calibreDe(tp) { return CALIBRE[tp] || 1; }
+
   function escalaDe(t) {
     var base = medidaDe(PATRON[tipo(t)]), m = medidaDe(t);
     return { ancho: m[0] / base[0], largo: m[1] / base[1] };
   }
-  function anchoDe(t) { return ANCHO * escalaDe(t).ancho; }
+  function anchoDe(t) { return ANCHO * escalaDe(t).ancho * calibreDe(tipo(t)); }
   function altoDe(t) {
     var tp = tipo(t);
-    return ANCHO * (IMGS[tp].h / IMGS[tp].w) * escalaDe(t).largo;
+    return ANCHO * (IMGS[tp].h / IMGS[tp].w) * escalaDe(t).largo * calibreDe(tp);
   }
 
   /* --- Alineacion por la linea del cuello ---------------------------------
@@ -115,20 +169,36 @@
     { k: "arco", n: "Maxilar" }
   ];
 
+  /* El tercer dato es el color: la norma escribe en rojo lo que esta por
+     tratar o daña la pieza -desgaste, movilidad, remanente radicular- y en
+     azul lo que ya esta hecho o es una caracteristica. */
   var SIGLAS_BOX = [
-    ["DES", "Desgaste oclusal/incisal"], ["DIS", "Diente discrómico"],
+    ["DES", "Desgaste oclusal/incisal", "rojo"], ["DIS", "Diente discrómico"],
     ["E", "Diente ectópico"], ["I", "Impactación"], ["SI", "Semi-impactación"],
     ["IMP", "Implante"], ["MAC", "Macrodoncia"], ["MIC", "Microdoncia"],
-    ["M1", "Movilidad grado 1"], ["M2", "Movilidad grado 2"], ["M3", "Movilidad grado 3"]
+    ["M1", "Movilidad grado 1", "rojo"], ["M2", "Movilidad grado 2", "rojo"],
+    ["M3", "Movilidad grado 3", "rojo"],
+    /* Posicion dentaria (5.3.16). Se anotan en el mismo recuadro y pueden ir
+       varias en una pieza, que es como la norma pide registrar la combinacion. */
+    ["M", "Mesializado"], ["D", "Distalizado"], ["V", "Vestibularizado"],
+    ["P", "Palatinizado"], ["L", "Lingualizado"],
+    /* Defectos de desarrollo del esmalte (5.3.2), en rojo. La fluorosis no
+       tiene sigla: la norma la manda a Especificaciones con su clasificacion. */
+    ["HP", "Hipoplasia", "rojo"], ["HM", "Hipomineralización", "rojo"],
+    ["O", "Opacidades del esmalte", "rojo"], ["DE", "Decoloración del esmalte", "rojo"],
+    /* Fosas y fisuras profundas (5.3.5) */
+    ["FFP", "Fosas y fisuras profundas"]
   ];
 
   var TOOLS = [
-    { cat: "sup", k: "caries", n: "Caries", c: "rojo",
-      hint: "Clic en la cara comprometida: se pinta totalmente de rojo. La palatina y la lingual se marcan en el cuadro de caras." },
-    { cat: "sup", k: "restauracion", n: "Restauración", c: "azul", sig: ["AM", "R", "IV", "IM", "IE"],
+    { cat: "sup", k: "caries", n: "Caries", c: "rojo", sig: ["MB", "CE", "CD", "CDP"],
+      hint: "Elige hasta dónde llegó y haz clic en la cara: se pinta de rojo y la sigla va al recuadro. MB mancha blanca, CE esmalte, CD dentina, CDP con compromiso pulpar." },
+    { cat: "sup", k: "restauracion", n: "Restauración", c: "azul", sig: ["AM", "R", "IV", "IM", "IE", "C"],
       hint: "Se pinta de azul la cara y la sigla del material va al recuadro." },
     { cat: "sup", k: "rest_temp", n: "Restauración temporal", c: "rojo", borde: true,
       hint: "Solo el contorno de la restauración, en rojo." },
+    { cat: "sup", k: "sellante", n: "Sellante", c: "azul", malo: true, sig: ["S"],
+      hint: "Clic en la cara sellada: queda marcada y la S va al recuadro. En azul si está bien y en rojo si está en mal estado." },
     { cat: "sup", k: "borrar_sup", n: "Borrar cara", c: "", hint: "Quita el hallazgo de esa cara." },
 
     { cat: "pieza", k: "ausente", n: "Ausente", c: "azul", hint: "Aspa azul sobre la figura de la pieza." },
@@ -137,19 +207,32 @@
        -azul, ya paso- de lo que hay que hacer -rojo, esta pendiente-. */
     { cat: "pieza", k: "por_extraer", n: "Pieza por extraer", c: "rojo", hint: "Aspa roja sobre la figura de la pieza." },
     { cat: "pieza", k: "corona_def", n: "Corona definitiva", c: "azul",
-      sig: ["CC", "CF", "CMC", "3/4", "4/5", "7/8", "CV", "CJ"],
+      sig: ["CM", "CF", "CMC", "CV", "CJ"],
       hint: "Circunferencia azul que encierra la corona. El color del metal va en especificaciones." },
-    { cat: "pieza", k: "corona_tmp", n: "Corona temporal", c: "rojo", hint: "Circunferencia roja sobre la corona." },
+    { cat: "pieza", k: "corona_tmp", n: "Corona temporal", c: "rojo", box: "CT",
+      hint: "Cuadrado rojo que encierra la corona, y CT en el recuadro." },
     { cat: "pieza", k: "pulpar", n: "Tratamiento pulpar", c: "azul", sig: ["TC", "PC", "PP"],
       hint: "Línea vertical azul sobre la raíz + sigla del tratamiento." },
-    { cat: "pieza", k: "fractura", n: "Fractura", c: "rojo", hint: "Línea roja en el sentido de la fractura." },
-    { cat: "pieza", k: "rr", n: "Remanente radicular", c: "rojo", hint: "Letras RR en rojo sobre la raíz." },
+    /* La norma dibuja la fractura "sobre la figura de la corona y/o la raiz
+       segun sea el caso", asi que la linea no puede ser siempre la misma: se
+       elige donde va y hacia que lado cae. */
+    { cat: "pieza", k: "fractura", n: "Fractura", c: "rojo",
+      sig: ["corona /", "corona \\", "raíz /", "raíz \\", "toda la pieza /", "toda la pieza \\"],
+      hint: "Elige por dónde va la fractura: corona, raíz o toda la pieza, y hacia qué lado cae la línea." },
+    { cat: "pieza", k: "espigo", n: "Espigo-muñón", c: "azul", malo: true,
+      hint: "Línea en la raíz unida a un cuadrado en la corona. En rojo si está en mal estado." },
+    { cat: "pieza", k: "erupcion", n: "En erupción", c: "azul",
+      hint: "Flecha azul en zigzag sobre la pieza, hacia el plano oclusal." },
+    { cat: "pieza", k: "rr", n: "Remanente radicular", c: "rojo", box: "RR",
+      hint: "RR en rojo sobre la raíz y en el recuadro." },
     { cat: "pieza", k: "extruido", n: "Extruido", c: "azul", hint: "Flecha azul hacia el plano oclusal." },
     { cat: "pieza", k: "intruido", n: "Intruido", c: "azul", hint: "Flecha vertical azul hacia el ápice." },
     { cat: "pieza", k: "giroversion", n: "Giroversión", c: "azul", sig: ["horaria", "antihoraria"],
       hint: "Flecha curva azul siguiendo el sentido de la rotación." },
     { cat: "pieza", k: "migracion", n: "Migración", c: "azul", sig: ["mesial", "distal"],
       hint: "Flecha recta horizontal azul en el sentido del desplazamiento." },
+    { cat: "pieza", k: "gemina", n: "Geminación", c: "azul",
+      hint: "Circunferencia azul sobre el número de la pieza." },
     { cat: "pieza", k: "clavija", n: "Diente en clavija", c: "azul",
       hint: "Triángulo azul circunscribiendo el número de la pieza." },
     { cat: "pieza", k: "limpiar", n: "Limpiar pieza", c: "", hint: "Borra todos los hallazgos de la pieza." },
@@ -168,8 +251,11 @@
       hint: "Letra S en una circunferencia, entre los ápices de las piezas adyacentes." },
     { cat: "span", k: "transposicion", n: "Transposición", c: "azul",
       hint: "Dos flechas curvas entrecruzadas a la altura de los números." },
-    { cat: "span", k: "geminacion", n: "Geminación / fusión", c: "azul",
-      hint: "Dos circunferencias interceptadas encerrando los números." },
+    /* La clave se queda en "geminacion" aunque ahora se llame Fusion: es la que
+       tienen guardada los odontogramas de antes y cambiarla los dejaria sin el
+       trazo. La geminacion, que es de una sola pieza, va aparte. */
+    { cat: "span", k: "geminacion", n: "Fusión", c: "azul",
+      hint: "Dos circunferencias azules interceptadas sobre los números de las dos piezas." },
     { cat: "span", k: "borrar_span", n: "Borrar trazo", c: "", hint: "Clic sobre una de las dos piezas del trazo." },
 
     { cat: "arco", k: "edentulo", n: "Edéntulo total", c: "azul",
@@ -180,9 +266,10 @@
   ];
 
   SIGLAS_BOX.forEach(function (par) {
+    var color = par[2] || "azul";
     TOOLS.push({
-      cat: "box", k: par[0], n: par[0] + " · " + par[1], c: "azul",
-      hint: 'Registra "' + par[0] + '" en azul dentro del recuadro de la pieza.'
+      cat: "box", k: par[0], n: par[0] + " · " + par[1], c: color,
+      hint: 'Registra "' + par[0] + '" en ' + color + ' dentro del recuadro de la pieza.'
     });
   });
   TOOLS.push({ cat: "box", k: "borrar_box", n: "Vaciar recuadro", c: "", hint: "Borra las siglas del recuadro." });
@@ -197,7 +284,7 @@
   function fichaVacia() {
     var d = {};
     PIEZAS.forEach(function (t) { d[t] = { sup: {}, pieza: {}, box: [], num: null, nota: "" }; });
-    return { dientes: d, spans: [], arcada: { up: null, down: null }, esp: "" };
+    return { dientes: d, spans: [], arcada: { up: null, down: null }, nino: false, esp: "", obs: "" };
   }
   function normalizarFicha(f) {
     var base = fichaVacia();
@@ -213,7 +300,9 @@
     });
     base.spans = Array.isArray(f.spans) ? f.spans.filter(function (s) { return meta(s.k); }) : [];
     base.arcada = { up: (f.arcada || {}).up || null, down: (f.arcada || {}).down || null };
+    base.nino = Boolean(f.nino);
     base.esp = f.esp || "";
+    base.obs = f.obs || "";
     return base;
   }
 
@@ -224,7 +313,7 @@
      linea media queda a la derecha, y en los cuadrantes 2 y 3 a la izquierda. */
   function mesialALaDerecha(t) {
     var c = String(t).charAt(0);
-    return c === "1" || c === "4";
+    return c === "1" || c === "4" || c === "5" || c === "8";
   }
   /* Los anteriores no tienen cara oclusal sino borde incisal, y la cara
      interna se llama palatina arriba y lingual abajo. */
@@ -250,11 +339,14 @@
     var x0 = W * 0.04, x1 = W * 0.96, p = (x1 - x0) / 3;
     var der = mesialALaDerecha(t);
     function R(a, b, ya, yb) { return "M" + a + "," + ya + " L" + b + "," + ya + " L" + b + "," + yb + " L" + a + "," + yb + " Z"; }
+    /* El centro de cada cara y el radio que cabe dentro: de ahi sale el circulo
+       de la restauracion temporal. */
+    function C(a, b, ya, yb) { return [(a + b) / 2, (ya + yb) / 2, Math.min(b - a, yb - ya) * 0.34]; }
     return [
-      { s: "oclusal", d: R(x0, x1, 0, bordeY) },
-      { s: der ? "distal" : "mesial", d: R(x0, x0 + p, bordeY, cuello) },
-      { s: "vestibular", d: R(x0 + p, x0 + 2 * p, bordeY, cuello) },
-      { s: der ? "mesial" : "distal", d: R(x0 + 2 * p, x1, bordeY, cuello) }
+      { s: "oclusal", d: R(x0, x1, 0, bordeY), c: C(x0, x1, 0, bordeY) },
+      { s: der ? "distal" : "mesial", d: R(x0, x0 + p, bordeY, cuello), c: C(x0, x0 + p, bordeY, cuello) },
+      { s: "vestibular", d: R(x0 + p, x0 + 2 * p, bordeY, cuello), c: C(x0 + p, x0 + 2 * p, bordeY, cuello) },
+      { s: der ? "mesial" : "distal", d: R(x0 + 2 * p, x1, bordeY, cuello), c: C(x0 + 2 * p, x1, bordeY, cuello) }
     ];
   }
 
@@ -274,11 +366,11 @@
     var ladoDerecho = mesialALaDerecha(t) ? "mesial" : "distal";
     var ladoIzquierdo = mesialALaDerecha(t) ? "distal" : "mesial";
     return [
-      { s: ladoSuperior, d: "M0,0 L100,0 L70,30 L30,30 Z" },
-      { s: ladoInferior, d: "M0,100 L100,100 L70,70 L30,70 Z" },
-      { s: ladoIzquierdo, d: "M0,0 L30,30 L30,70 L0,100 Z" },
-      { s: ladoDerecho, d: "M100,0 L100,100 L70,70 L70,30 Z" },
-      { s: "oclusal", d: "M30,30 L70,30 L70,70 L30,70 Z" }
+      { s: ladoSuperior, d: "M0,0 L100,0 L70,30 L30,30 Z", c: [50, 14, 13] },
+      { s: ladoInferior, d: "M0,100 L100,100 L70,70 L30,70 Z", c: [50, 86, 13] },
+      { s: ladoIzquierdo, d: "M0,0 L30,30 L30,70 L0,100 Z", c: [14, 50, 13] },
+      { s: ladoDerecho, d: "M100,0 L100,100 L70,70 L70,30 Z", c: [86, 50, 13] },
+      { s: "oclusal", d: "M30,30 L70,30 L70,70 L30,70 Z", c: [50, 50, 17] }
     ];
   }
 
@@ -288,6 +380,33 @@
     var ax = x - L * Math.cos(ang - a), ay = y - L * Math.sin(ang - a);
     var bx = x - L * Math.cos(ang + a), by = y - L * Math.sin(ang + a);
     return '<path d="M' + x + "," + y + " L" + ax + "," + ay + " L" + bx + "," + by + ' Z" fill="' + c + '"/>';
+  }
+  /* La flecha en zigzag de la pieza en erupcion (5.3.7 de la norma): sube por
+     el medio de la figura dando dientes de sierra y acaba en punta sobre el
+     plano oclusal. Se dibuja de abajo -donde esta la raiz- hacia arriba. */
+  function zigzag(x, desde, hasta, ancho, c, gr) {
+    /* Los dientes de sierra ocupan el primer tramo y el ultimo vuelve al eje:
+       asi la punta remata recta y centrada, como el simbolo del rayo, en vez
+       de quedar colgando del lado al que se fue el zigzag. */
+    var tramos = 5, quiebre = desde + (hasta - desde) * 0.78;
+    var d = "M" + x + "," + desde;
+    for (var i = 1; i <= tramos; i++) {
+      var y = desde + (quiebre - desde) * (i / tramos);
+      d += " L" + (x + (i % 2 ? ancho : -ancho)) + "," + y;
+    }
+    d += " L" + x + "," + hasta;
+    return '<path d="' + d + '" stroke="' + c + '" stroke-width="' + gr +
+      '" fill="none" stroke-linejoin="round" stroke-linecap="round"/>' +
+      // la punta va mas ancha que la del resto: es lo que se mira de un vistazo
+      punta(x, hasta, 0, hasta - desde, c, gr * 1.6);
+  }
+  /* Flecha curva: el arco pasa por un punto desviado del medio, y la punta se
+     coloca siguiendo la direccion con la que llega. */
+  function flechaCurva(x1, y1, x2, y2, desvio, c, gr) {
+    var mx = (x1 + x2) / 2, my = (y1 + y2) / 2 + desvio;
+    return '<path d="M' + x1 + "," + y1 + " Q" + mx + "," + my + " " + x2 + "," + y2 +
+      '" stroke="' + c + '" stroke-width="' + gr + '" fill="none" stroke-linecap="round"/>' +
+      punta(x2, y2, x2 - mx, y2 - my, c, gr);
   }
   function flecha(x1, y1, x2, y2, c, gr) {
     return '<path d="M' + x1 + "," + y1 + " L" + x2 + "," + y2 + '" stroke="' + c +
@@ -307,7 +426,10 @@
     var onPaciente = opts.onPaciente || null;
 
     var ficha = fichaVacia();
-    var tool = { cat: "sup", k: "caries", sig: null };
+    /* La sigla arranca en la primera de la herramienta, no en null: desde que
+       la caries tiene niveles, sin esto la primera marca dejaba un recuadro
+       vacio ("Recuadro: null"). */
+    var tool = { cat: "sup", k: "caries", sig: (meta("caries").sig || [null])[0] };
     var malEstado = false;
     var sel = null, pendiente = null, hist = [];
     var soloLectura = false;
@@ -337,28 +459,51 @@
           return '<path d="' + dd + '" stroke="' + c + '" stroke-width="' + gr + '" fill="none" stroke-linecap="round"/>';
         }
         if (k === "ausente" || k === "por_extraer") {
-          out += L("M" + x0 + ",2 L" + x1 + "," + cuello) + L("M" + x1 + ",2 L" + x0 + "," + cuello);
+          /* El aspa va "sobre la figura de la pieza dentaria", no solo sobre su
+             corona: cruza de punta a punta, como en la norma. */
+          var fin = cuello + (H - cuello) * 0.88;
+          out += L("M" + x0 + ",2 L" + x1 + "," + fin) + L("M" + x1 + ",2 L" + x0 + "," + fin);
         } else if (k === "corona_def" || k === "corona_tmp") {
-          out += '<ellipse cx="' + (W / 2) + '" cy="' + (cuello / 2) + '" rx="' + ((x1 - x0) / 2) +
-            '" ry="' + (cuello / 2 - 1) + '" fill="none" stroke="' + c + '" stroke-width="' + gr + '"/>';
+          // la norma dibuja un cuadrado que bordea la corona clinica
+          out += '<rect x="' + x0 + '" y="3" width="' + (x1 - x0) + '" height="' + (cuello - 6) +
+            '" fill="none" stroke="' + c + '" stroke-width="' + gr + '"/>';
+        } else if (k === "espigo") {
+          /* Un cuadrado dentro de la corona y una linea que baja por la raiz,
+             que es el perno. */
+          var lado = (x1 - x0) * 0.5, cx0 = W / 2 - lado / 2;
+          out += '<rect x="' + cx0 + '" y="' + (cuello * 0.28) + '" width="' + lado + '" height="' + (cuello * 0.5) +
+            '" fill="none" stroke="' + c + '" stroke-width="' + gr + '"/>';
+          out += L("M" + (W / 2) + "," + (cuello * 0.78) + " L" + (W / 2) + "," + (cuello + (H - cuello) * 0.62));
         } else if (k === "pulpar") {
-          out += L("M" + (W / 2) + "," + cuello + " L" + (W / 2) + "," + (H * 0.93));
+          /* La norma solo hace la raya en la raiz para el tratamiento de
+             conductos y la pulpectomia. La pulpotomia se queda en la corona,
+             asi que ahi se dibuja la camara pulpar. */
+          if (sig === "PP") {
+            var anchoC = (x1 - x0) * 0.44, altoC = cuello * 0.34;
+            out += '<rect x="' + (W / 2 - anchoC / 2) + '" y="' + (cuello * 0.42) + '" width="' + anchoC +
+              '" height="' + altoC + '" fill="' + c + '" opacity=".85"/>';
+          } else {
+            out += L("M" + (W / 2) + "," + cuello + " L" + (W / 2) + "," + (H * 0.93));
+          }
         } else if (k === "fractura") {
-          out += L("M" + (x0 + W * 0.05) + "," + (cuello * 0.92) + " L" + (x1 - W * 0.05) + ",4");
-        } else if (k === "extruido") {
-          out += flecha(W / 2, -H * 0.02, W / 2, -H * 0.15, c, gr);
-        } else if (k === "intruido") {
-          out += flecha(W / 2, -H * 0.17, W / 2, -H * 0.04, c, gr);
+          /* De la sigla salen las dos cosas: donde empieza y acaba la linea
+             -corona, raiz o toda la pieza- y hacia que lado cae. La raiz se va
+             estrechando, por eso ahi la linea se mete mas hacia el centro. */
+          var donde = String(sig || "corona /");
+          var invertida = donde.indexOf("\\") >= 0;
+          var soloRaiz = donde.indexOf("raíz") === 0;
+          var enRaiz = soloRaiz || donde.indexOf("toda") === 0;
+          // la raiz es mas angosta que la corona: ahi la linea se mete mas
+          var margen = W * (soloRaiz ? 0.22 : enRaiz ? 0.13 : 0.05);
+          var desde = soloRaiz ? cuello + (H - cuello) * 0.04 : 4;
+          var hasta = enRaiz ? cuello + (H - cuello) * 0.86 : cuello * 0.92;
+          var izq = x0 + margen, der = x1 - margen;
+          out += L("M" + (invertida ? der : izq) + "," + hasta + " L" + (invertida ? izq : der) + "," + desde);
+        } else if (k === "erupcion") {
+          out += zigzag(W / 2, cuello + (H - cuello) * 0.26, H * 0.11, W * 0.12, c, gr);
         } else if (k === "migracion") {
           var der = sig !== "mesial";
           out += flecha(der ? x0 : x1, -H * 0.09, der ? x1 : x0, -H * 0.09, c, gr);
-        } else if (k === "giroversion") {
-          // arco sobre el plano oclusal, con la punta en el sentido de la rotacion
-          var y = -H * 0.08, horaria = sig !== "antihoraria";
-          var ini = horaria ? x0 : x1, fin = horaria ? x1 : x0;
-          out += '<path d="M' + ini + "," + y + " Q" + (W / 2) + "," + (y - H * 0.12) + " " + fin + "," + y +
-            '" stroke="' + c + '" stroke-width="' + gr + '" fill="none" stroke-linecap="round"/>';
-          out += punta(fin, y, fin - W / 2, H * 0.12, c, gr);
         } else if (k === "rr") {
           var yy = cuello + (H - cuello) * 0.5;
           var g = arriba ? ' transform="translate(0,' + (2 * yy) + ') scale(1,-1)"' : "";
@@ -375,8 +520,11 @@
       var rell = zs.map(function (z) {
         var h = d.sup[z.s]; if (!h) return "";
         var m = meta(h); if (!m) return "";
+        /* La temporal se marca con un circulo rojo y no pintando la cara: asi se
+           distingue de un vistazo de la definitiva, que va rellena. */
         return m.borde
-          ? '<path d="' + z.d + '" fill="none" stroke="' + col(m.c) + '" stroke-width="' + (im.w * 0.05) + '"/>'
+          ? '<circle cx="' + z.c[0] + '" cy="' + z.c[1] + '" r="' + z.c[2] +
+            '" fill="none" stroke="' + col(m.c) + '" stroke-width="' + (im.w * 0.04) + '"/>'
           : '<path d="' + z.d + '" fill="' + col(m.c) + '" opacity=".8"/>';
       }).join("");
       var clic = zs.map(function (z) {
@@ -400,24 +548,34 @@
        ilustracion frontal queda escondida detras del diente. */
     function carasHtml(t) {
       var d = ficha.dientes[t];
+      var circulos = "";
       var zs = caras(t).map(function (z) {
         var h = d.sup[z.s], relleno = "", m = h ? meta(h) : null;
         // va en style y no como atributo: en SVG los atributos de presentacion
         // pierden frente a la regla CSS de la clase
         if (m) {
-          relleno = m.borde
-            ? ' style="fill:none;stroke:' + col(m.c) + ';stroke-width:7"'
-            : ' style="fill:' + col(m.c) + ';fill-opacity:.85"';
+          if (m.borde) {
+            // el circulo se dibuja aparte, encima, para que no lo tape la cara
+            circulos += '<circle cx="' + z.c[0] + '" cy="' + z.c[1] + '" r="' + z.c[2] +
+              '" fill="none" stroke="' + col(m.c) + '" stroke-width="5" pointer-events="none"/>';
+          } else {
+            relleno = ' style="fill:' + col(m.c) + ';fill-opacity:.85"';
+          }
         }
         return '<path class="odo-cara" d="' + z.d + '" data-s="' + z.s + '"' + relleno +
           '><title>' + nombreCara(t, z.s) + "</title></path>";
-      }).join("");
+      }).join("") + circulos;
       return '<div class="odo-col"><svg class="odo-caras" viewBox="-3 -3 106 106" data-t="' + t + '">' +
         zs + "</svg></div>";
     }
 
     function filaHtml(lista, kind) {
-      return lista.map(function (t) {
+      /* Las diez de leche van centradas bajo las dieciseis permanentes: se
+         rellenan las tres columnas de cada lado, que es lo que hace que la
+         linea media caiga entre el 51 y el 61 y no a un costado. */
+      var hueco = "";
+      for (var h = 0; h < (UP.length - lista.length) / 2; h++) hueco += '<div class="odo-col"></div>';
+      return hueco + lista.map(function (t) {
         if (kind === "diente") return '<div class="odo-col">' + dienteHtml(t) + "</div>";
         if (kind === "num") return '<div class="odo-col"><span class="odo-num" data-num="' + t + '">' + t + "</span></div>";
         if (kind === "caras") return carasHtml(t);
@@ -426,7 +584,7 @@
           return '<span class="' + (x.c === "rojo" ? "odo-ro" : "odo-az") + '">' + esc(x.k) + "</span>";
         }).join(" ");
         return '<div class="odo-col"><div class="odo-recuadro" data-box="' + t + '">' + txt + "</div></div>";
-      }).join("");
+      }).join("") + hueco;
     }
 
     /* ---------- capa de trazos entre piezas ---------- */
@@ -438,7 +596,8 @@
       svg.setAttribute("viewBox", "0 0 " + W + " " + H);
       svg.setAttribute("width", W); svg.setAttribute("height", H);
 
-      var up = arco === "up";
+      // "upd" y "downd" son las filas de leche: van con su maxilar
+      var up = arco.indexOf("up") === 0;
       var tFila = lienzo.querySelector("#odo-" + arco).offsetTop;
       var nFila = lienzo.querySelector("#odo-" + arco + "-num");
       var numY = nFila.offsetTop + nFila.offsetHeight / 2;
@@ -451,13 +610,16 @@
       var carasY = cFila.offsetTop, carasH = cFila.offsetHeight;
       var coronaY = up ? carasY + carasH + 3 : carasY - 3;
       var carasCY = carasY + carasH / 2;   // altura del hueco entre dos piezas
+      // el borde del cuadro que mira a la pieza: arriba en el maxilar superior
+      // y abajo en el inferior. Ahi va lo que se dibuja entre diente y cuadro
+      var bordeCaras = up ? carasY : carasY + carasH;
 
       var out = "";
       function st(c, gr) {
         return 'stroke="' + col(c) + '" stroke-width="' + (gr || 2.2) + '" fill="none" stroke-linecap="round"';
       }
 
-      var a = ficha.arcada[arco];
+      var a = ficha.arcada[arco];   // el maxilar edentulo es cosa de las permanentes
       if (a && meta(a)) {
         var ca = colorDe(meta(a)), ya = coronaY - fuera * 4;
         out += '<path d="M6,' + ya + " L" + (W - 6) + "," + ya + '" ' + st(ca, 2.4) + "/>";
@@ -467,6 +629,7 @@
       }
 
       ficha.spans.filter(function (s) { return s.arco === arco; }).forEach(function (s) {
+        if (filaDe(s.a) !== arco) return;
         var m = meta(s.k); if (!m) return;
         var c = colorDe(m);
         var xa = Math.min(centroDe(s.a), centroDe(s.b)), xb = Math.max(centroDe(s.a), centroDe(s.b));
@@ -497,31 +660,72 @@
           }
           out += '<path d="' + d + '" ' + st(c, 2.2) + "/>";
         } else if (s.k === "diastema") {
-          // va en el hueco entre las dos piezas, a la altura del cuadro de caras
+          /* Los parentesis van en el hueco entre las dos coronas, que es donde
+             se ve el espacio, y no abajo en el cuadro de caras. La altura se
+             mide desde el apice hacia la corona, asi vale igual en los dos
+             maxilares. */
           var xm = (centroDe(s.a) + centroDe(s.b)) / 2;
-          var y0 = carasCY + 13, y1 = carasCY - 13;
-          out += '<path d="M' + (xm - 5) + "," + y0 + " Q" + (xm - 1) + "," + ((y0 + y1) / 2) + " " + (xm - 5) + "," + y1 + '" ' + st(c, 2.2) + "/>";
-          out += '<path d="M' + (xm + 5) + "," + y0 + " Q" + (xm + 1) + "," + ((y0 + y1) / 2) + " " + (xm + 5) + "," + y1 + '" ' + st(c, 2.2) + "/>";
+          var yd = apiceY - fuera * (CELDA * 0.68);
+          var y0 = yd + 18, y1 = yd - 18;
+          out += '<path d="M' + (xm - 7) + "," + y0 + " Q" + (xm - 2) + "," + yd + " " + (xm - 7) + "," + y1 + '" ' + st(c, 2.4) + "/>";
+          out += '<path d="M' + (xm + 7) + "," + y0 + " Q" + (xm + 2) + "," + yd + " " + (xm + 7) + "," + y1 + '" ' + st(c, 2.4) + "/>";
         } else if (s.k === "supernumerario") {
           var xs = (centroDe(s.a) + centroDe(s.b)) / 2, ys = apiceY + fuera * 12;
           out += '<circle cx="' + xs + '" cy="' + ys + '" r="9" ' + st(c, 2) + "/>";
           out += '<text x="' + xs + '" y="' + ys + '" fill="' + col(c) +
             '" font-size="11" font-weight="800" font-family="Segoe UI,Arial" text-anchor="middle" dominant-baseline="central">S</text>';
         } else if (s.k === "geminacion") {
-          [centroDe(s.a), centroDe(s.b)].forEach(function (x) {
-            out += '<ellipse cx="' + x + '" cy="' + numY + '" rx="16" ry="10" ' + st(c, 2) + "/>";
+          // se acercan hasta cruzarse, que es como la norma dibuja la fusion
+          [Math.min(xa, xb) + 10, Math.max(xa, xb) - 10].forEach(function (x) {
+            out += '<ellipse cx="' + x + '" cy="' + numY + '" rx="21" ry="11" ' + st(c, 2) + "/>";
           });
         } else if (s.k === "transposicion") {
-          out += flecha(xa, numY - 13, xb, numY + 13, col(c), 2.2);
-          out += flecha(xb, numY - 13, xa, numY + 13, col(c), 2.2);
+          /* Los dos arcos se cruzan justo por fuera de las raices, como en el
+             dibujo de la norma. Antes salian arriba del todo, a la altura de
+             los numeros, y quedaban despegados de las piezas. */
+          var yT = apiceY + fuera * 10;
+          out += flechaCurva(xa, yT, xb, yT, -13, col(c), 2.2);
+          out += flechaCurva(xb, yT + fuera * 3, xa, yT + fuera * 3, 13, col(c), 2.2);
         }
       });
 
-      (up ? UP : DOWN).forEach(function (t) {
-        if (ficha.dientes[t].num !== "clavija") return;
+      /* Las flechas de extruido e intruido se dibujan aqui y no dentro de la
+         pieza: el canino es la mas larga y ahi no cabian, se recortaban contra
+         el borde de su recuadro. Van en el hueco entre la pieza y su cuadro de
+         caras; antes caian encima del cuadro y lo tapaban. */
+      listaDe(arco).forEach(function (t) {
+        var dp = ficha.dientes[t].pieza, x = centroDe(t);
+        var cerca = bordeCaras + fuera * 4, lejos = bordeCaras + fuera * 24;
+        if (dp.extruido !== undefined) {
+          out += flecha(x, lejos, x, cerca, col(colorDe(meta("extruido"))), 2.4);
+        }
+        if (dp.intruido !== undefined) {
+          out += flecha(x, cerca, x, lejos, col(colorDe(meta("intruido"))), 2.4);
+        }
+      });
+
+      /* La giroversion tambien se dibuja aqui: va en el hueco entre la pieza y
+         su cuadro de caras, y dentro del dibujo de cada diente caia sobre el
+         cuadro porque las piezas no miden todas lo mismo. */
+      listaDe(arco).forEach(function (t) {
+        var giro = ficha.dientes[t].pieza.giroversion;
+        if (giro === undefined) return;
+        var x = centroDe(t), cg = col(colorDe(meta("giroversion")));
+        var yg = bordeCaras + fuera * 3, ala = COLW * 0.3;
+        var horaria = giro !== "antihoraria";
+        out += flechaCurva(horaria ? x - ala : x + ala, yg, horaria ? x + ala : x - ala, yg, fuera * 13, cg, 2.4);
+      });
+
+      listaDe(arco).forEach(function (t) {
+        var marca = ficha.dientes[t].num;
+        if (!marca) return;
         var x = centroDe(t);
-        out += '<path d="M' + x + "," + (numY - 11) + " L" + (x + 14) + "," + (numY + 9) +
-          " L" + (x - 14) + "," + (numY + 9) + ' Z" ' + st("azul", 1.8) + "/>";
+        if (marca === "clavija") {
+          out += '<path d="M' + x + "," + (numY - 11) + " L" + (x + 14) + "," + (numY + 9) +
+            " L" + (x - 14) + "," + (numY + 9) + ' Z" ' + st("azul", 1.8) + "/>";
+        } else if (marca === "gemina") {
+          out += '<ellipse cx="' + x + '" cy="' + numY + '" rx="15" ry="11" ' + st("azul", 2) + "/>";
+        }
       });
 
       svg.innerHTML = out;
@@ -541,10 +745,19 @@
         out.push({ txt: m.n + " · " + nombreCara(t, z), c: m.c });
       });
       d.box.forEach(function (x) {
-        var m = meta(x.k);   // las siglas de material no son herramienta propia
-        out.push({ txt: m ? m.n : "Recuadro: " + x.k, c: x.c });
+        var m = meta(x.k);
+        if (m) { out.push({ txt: m.n, c: x.c }); return; }
+        /* Las siglas de material, de nivel de caries o de tipo de corona no son
+           herramienta propia: se dicen con el nombre de la que las puso, que se
+           lee mucho mejor que un "Recuadro: MB". */
+        var duena = null;
+        for (var i = 0; i < TOOLS.length; i++) {
+          if (TOOLS[i].sig && TOOLS[i].sig.indexOf(x.k) >= 0) { duena = TOOLS[i]; break; }
+        }
+        out.push({ txt: duena ? x.k + " · " + duena.n : "Recuadro: " + x.k, c: x.c });
       });
       if (d.num === "clavija") out.push({ txt: "Diente en clavija", c: "azul" });
+      if (d.num === "gemina") out.push({ txt: "Geminación", c: "azul" });
       if (d.nota) out.push({ txt: d.nota, c: "azul" });
       return out;
     }
@@ -628,13 +841,16 @@
         '<input type="search" class="odo-q" placeholder="Buscar paciente por nombre o documento" autocomplete="off">' +
         '<div class="odo-res" hidden></div>' +
         '<div class="odo-ficha"></div>' +
-        '<select class="odo-hoja"><option value="inicial">Odontograma inicial</option>' +
-        '<option value="evolucion">Odontograma de evolución</option></select>' +
+        /* El selector de hoja se quito: la historia ya distingue sola la copia
+           inicial de la ultima -por la fecha en que se guardo cada una- y
+           tener ademas que elegirla aqui confundia. */
+        '<label class="odo-nino"><input type="checkbox" class="odo-nino-check"> Piezas de leche</label>' +
         '<button type="button" class="odo-btn odo-imprimir">Imprimir</button></div>'
         : "";
       if (cabecera) cabecera.innerHTML = buscador;
       lienzo.innerHTML = (cabecera ? "" : buscador) +
         '<div class="odo-layout"><div class="odo-arco">' +
+        '<div class="odo-permanente">' +
         '<p class="odo-titulo">Maxilar superior &mdash; permanente</p>' +
         '<div class="odo-wrap" id="odo-up-wrap">' +
         '<div class="odo-fila" id="odo-up-box"></div>' +
@@ -653,13 +869,40 @@
         '<svg class="odo-capa" id="odo-down-ov"></svg></div>' +
         '<p class="odo-titulo" style="margin:8px 0 0">Maxilar inferior &mdash; permanente</p>' +
         "</div>" +
+        /* Las dos filas de leche sustituyen a las permanentes cuando la ficha
+           dice que el paciente las tiene: en pantalla se ve solo la denticion
+           que se esta registrando, que es como se lee mejor. */
+        '<div class="odo-leche" hidden>' +
+        '<p class="odo-titulo">Maxilar superior &mdash; decidua</p>' +
+        '<div class="odo-wrap" id="odo-upd-wrap">' +
+        '<div class="odo-fila" id="odo-upd-box"></div>' +
+        '<div class="odo-fila odo-linea" id="odo-upd-num"></div>' +
+        '<div class="odo-fila odo-linea" id="odo-upd"></div>' +
+        '<div class="odo-fila odo-linea" id="odo-upd-caras"></div>' +
+        '<svg class="odo-capa" id="odo-upd-ov"></svg></div>' +
+        '<div style="height:26px"></div>' +
+        '<div class="odo-wrap" id="odo-downd-wrap">' +
+        '<div class="odo-fila odo-linea" id="odo-downd-caras"></div>' +
+        '<div class="odo-fila odo-linea" id="odo-downd"></div>' +
+        '<div class="odo-fila odo-linea" id="odo-downd-num"></div>' +
+        '<div class="odo-fila" id="odo-downd-box"></div>' +
+        '<svg class="odo-capa" id="odo-downd-ov"></svg></div>' +
+        '<p class="odo-titulo" style="margin:8px 0 18px">Maxilar inferior &mdash; decidua</p>' +
+        "</div>" +
+        "</div>" +
         '<div class="odo-side">' +
-        '<h4>Pieza seleccionada</h4><div class="odo-body odo-selbox"></div>' +
-        '<h4>Hallazgos <small class="odo-cuenta"></small></h4>' +
-        '<div class="odo-body"><ul class="odo-lista"></ul></div>' +
+        /* Especificaciones y observaciones van arriba, que es como las pide la
+           hoja de la norma y como se leen despues en la historia del paciente.
+           Del bloque de la pieza quedan solo sus dos botones: son la unica
+           forma de corregir un diente mal marcado. */
+        '<div class="odo-body odo-selbox"></div>' +
         '<h4>Especificaciones</h4><div class="odo-body">' +
         '<textarea class="odo-esp" rows="3" placeholder="Hallazgos que no pueden registrarse gráficamente, piezas con más de una anomalía, color del metal, tipo de aparatología o material."></textarea>' +
         '<p class="odo-aviso"></p></div>' +
+        '<h4>Observaciones</h4><div class="odo-body">' +
+        '<textarea class="odo-obs" rows="3" placeholder="Lo que se hizo o se observó en este control."></textarea></div>' +
+        '<h4>Hallazgos <small class="odo-cuenta"></small></h4>' +
+        '<div class="odo-body"><ul class="odo-lista"></ul></div>' +
         '<h4>Cómo se lee</h4><div class="odo-body odo-ley">' +
         '<span class="odo-az">Azul</span>: tratamiento en buen estado.<br>' +
         '<span class="odo-ro">Rojo</span>: patología, mal estado o temporal.' +
@@ -681,6 +924,23 @@
     }
 
     function renderChart() {
+      var leche = lienzo.querySelector(".odo-leche");
+      var permanente = lienzo.querySelector(".odo-permanente");
+      // se ve una denticion o la otra, nunca las dos a la vez
+      if (leche) leche.hidden = !ficha.nino;
+      if (permanente) permanente.hidden = Boolean(ficha.nino);
+      var marca = lienzo.querySelector(".odo-nino-check") || (cabecera && cabecera.querySelector(".odo-nino-check"));
+      if (marca) marca.checked = Boolean(ficha.nino);
+      if (ficha.nino) {
+        ["upd", "downd"].forEach(function (fila) {
+          var l = listaDe(fila);
+          lienzo.querySelector("#odo-" + fila + "-box").innerHTML = filaHtml(l, "box");
+          lienzo.querySelector("#odo-" + fila + "-num").innerHTML = filaHtml(l, "num");
+          lienzo.querySelector("#odo-" + fila).innerHTML = filaHtml(l, "diente");
+          lienzo.querySelector("#odo-" + fila + "-caras").innerHTML = filaHtml(l, "caras");
+        });
+      }
+      if (ficha.nino) { capa("upd"); capa("downd"); ajustarAncho(); return; }
       lienzo.querySelector("#odo-up-box").innerHTML = filaHtml(UP, "box");
       lienzo.querySelector("#odo-up-num").innerHTML = filaHtml(UP, "num");
       lienzo.querySelector("#odo-up").innerHTML = filaHtml(UP, "diente");
@@ -695,14 +955,8 @@
 
     function renderLateral() {
       var box = lienzo.querySelector(".odo-selbox");
-      if (!sel) {
-        box.innerHTML = '<div class="odo-selnum">&mdash;</div><div class="odo-selsub">Selecciona una pieza</div>';
-      } else {
-        var d = describir(sel);
-        box.innerHTML = '<div class="odo-selnum">' + sel + "</div>" +
-          '<div class="odo-selsub">' + (d.length ? d.map(function (x) { return esc(x.txt); }).join(" · ") : "Sin hallazgos") + "</div>";
-      }
-      box.innerHTML += '<button type="button" class="odo-btn odo-undo">Deshacer</button>' +
+      box.innerHTML = '<span class="odo-selsub">' + (sel ? "Pieza " + esc(sel) : "Ninguna pieza elegida") + "</span>" +
+        '<button type="button" class="odo-btn odo-undo">Deshacer</button>' +
         '<button type="button" class="odo-btn odo-clear">Limpiar pieza</button>';
 
       var f = listaHallazgos();
@@ -719,6 +973,11 @@
       var esp = lienzo.querySelector(".odo-esp");
       if (document.activeElement !== esp) esp.value = ficha.esp || "";
       esp.disabled = soloLectura;
+      var obs = lienzo.querySelector(".odo-obs");
+      if (obs) {
+        if (document.activeElement !== obs) obs.value = ficha.obs || "";
+        obs.disabled = soloLectura;
+      }
     }
 
     function renderPaciente() {
@@ -743,6 +1002,7 @@
       if (hist.length > 40) hist.shift();
     }
     function ponerBox(t, k, c) {
+      if (!k) return;   // sin sigla no hay nada que escribir en el recuadro
       var box = ficha.dientes[t].box;
       for (var i = 0; i < box.length; i++) {
         if (box[i].k === k) { box.splice(i, 1); return; }
@@ -759,23 +1019,27 @@
           ficha.dientes[t] = { sup: {}, pieza: {}, box: [], num: null, nota: "" };
           return [t];
         }
-        if (tool.k === "clavija") {
-          d.num = d.num === "clavija" ? null : "clavija";
+        if (tool.k === "clavija" || tool.k === "gemina") {
+          d.num = d.num === tool.k ? null : tool.k;
           return [t];
         }
         if (d.pieza[tool.k] !== undefined && (!m.sig || d.pieza[tool.k] === tool.sig)) {
           delete d.pieza[tool.k];
+          // al quitar la marca se va tambien su sigla del recuadro
+          if (m.box) ponerBox(t, m.box, colorDe(m));
         } else {
           d.pieza[tool.k] = m.sig ? tool.sig : "";
           // las siglas de corona y tratamiento pulpar van al recuadro
           if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar")) ponerBox(t, tool.sig, colorDe(m));
+          // y las que la norma manda escribir siempre, como CT o RR
+          if (m.box) ponerBox(t, m.box, colorDe(m));
         }
         return [t];
       }
 
       if (tool.cat === "box") {
         if (tool.k === "borrar_box") d.box = [];
-        else ponerBox(t, tool.k, "azul");
+        else ponerBox(t, tool.k, colorDe(m));
         return [t];
       }
 
@@ -793,8 +1057,8 @@
         }
         if (!pendiente) { pendiente = t; return []; }
         if (pendiente === t) { pendiente = null; return []; }
-        if (arcoDe(pendiente) !== arcoDe(t)) {
-          alert("Las dos piezas deben pertenecer al mismo maxilar.");
+        if (filaDe(pendiente) !== filaDe(t)) {
+          alert("Las dos piezas deben pertenecer al mismo maxilar y a la misma dentición.");
           pendiente = t; return [];
         }
         if (m.vecinas && Math.abs(indiceDe(pendiente) - indiceDe(t)) !== 1) {
@@ -824,6 +1088,13 @@
       }
       var s = ev.target.closest("[data-sig]");
       if (s) { tool.sig = s.dataset.sig; renderBarra(); return; }
+    }
+    function onCambioNino(ev) {
+      if (!ev.target.classList || !ev.target.classList.contains("odo-nino-check")) return;
+      guardar();
+      ficha.nino = ev.target.checked;
+      render();
+      avisar([CLAVE_FICHA]);
     }
     function onCambioBarra(ev) {
       if (!ev.target.hasAttribute || !ev.target.hasAttribute("data-malo")) return;
@@ -861,7 +1132,7 @@
       var num = ev.target.closest("[data-num]");
       if (num) {
         var tn = num.dataset.num;
-        if (tool.cat === "span" || (tool.cat === "pieza" && tool.k === "clavija")) {
+        if (tool.cat === "span" || (tool.cat === "pieza" && (tool.k === "clavija" || tool.k === "gemina"))) {
           guardar();
           var cl = aplicarPieza(tn);
           sel = tn; render(); if (cl.length) avisar(cl);
@@ -908,6 +1179,11 @@
         avisar([CLAVE_FICHA]);
         return;
       }
+      if (ev.target.classList.contains("odo-obs")) {
+        ficha.obs = ev.target.value;
+        avisar([CLAVE_FICHA]);
+        return;
+      }
       if (ev.target.classList.contains("odo-q")) {
         var v = normalizar(ev.target.value.trim());
         var res = zonaBusqueda.querySelector(".odo-res");
@@ -925,6 +1201,7 @@
       }
     }
     function onCambioLienzo(ev) {
+      if (ev.target.classList.contains("odo-nino-check")) { onCambioNino(ev); return; }
       if (!ev.target.classList.contains("odo-hoja")) return;
       hoja = ev.target.value;
       if (onPaciente) onPaciente(pacienteId, hoja);
@@ -1073,7 +1350,7 @@
     else if (c === "Endodoncia") { d.pieza.pulpar = "TC"; d.box.push({ k: "TC", c: "azul" }); }
     else if (c === "Cariado") d.sup.vestibular = "caries";
     else if (c === "Obturado") d.sup.vestibular = "restauracion";
-    else if (c === "Sellante") d.sup.oclusal = "restauracion";
+    else if (c === "Sellante") { d.sup.oclusal = "sellante"; d.box.push({ k: "S", c: "azul" }); }
     else if (c === "Implante") d.box.push({ k: "IMP", c: "azul" });
     else if (c && c !== "Sano") d.nota = c;
     if (nota) d.nota = d.nota ? d.nota + " - " + nota : nota;
