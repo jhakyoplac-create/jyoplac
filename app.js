@@ -285,7 +285,7 @@ function normalizeState(data) {
     name: String(user.name || user.username || `Usuario ${index + 1}`).trim(),
     username: String(user.username || "").trim(),
     password: String(user.password || ""),
-    role: ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(user.role) ? user.role : "RECEPCION",
+    role: ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(user.role) ? user.role : "RECEPCION",
     active: user.active !== false,
     /* Lo que sale impreso bajo su firma. Va aqui a proposito: esta lista se
        rehace campo por campo, y lo que no se nombre se pierde. */
@@ -2816,16 +2816,23 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
 }
 
+/* "Doctor" es el dueno: ve todo, configuracion incluida, y puede eliminar
+   pagos. Usuarios, respaldo y reiniciar siguen siendo del administrador.
+   "Trabajador / Caja" es el codigo DOCTOR_TRABAJADOR de siempre, con sus
+   mismos accesos. "Doctor trabajador" -DOCTOR_ATENCION- solo atiende: no
+   cobra y en el inicio no ve la caja del dia ni el saldo pendiente. */
 const roleLabels = {
   ADMIN: "Administrador",
   DOCTOR: "Doctor",
-  DOCTOR_TRABAJADOR: "Doctor trabajador",
+  DOCTOR_ATENCION: "Doctor trabajador",
+  DOCTOR_TRABAJADOR: "Trabajador / Caja",
   RECEPCION: "Recepcion"
 };
 
 const roleViews = {
   ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
-  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas"],
+  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR_ATENCION: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "campanas"],
   DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
   RECEPCION: ["dashboard", "pacientes", "agenda", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
@@ -2842,6 +2849,18 @@ function hasRoleView(view) {
 
 function isAdmin() {
   return currentUser()?.role === "ADMIN";
+}
+
+function puedeConfigurar() {
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+}
+
+function puedeEliminarPagos() {
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+}
+
+function veDineroEnInicio() {
+  return currentUser()?.role !== "DOCTOR_ATENCION";
 }
 
 function addLocalAuditEvent(action, detail, patientId = "") {
@@ -2862,11 +2881,11 @@ function addLocalAuditEvent(action, detail, patientId = "") {
 }
 
 function canManageAppointments() {
-  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageClinical() {
-  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"].includes(currentUser()?.role);
 }
 
 function canEditReceivableAmount() {
@@ -2878,19 +2897,19 @@ function canManagePayments() {
 }
 
 function canManageExpenses() {
-  return ["ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageCash() {
-  return ["ADMIN", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canManageInventory() {
-  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canCreatePatients() {
-  return ["ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 function canDeletePatients() {
@@ -2945,8 +2964,8 @@ window.addEventListener("scroll", medirCabecera, { passive: true });
    usuario, asi que la llevamos a 480 px de ancho, que es mas de lo que ocupa
    un sello en la hoja. */
 function ponerSelloDelUsuario(input) {
-  if (!isAdmin()) {
-    alert("Solo el administrador puede cambiar el sello.");
+  if (!puedeConfigurar()) {
+    alert("Solo el administrador o el doctor pueden cambiar el sello.");
     input.value = "";
     return;
   }
@@ -3974,6 +3993,8 @@ function renderDashboard() {
   $("#kpiActive").textContent = state.patients.filter((patient) => patientStatus(patient) !== "INACTIVO").length;
   $("#kpiCash").textContent = money(cashToday);
   $("#kpiDebt").textContent = money(totalDebtValue);
+  const veDinero = veDineroEnInicio();
+  document.querySelectorAll("[data-kpi-dinero]").forEach((tarjeta) => { tarjeta.hidden = !veDinero; });
 
   $("#todayAppointments").innerHTML = appointmentsToday.length
     ? appointmentsToday.map(appointmentCard).join("")
@@ -4085,7 +4106,7 @@ function renderPatients() {
         <td>${escapeHtml(patient.doctor)}</td>
         <td><span class="status ${CLASE_ESTADO[status] ?? ""}" ${TITULO_ESTADO[status] ? `title="${TITULO_ESTADO[status]}"` : ""}>${status}</span></td>
         <td>${money(patientDebt(patient.id))}</td>
-        <td class="row-actions">${detailButton}<button class="small-btn" data-edit-patient="${patient.id}">Editar</button><button class="small-btn" data-pay-patient="${patient.id}">Pago</button>${canDeletePatients() ? `<button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button>` : ""}</td>
+        <td class="row-actions">${detailButton}<button class="small-btn" data-edit-patient="${patient.id}">Editar</button>${canManagePayments() ? `<button class="small-btn" data-pay-patient="${patient.id}">Pago</button>` : ""}${canDeletePatients() ? `<button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button>` : ""}</td>
       </tr>`;
       const detailRow = expanded ? `<tr class="patient-detail-row"><td colspan="6">${renderPatientAppointmentDetail(patient.id)}</td></tr>` : "";
       return mainRow + detailRow;
@@ -5274,7 +5295,7 @@ function usuarioDelDoctor(etiqueta) {
   const usuarios = todos.filter((usuario) => usuario.active !== false && String(usuario.name || "").trim());
   const exacto = usuarios.find((usuario) => enMinusculas(usuario.name) === enMinusculas(corto));
   if (exacto) return exacto;
-  const clinicos = ["DOCTOR", "DOCTOR_TRABAJADOR", "ADMIN"];
+  const clinicos = ["DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "ADMIN"];
   const candidatos = usuarios.filter((usuario) =>
     clinicos.includes(usuario.role) && enMinusculas(usuario.name).split(/\s+/)[0] === enMinusculas(corto));
   return candidatos.length === 1 ? candidatos[0] : null;
@@ -6562,7 +6583,7 @@ function renderPayments() {
       <th>Metodo</th>
       <th>Monto</th>
       <th>Notas</th>
-      ${isAdmin() ? "<th>Accion</th>" : ""}
+      ${puedeEliminarPagos() ? "<th>Accion</th>" : ""}
     `;
   }
   $("#paymentsTable").innerHTML = visiblePaymentsForCashView(cashDate)
@@ -6578,9 +6599,9 @@ function renderPayments() {
         <td>${esDescuentoDeTratamiento(payment) ? `<span class="payment-discount-tag">Tratamiento</span>` : escapeHtml(paymentMethodLabel(payment))}</td>
         <td><strong>${money(payment.amount)}</strong>${esDescuentoDeTratamiento(payment) ? `<br><span class="muted">Descontado ${money(payment.descontado)} · no entra a caja</span>` : ""}${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}${payment.comprobante ? `<br><span class="muted">${escapeHtml(payment.comprobante)}</span>` : ""}</td>
-        ${isAdmin() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
+        ${puedeEliminarPagos() ? `<td class="row-actions"><button class="small-btn danger-btn" data-delete-payment="${payment.id}">Eliminar</button></td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="${isAdmin() ? 6 : 5}">No hay pagos registrados.</td></tr>`;
+    }).join("") || `<tr><td colspan="${puedeEliminarPagos() ? 6 : 5}">No hay pagos registrados.</td></tr>`;
 }
 
 /* Lo que va en la descripcion del comprobante cuando no se escribe nada.
@@ -7371,7 +7392,7 @@ function renderReceivables() {
       <td><span class="status ${status === "VENCIDO" ? "danger" : status === "COBRAR HOY" ? "warn" : ""}">${status}</span>${canEditReceivableAmount() ? `<button class="inline-edit-btn" data-edit-receivable="${entry.id}" title="Editar monto">Editar</button>` : ""}</td>
       <td class="row-actions">
         <a class="small-btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>
-        <button class="small-btn" data-pay-history="${entry.id}">Registrar pago</button>
+        ${canManagePayments() ? `<button class="small-btn" data-pay-history="${entry.id}">Registrar pago</button>` : ""}
         ${canEditReceivableAmount() ? `<button class="small-btn danger-btn" data-void-receivable="${entry.id}" title="Anular esta deuda">Anular</button>` : ""}
       </td>
     </tr>`;
@@ -9693,7 +9714,7 @@ function bindEvents() {
 
   $("#paymentsTable")?.addEventListener("click", async (event) => {
     const del = event.target.closest("[data-delete-payment]");
-    if (!del || !isAdmin()) return;
+    if (!del || !puedeEliminarPagos()) return;
     const payment = state.payments.find((item) => item.id === del.dataset.deletePayment);
     if (!payment) return;
     const patient = patientById(payment.patientId);
@@ -10791,8 +10812,8 @@ function bindEvents() {
 
   $("#configForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!isAdmin()) {
-      alert("Solo el administrador puede cambiar la configuracion.");
+    if (!puedeConfigurar()) {
+      alert("Solo el administrador o el doctor pueden cambiar la configuracion.");
       return;
     }
     const data = formData(event.currentTarget);

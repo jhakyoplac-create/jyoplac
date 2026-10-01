@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261001-cabecera-de-un-solo-color" />
-    <link rel="stylesheet" href="odontograma.css?v=20261001-cabecera-de-un-solo-color" />
+    <link rel="stylesheet" href="styles.css?v=20261001-roles-doctor-trabajador" />
+    <link rel="stylesheet" href="odontograma.css?v=20261001-roles-doctor-trabajador" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -110,11 +110,11 @@
             <span>Pacientes activos</span>
             <strong id="kpiActive">0</strong>
           </article>
-          <article class="kpi">
+          <article class="kpi" data-kpi-dinero>
             <span>Caja del dia</span>
             <strong id="kpiCash">S/ 0</strong>
           </article>
-          <article class="kpi">
+          <article class="kpi" data-kpi-dinero>
             <span>Saldo pendiente</span>
             <strong id="kpiDebt">S/ 0</strong>
           </article>
@@ -1068,7 +1068,8 @@
             <label>Rol
               <select name="role" required>
                 <option value="DOCTOR">Doctor</option>
-                <option value="DOCTOR_TRABAJADOR">Doctor trabajador</option>
+                <option value="DOCTOR_ATENCION">Doctor trabajador</option>
+                <option value="DOCTOR_TRABAJADOR">Trabajador / Caja</option>
                 <option value="RECEPCION">Recepcion</option>
                 <option value="ADMIN">Administrador</option>
               </select>
@@ -1319,7 +1320,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20261001-cabecera-de-un-solo-color"></script>
-    <script src="app.js?v=20261001-cabecera-de-un-solo-color"></script>
+    <script src="odontograma.js?v=20261001-roles-doctor-trabajador"></script>
+    <script src="app.js?v=20261001-roles-doctor-trabajador"></script>
   </body>
 </html>
