@@ -1536,6 +1536,64 @@ tr.followup-pending td:first-child {
   color: var(--muted);
 }
 
+/* ---- La cabecera: el logo y el nombre, al lado del titulo ----
+   El logo, «CM Odontologia» y «Sistema dental» salen del menu y viven en la
+   cabecera. Ocupan exactamente el ancho del menu, asi que quedan alineados con
+   el sin pasarse de su borde, y no se mueven cuando el menu se esconde o
+   vuelve: lo unico que se desliza es la lista de modulos.
+
+   No se queda pegada arriba: sube con la pagina, como el resto. El menu si se
+   queda, y arranca donde termine lo que quede de cabecera a la vista
+   (--alto-cabecera, que app.js recalcula al desplazar). */
+body {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.topbar > .brand {
+  flex: 0 0 260px;
+  max-width: 260px;
+  box-sizing: border-box;
+  align-self: stretch;
+  padding: 14px 16px;
+  margin: 0;
+  background: linear-gradient(180deg, #c9f4ff 0%, #e6fff8 100%);
+  border-right: 1px solid var(--line);
+}
+
+/* el titulo de la pantalla y sus acciones, a la derecha del logo */
+.topbar-pantalla {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 28px;
+}
+
+/* El menu crece a lo que mide su lista: el logo ya no vive aqui. */
+.sidebar {
+  grid-column: 1;
+  padding-top: 14px;
+  top: var(--alto-cabecera, 0px);
+}
+
+.app {
+  grid-column: 2;
+  padding-top: 20px;
+}
+
 /* ---- Registrar paciente: el menu se va a la izquierda ----
    Solo en esa pantalla. El menu se desliza fuera y la ficha se lleva el ancho
    entero, sin dejar la columna vacia. Vuelve acercando el puntero al borde
@@ -1548,7 +1606,7 @@ body.sin-menu {
 body.sin-menu .sidebar {
   position: fixed;
   left: 0;
-  top: 0;
+  top: var(--alto-cabecera, 0px);
   bottom: 0;
   width: 260px;
   overflow-y: auto;
@@ -1579,7 +1637,7 @@ body.sin-menu:not(.menu-a-la-vista) .edge-zone {
   display: block;
   position: fixed;
   left: 0;
-  top: 0;
+  top: var(--alto-cabecera, 0px);
   bottom: 0;
   width: 14px;
   z-index: 26;
@@ -5254,8 +5312,8 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   }
 }
 
-/* La ficha del paciente es la mas larga del sistema: en Registrar paciente se
-   reparte en dos columnas para que entre casi entera en la pantalla. */
+/* ---- Registrar paciente: la ficha en dos columnas ----
+   Es la ficha mas larga del sistema y en una sola columna obligaba a bajar y
    bajar. Se reparte en dos y baja de 1352 px de alto a poco mas de 900, sin
    mover nada de su sitio: ni el menu, ni el logo, ni el titulo. */
 /* La ficha se lleva la mitad del ancho y sus campos se emparejan de dos en

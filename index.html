@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261001-lo-cerrado-se-queda-cerrado" />
-    <link rel="stylesheet" href="odontograma.css?v=20261001-lo-cerrado-se-queda-cerrado" />
+    <link rel="stylesheet" href="styles.css?v=20261001-la-ficha-y-el-logo-como-aurea" />
+    <link rel="stylesheet" href="odontograma.css?v=20261001-la-ficha-y-el-logo-como-aurea" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -29,11 +29,10 @@
         <p class="muted" id="loginMessage"></p>
       </form>
     </section>
-    <!-- Zona invisible del borde: en Registrar paciente, acercar el puntero aqui
-         devuelve el menu. No es un boton ni se ve. -->
-    <div id="edgeZone" class="edge-zone" aria-hidden="true"></div>
-
-    <aside class="sidebar">
+    <!-- La cabecera va a lo ancho de la pagina, fuera del menu: el logo y el
+         nombre del consultorio ocupan justo la columna del menu, asi que no se
+         mueven cuando el menu se esconde en Registrar paciente. -->
+    <header class="topbar">
       <div class="brand">
         <img class="brand-mark" src="assets/logo-cm.png" alt="Logo CM Odontologia" />
         <div>
@@ -41,6 +40,33 @@
           <small>Sistema dental</small>
         </div>
       </div>
+      <div class="topbar-pantalla">
+        <div>
+          <p class="eyebrow" id="todayLabel"></p>
+          <div class="title-row">
+            <h1 id="viewTitle">Dashboard</h1>
+            <button id="openCashPeriodBtn" class="title-icon-btn" type="button" aria-label="Ver cierre por mes" hidden>
+              <span></span>
+            </button>
+            <input id="cashTitleMonthPicker" class="title-month-picker" type="month" aria-label="Seleccionar mes de caja" />
+            <div id="cashTitleRangeControls" class="title-range-controls" hidden>
+              <label>Desde<input id="cashTitleFrom" type="date" /></label>
+              <label>Hasta<input id="cashTitleTo" type="date" /></label>
+            </div>
+          </div>
+        </div>
+        <div class="top-actions" id="patientTopActions" hidden>
+          <input id="globalSearch" class="search" type="search" placeholder="Buscar por nombre o DNI" />
+          <button class="primary" id="quickAppointmentBtn">Nueva cita</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Zona invisible del borde: en Registrar paciente, acercar el puntero aqui
+         devuelve el menu. No es un boton ni se ve. -->
+    <div id="edgeZone" class="edge-zone" aria-hidden="true"></div>
+
+    <aside class="sidebar">
       <nav class="nav" aria-label="Modulos">
         <button class="nav-item active" data-view="dashboard">Dashboard</button>
         <button class="nav-item" data-view="pacientes">Registrar paciente</button>
@@ -74,27 +100,6 @@
     </aside>
 
     <main class="app">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow" id="todayLabel"></p>
-          <div class="title-row">
-            <h1 id="viewTitle">Dashboard</h1>
-            <button id="openCashPeriodBtn" class="title-icon-btn" type="button" aria-label="Ver cierre por mes" hidden>
-              <span></span>
-            </button>
-            <input id="cashTitleMonthPicker" class="title-month-picker" type="month" aria-label="Seleccionar mes de caja" />
-            <div id="cashTitleRangeControls" class="title-range-controls" hidden>
-              <label>Desde<input id="cashTitleFrom" type="date" /></label>
-              <label>Hasta<input id="cashTitleTo" type="date" /></label>
-            </div>
-          </div>
-        </div>
-        <div class="top-actions" id="patientTopActions" hidden>
-          <input id="globalSearch" class="search" type="search" placeholder="Buscar por nombre o DNI" />
-          <button class="primary" id="quickAppointmentBtn">Nueva cita</button>
-        </div>
-      </header>
-
       <section id="dashboard" class="view active">
         <div class="kpi-grid">
           <article class="kpi">
@@ -1307,7 +1312,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20261001-lo-cerrado-se-queda-cerrado"></script>
-    <script src="app.js?v=20261001-lo-cerrado-se-queda-cerrado"></script>
+    <script src="odontograma.js?v=20261001-la-ficha-y-el-logo-como-aurea"></script>
+    <script src="app.js?v=20261001-la-ficha-y-el-logo-como-aurea"></script>
   </body>
 </html>

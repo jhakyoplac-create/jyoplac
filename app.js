@@ -2906,6 +2906,20 @@ function applyAuthState() {
   if (!hasRoleView(currentView)) setView((roleViews[user.role] || ["dashboard"])[0]);
 }
 
+/* La cabecera sube con la pagina, como cualquier otra cosa. Lo que se apunta
+   aqui no es cuanto mide, sino cuanto de ella sigue viendose: es desde ahi
+   donde empieza el menu, para no montarsele encima mientras el logo este a la
+   vista y para pegarse arriba en cuanto se haya ido. */
+function medirCabecera() {
+  const cabecera = document.querySelector(".topbar");
+  const visible = cabecera ? Math.max(0, Math.round(cabecera.getBoundingClientRect().bottom)) : 0;
+  document.documentElement.style.setProperty("--alto-cabecera", `${visible}px`);
+}
+
+window.addEventListener("resize", medirCabecera);
+window.addEventListener("scroll", medirCabecera, { passive: true });
+
+
 function setView(view) {
   if (!hasRoleView(view)) view = (roleViews[currentUser()?.role] || ["dashboard"])[0];
   currentView = view;
@@ -2921,6 +2935,8 @@ function setView(view) {
      reparten en dos columnas. El menu vuelve por el borde izquierdo y se queda
      hasta que se entre otra vez aqui. En los demas modulos, todo normal. */
   const enRegistro = view === "pacientes";
+  // el menu arranca donde termine la cabecera, y eso cambia al cambiar de vista
+  setTimeout(medirCabecera, 0);
   document.body.classList.toggle("ficha-en-dos-columnas", enRegistro);
   document.body.classList.toggle("sin-menu", enRegistro);
   if (enRegistro) document.body.classList.remove("menu-a-la-vista");
