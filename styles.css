@@ -21,6 +21,14 @@
   box-sizing: border-box;
 }
 
+/* El atributo hidden debe ganar siempre, incluso sobre las clases que definen
+   su propio display. Sin esto, un bloque que el codigo cierra -el representante
+   del menor, el detalle de la enfermedad- se queda a la vista porque su
+   display:grid le gana a la regla del navegador. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -4535,13 +4543,6 @@ menu {
 
 /* El representante legal del paciente menor: se pide dentro del registro, no
    en otra pantalla, y solo cuando la fecha de nacimiento dice que hace falta. */
-/* El bloque nace cerrado y se abre solo si el paciente es menor: display:grid
-   gana a [hidden] del navegador, asi que hay que apagarlo aqui. */
-.patient-guardian[hidden],
-#patientIllnessDetail[hidden] {
-  display: none;
-}
-
 .patient-guardian {
   display: grid;
   gap: 8px;
