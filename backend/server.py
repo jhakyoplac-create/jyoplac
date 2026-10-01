@@ -2925,6 +2925,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
             # ventana de Precios: tratamiento y cuanto cobra por el.
             if "listaDePrecios" in data:
                 values["listaDePrecios"] = data["listaDePrecios"]
+            # El % de comision de cada doctor, para el Resumen por doctor.
+            if isinstance(data.get("commissions"), dict):
+                values["commissions"] = {
+                    str(doctor): float(valor)
+                    for doctor, valor in data["commissions"].items()
+                    if isinstance(valor, (int, float)) and 0 <= valor <= 100
+                }
             set_config(values)
             return send_json(self, {"ok": True})
 

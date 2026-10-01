@@ -834,6 +834,12 @@ function applyApiBootstrap(payload) {
     /* La lista de precios del consultorio: lo que se escribio en la ventana de
        Precios. Viaja como texto JSON, igual que los servicios. */
     state.listaDePrecios = parseListaDePrecios(payload.config.listaDePrecios, state.listaDePrecios || []);
+    if (payload.config.commissions) {
+      try {
+        const comisiones = typeof payload.config.commissions === "string" ? JSON.parse(payload.config.commissions) : payload.config.commissions;
+        if (comisiones && typeof comisiones === "object") state.config.commissions = comisiones;
+      } catch {}
+    }
   }
   state = normalizeState(state);
   rememberApiUser(payload.user || apiUser);
@@ -7823,6 +7829,107 @@ function reportRefreshRange(month, compareMonth) {
   return { from, to };
 }
 
+/* Comisiones por doctor. Cuenta el dinero que de verdad entro a caja por los
+   pacientes que cada doctor atendio, entre dos fechas, y le aplica su
+   porcentaje. Lo que el paciente todavia debe no suma: cuenta el dia que paga.
+   De quien es cada pago: de quien atendio la nota que se cobra, o de quien
+   tenia la cita, o del tratamiento; si no, del doctor asignado al paciente.
+   Los productos del mismo cobro se restan, y un descuento de tratamiento llega
+   con monto cero. Igual que en el dental de EmpresaFacil. */
+const COMISION_POR_DEFECTO = 10;
+
+function porcentajeDeComision(doctor) {
+  const valor = Number(state.config.commissions?.[doctor]);
+  return Number.isFinite(valor) && valor >= 0 ? valor : COMISION_POR_DEFECTO;
+}
+
+function doctorDelPago(payment) {
+  const nota = payment.historyId ? historyById(payment.historyId) : null;
+  if (nota?.attendedBy) return nota.attendedBy;
+  const cita = payment.appointmentId ? state.appointments.find((a) => a.id === payment.appointmentId) : null;
+  if (cita?.doctor) return cita.doctor;
+  const tratamiento = payment.treatmentId ? historyById(payment.treatmentId) : null;
+  if (tratamiento?.attendedBy) return tratamiento.attendedBy;
+  return patientById(payment.patientId)?.doctor || "";
+}
+
+function comisionesPorDoctor(desde, hasta) {
+  const filas = new Map();
+  const fila = (doctor) => {
+    if (!filas.has(doctor)) filas.set(doctor, { doctor, cobrado: 0 });
+    return filas.get(doctor);
+  };
+  (state.config.doctors || []).filter(Boolean).forEach(fila);
+  state.payments
+    .filter((payment) => payment.date >= desde && payment.date <= hasta)
+    .forEach((payment) => {
+      const monto = Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0));
+      if (monto <= 0) return;
+      fila(doctorDelPago(payment) || "Sin doctor").cobrado += monto;
+    });
+  return [...filas.values()].map((item) => {
+    const porcentaje = item.doctor === "Sin doctor" ? 0 : porcentajeDeComision(item.doctor);
+    const cobrado = Math.round(item.cobrado * 100) / 100;
+    return { doctor: item.doctor, cobrado, porcentaje, comision: Math.round(cobrado * porcentaje) / 100 };
+  });
+}
+
+// montos con dos decimales siempre, para que la columna quede alineada
+const soles = (valor) => `S/ ${Number(valor || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/* Resumen por doctor. Pacientes, nuevos, citas y atendidas son del mes del
+   reporte; Total y Comision van por Desde/Hasta, que arranca en el primer dia
+   de ese mes y llega a hoy. El % lo cambian Administrador y Doctor. */
+function renderCommissions() {
+  const desde = $("#commissionFrom");
+  const hasta = $("#commissionTo");
+  if (!desde || !hasta) return;
+  const month = $("#reportMonth")?.value || todayISO().slice(0, 7);
+  // al cambiar el mes del reporte, el rango se va a ese mes
+  if (desde.dataset.mes !== month || !desde.value || !hasta.value) {
+    const finDeMes = monthEnd(month);
+    desde.value = `${month}-01`;
+    hasta.value = finDeMes < todayISO() ? finDeMes : todayISO();
+    desde.dataset.mes = month;
+  }
+  const metrics = reportMetrics(month);
+  const appointments = metrics.appointments;
+  const comisiones = comisionesPorDoctor(desde.value, hasta.value);
+  const doctores = [...new Set([...state.config.doctors.filter(Boolean), ...comisiones.filter((fila) => fila.cobrado > 0).map((fila) => fila.doctor)])];
+  const editable = puedeConfigurar();
+  let totalCobrado = 0;
+  let totalComision = 0;
+  const filas = doctores.map((doctor) => {
+    const comision = comisiones.find((fila) => fila.doctor === doctor) || { cobrado: 0, porcentaje: 0, comision: 0 };
+    totalCobrado += comision.cobrado;
+    totalComision += comision.comision;
+    const count = appointments.filter((appointment) => appointment.doctor === doctor).length;
+    const attended = appointments.filter((appointment) => appointment.doctor === doctor && appointment.status === "ATENDIDA").length;
+    const assignedPatients = state.patients.filter((patient) => patient.doctor === doctor).length;
+    const newAssigned = metrics.newPatients.filter((patient) => patient.doctor === doctor).length;
+    const porcentaje = doctor === "Sin doctor"
+      ? "—"
+      : editable
+        ? `<input class="commission-pct" type="number" min="0" max="100" step="0.5" value="${comision.porcentaje}" data-commission-doctor="${escapeHtml(doctor)}" aria-label="Comision de ${escapeHtml(doctor)}" />`
+        : `${comision.porcentaje}`;
+    return `<tr><td>${escapeHtml(doctor)}</td><td>${assignedPatients}</td><td>${newAssigned}</td><td>${count}</td><td>${attended}</td><td>${soles(comision.cobrado)}</td><td class="commission-pct-cell">${porcentaje}</td><td><strong>${soles(comision.comision)}</strong></td></tr>`;
+  }).join("");
+  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th title="Pacientes asignados">Pac.</th><th title="Nuevos del mes">Nuevos</th><th>Citas</th><th title="Atendidas">Atend.</th><th title="Cobrado entre las fechas">Total</th><th>%</th><th>Comision</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="5"><strong>Total</strong></td><td><strong>${soles(totalCobrado)}</strong></td><td></td><td><strong>${soles(totalComision)}</strong></td></tr></tfoot></table>`;
+}
+
+/* CM trae los pagos por rango: si las fechas salen de lo que el reporte ya
+   cargo, se pide el rango que cubre las dos cosas para no perder ninguna. */
+function refreshCommissionsRange() {
+  renderCommissions();
+  const month = $("#reportMonth")?.value || todayISO().slice(0, 7);
+  const compareMonth = $("#compareMonth")?.value || previousMonth(month);
+  const range = reportRefreshRange(month, compareMonth);
+  const desde = $("#commissionFrom")?.value || range.from;
+  const hasta = $("#commissionTo")?.value || range.to;
+  if (desde >= range.from && hasta <= range.to) return;
+  refreshRangeThenRender(desde < range.from ? desde : range.from, hasta > range.to ? hasta : range.to, renderReports);
+}
+
 async function refreshReportsRange() {
   const month = $("#reportMonth")?.value || todayISO().slice(0, 7);
   const compareMonth = $("#compareMonth")?.value || previousMonth(month);
@@ -8035,14 +8142,7 @@ function renderReports() {
   $("#monthCompareReport").innerHTML = `<table><thead><tr><th>Indicador</th><th>${monthLabel(month)}</th><th>${monthLabel(compareMonth)}</th><th>Variacion</th></tr></thead><tbody>${compareRows}</tbody></table>`;
   renderDailyIncomeBreakdown(month);
 
-  const doctorRows = state.config.doctors.map((doctor) => {
-    const count = appointments.filter((appointment) => appointment.doctor === doctor).length;
-    const attended = appointments.filter((appointment) => appointment.doctor === doctor && appointment.status === "ATENDIDA").length;
-    const assignedPatients = state.patients.filter((patient) => patient.doctor === doctor).length;
-    const newAssigned = metrics.newPatients.filter((patient) => patient.doctor === doctor).length;
-    return `<tr><td>${escapeHtml(doctor)}</td><td>${assignedPatients}</td><td>${newAssigned}</td><td>${count}</td><td>${attended}</td></tr>`;
-  }).join("");
-  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th>Pacientes</th><th>Nuevos mes</th><th>Citas</th><th>Atendidas</th></tr></thead><tbody>${doctorRows}</tbody></table>`;
+  renderCommissions();
 
   const serviceMap = appointments.reduce((map, appointment) => {
     map[appointment.service] = (map[appointment.service] || 0) + 1;
@@ -9140,6 +9240,35 @@ function bindEvents() {
   on("#reportMonth", "change", () => {
     renderReports();
     refreshReportsRange();
+  });
+  on("#commissionFrom", "change", refreshCommissionsRange);
+  on("#commissionTo", "change", refreshCommissionsRange);
+  /* El % de cada doctor queda en la configuracion del servidor. Se guarda al
+     salir del campo para no redibujar mientras se escribe. */
+  on("#doctorReport", "change", async (event) => {
+    const campo = event.target.closest("[data-commission-doctor]");
+    if (!campo || !puedeConfigurar()) return;
+    const valor = Number(campo.value);
+    if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
+      alert("El porcentaje debe estar entre 0 y 100.");
+      renderCommissions();
+      return;
+    }
+    state.config.commissions = { ...(state.config.commissions || {}), [campo.dataset.commissionDoctor]: valor };
+    try {
+      await saveConfigApi({ commissions: state.config.commissions });
+    } catch (error) {
+      alert(error.message);
+    }
+    if (!API_ENABLED) saveState();
+    renderCommissions();
+  });
+  on("#exportCommissionsBtn", "click", () => {
+    const desde = $("#commissionFrom").value;
+    const hasta = $("#commissionTo").value;
+    exportCsv(`comisiones-${desde}-a-${hasta}.csv`, comisionesPorDoctor(desde, hasta).map((fila) => ({
+      desde, hasta, doctor: fila.doctor, cobrado: fila.cobrado, porcentaje: fila.porcentaje, comision: fila.comision
+    })));
   });
   on("#compareMonth", "change", () => {
     renderReports();

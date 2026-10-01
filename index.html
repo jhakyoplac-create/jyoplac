@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261001-roles-doctor-trabajador" />
-    <link rel="stylesheet" href="odontograma.css?v=20261001-roles-doctor-trabajador" />
+    <link rel="stylesheet" href="styles.css?v=20261001-comision-por-doctor-titulo" />
+    <link rel="stylesheet" href="odontograma.css?v=20261001-comision-por-doctor-titulo" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -923,8 +923,16 @@
             </div>
             <div id="dailyIncomeBreakdownReport" class="table-wrap"></div>
           </section>
-          <section class="panel">
-            <div class="panel-head"><h2>Resumen por doctor</h2></div>
+          <section class="panel doctor-summary-panel">
+            <div class="panel-head">
+              <h2>Resumen por doctor</h2>
+              <div class="commission-range" title="Total: lo que ya se cobro de los pacientes que atendio cada doctor entre estas fechas. Lo que el paciente debe cuenta el dia que paga.">
+                <input id="commissionFrom" type="date" aria-label="Comision desde" />
+                <span class="muted">a</span>
+                <input id="commissionTo" type="date" aria-label="Comision hasta" />
+                <button class="ghost" id="exportCommissionsBtn">CSV</button>
+              </div>
+            </div>
             <div id="doctorReport" class="table-wrap"></div>
           </section>
           <section class="panel">
@@ -1320,7 +1328,7 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20261001-roles-doctor-trabajador"></script>
-    <script src="app.js?v=20261001-roles-doctor-trabajador"></script>
+    <script src="odontograma.js?v=20261001-comision-por-doctor-titulo"></script>
+    <script src="app.js?v=20261001-comision-por-doctor-titulo"></script>
   </body>
 </html>

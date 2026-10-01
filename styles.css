@@ -5804,3 +5804,57 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
 #userForm .sello-caja {
   margin: 4px 0;
 }
+
+/* Comisiones en el Resumen por doctor, en Reportes. El cuadro mantiene la
+   mitad del ancho como los demas: las columnas van apretadas y las cifras
+   alineadas a la derecha para que se lean como una tabla de montos. */
+.commission-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.commission-range input[type="date"] {
+  width: 128px;
+  padding: 5px 6px;
+  font-size: 12px;
+}
+#doctorReport th,
+#doctorReport td {
+  padding-left: 6px;
+  padding-right: 6px;
+  white-space: nowrap;
+}
+#doctorReport th:first-child,
+#doctorReport td:first-child {
+  white-space: normal;
+  padding-left: 0;
+}
+#doctorReport th:not(:first-child),
+#doctorReport td:not(:first-child) {
+  text-align: right;
+}
+#doctorReport td:nth-child(7) {
+  text-align: center;
+}
+.commission-pct {
+  width: 36px;
+  padding: 2px 3px;
+  text-align: center;
+  font-size: 12px;
+  -moz-appearance: textfield;
+}
+.commission-pct::-webkit-outer-spin-button,
+.commission-pct::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#doctorReport tfoot td {
+  border-top: 2px solid var(--line);
+}
+.doctor-summary-panel .panel-head {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.doctor-summary-panel .panel-head h2 {
+  white-space: nowrap;
+}
