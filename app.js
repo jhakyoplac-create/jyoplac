@@ -7104,6 +7104,67 @@ async function lookupPatientDni() {
   }
 }
 
+// el ultimo DNI que se consulto, para no preguntar dos veces por lo mismo
+let ultimoDniDelRepresentante = "";
+
+/* Poner el valor a mano no avisa a nadie: sin este aviso, el nombre traido por
+   la consulta no se copiaba al contacto de emergencia. */
+function avisarDelRepresentante(campo) {
+  campo.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/* El representante legal tambien se busca por su DNI, igual que el paciente:
+   quien lo atiende ya escribio ocho numeros, no tiene por que escribir ademas
+   el nombre. Primero se mira en la base del consultorio -la madre suele ser
+   paciente tambien, y ahi esta su celular- y solo si no esta se consulta
+   afuera. Un nombre ya escrito no se pisa: en recepcion se corrigen tildes y
+   el orden de los apellidos, y perder esa correccion molesta mas que ayuda. */
+async function buscarNombreDelRepresentante() {
+  const form = $("#patientForm");
+  const hint = $("#guardianDniHint");
+  const dniField = form?.elements?.guardianDni;
+  const nameField = form?.elements?.guardianName;
+  const phoneField = form?.elements?.guardianPhone;
+  if (!dniField || !nameField) return;
+  const dni = onlyDigits(dniField.value);
+  if (dniField.value !== dni) dniField.value = dni;
+  if (dni.length !== 8 || dni === ultimoDniDelRepresentante) return;
+  if (String(nameField.value || "").trim()) return;
+  ultimoDniDelRepresentante = dni;
+
+  const yaEsPaciente = state.patients.find((patient) => String(patient.dni || "").trim() === dni);
+  if (yaEsPaciente) {
+    nameField.value = yaEsPaciente.name || "";
+    if (phoneField && !String(phoneField.value || "").trim() && yaEsPaciente.phone) {
+      phoneField.value = yaEsPaciente.phone;
+    }
+    if (hint) hint.textContent = "Encontrado en la base del consultorio.";
+    avisarDelRepresentante(nameField);
+    return;
+  }
+  if (!API_ENABLED || !apiToken) {
+    if (hint) hint.textContent = "";
+    ultimoDniDelRepresentante = "";
+    return;
+  }
+  if (hint) hint.textContent = "Buscando el nombre...";
+  try {
+    const encontrado = await lookupExternalDni(dni);
+    if (encontrado?.name && !String(nameField.value || "").trim()) {
+      nameField.value = encontrado.name;
+      if (hint) hint.textContent = "Nombre encontrado por DNI. Revísalo antes de guardar.";
+      avisarDelRepresentante(nameField);
+    } else if (hint) {
+      hint.textContent = "No se encontró el DNI. Escribe el nombre a mano.";
+    }
+  } catch (error) {
+    // el registro no se detiene por esto: se avisa y se sigue a mano
+    if (hint) hint.textContent = error.message || "No se pudo consultar. Escribe el nombre a mano.";
+    ultimoDniDelRepresentante = "";
+  }
+}
+
+
 async function completePendingPayment(receiptValues = null) {
   const context = pendingPaymentContext;
   if (!context) return;
@@ -8958,10 +9019,15 @@ function bindEvents() {
 
   on('#patientForm input[name="dni"]', "input", autocompletarPacientePorDni);
   on('#patientForm input[name="dni"]', "blur", autocompletarPacientePorDni);
+  on('#patientForm input[name="guardianDni"]', "input", buscarNombreDelRepresentante);
+  on('#patientForm input[name="guardianDni"]', "blur", buscarNombreDelRepresentante);
   on("#patientForm", "reset", () => {
     ultimoDniConsultado = "";
+    ultimoDniDelRepresentante = "";
     const hint = $("#patientDniLookupHint");
     if (hint) hint.textContent = "";
+    const hintRepresentante = $("#guardianDniHint");
+    if (hintRepresentante) hintRepresentante.textContent = "";
   });
 
   on("#agendaDate", "change", () => {
