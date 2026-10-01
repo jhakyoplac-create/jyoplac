@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261001-odontograma-norma" />
-    <link rel="stylesheet" href="odontograma.css?v=20261001-odontograma-norma" />
+    <link rel="stylesheet" href="styles.css?v=20261001-historia-del-colegio" />
+    <link rel="stylesheet" href="odontograma.css?v=20261001-historia-del-colegio" />
   </head>
   <body class="locked">
     <section id="loginScreen" class="login-screen">
@@ -29,6 +29,10 @@
         <p class="muted" id="loginMessage"></p>
       </form>
     </section>
+    <!-- Zona invisible del borde: en Registrar paciente, acercar el puntero aqui
+         devuelve el menu. No es un boton ni se ve. -->
+    <div id="edgeZone" class="edge-zone" aria-hidden="true"></div>
+
     <aside class="sidebar">
       <div class="brand">
         <img class="brand-mark" src="assets/logo-cm.png" alt="Logo CM Odontologia" />
@@ -149,15 +153,97 @@
               <button type="reset" class="ghost">Limpiar</button>
             </div>
             <input type="hidden" name="id" />
-            <label>DNI<input name="dni" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" required /></label>
-            <p class="muted" id="patientDniLookupHint"></p>
-            <label>Nombre completo<input name="name" minlength="5" required /></label>
-            <div class="inline-fields patient-contact-row">
-              <label class="compact-label">Celular<input name="phone" inputmode="numeric" pattern="9[0-9]{8}" minlength="9" maxlength="9" required /></label>
-              <label class="compact-label">Fecha de nacimiento<input name="birthDate" type="date" required /></label>
+            <!-- El DNI y su aviso van juntos en una celda: el cuadro solo tiene
+                 que aceptar ocho numeros, y el nombre entra a su costado. -->
+            <!-- El DNI son ocho numeros: su cuadro mide eso y el nombre entra
+                 pegado a su costado, sin dejar el hueco de media fila. -->
+            <div class="patient-identidad">
+              <label class="patient-dni">DNI<input name="dni" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" required /></label>
+              <label class="patient-nombre">Nombre completo<input name="name" minlength="5" required /></label>
+              <label class="compact-label patient-sexo-campo">Sexo
+                <span class="patient-sexo">
+                  <label><input type="radio" name="sexo" value="M" /> M</label>
+                  <label><input type="radio" name="sexo" value="F" /> F</label>
+                </span>
+              </label>
+              <label class="compact-label patient-civil">Estado civil<select name="maritalStatus">
+                <option value=""></option>
+                <option>Soltero(a)</option>
+                <option>Casado(a)</option>
+                <option>Conviviente</option>
+                <option>Divorciado(a)</option>
+                <option>Viudo(a)</option>
+              </select></label>
             </div>
-            <label>Doctor principal<select name="doctor"></select></label>
-            <label>Tratamiento principal<select name="mainTreatment"></select></label>
+            <p class="muted" id="patientDniLookupHint"></p>
+            <div class="patient-contact-row">
+              <label class="compact-label">Fecha de nacimiento<input name="birthDate" type="date" required /></label>
+              <label class="compact-label">Celular<input name="phone" inputmode="numeric" pattern="9[0-9]{8}" minlength="9" maxlength="9" required /></label>
+            </div>
+            <fieldset class="patient-guardian" id="patientGuardian" hidden>
+              <legend>Representante legal</legend>
+              <p class="muted">El paciente es menor de edad: quien firme por &eacute;l va en su historia y en los consentimientos.</p>
+              <div class="patient-identidad">
+                <label class="patient-dni">DNI<input name="guardianDni" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" /></label>
+                <label class="patient-nombre">Nombre completo<input name="guardianName" maxlength="120" /></label>
+                <label class="compact-label patient-parentesco">Parentesco<input name="guardianRelation" maxlength="40" placeholder="Madre o padre" /></label>
+              </div>
+              <p class="muted" id="guardianDniHint"></p>
+              <div class="inline-fields">
+                <label class="compact-label">Celular<input name="guardianPhone" inputmode="numeric" pattern="9[0-9]{8}" maxlength="9" /></label>
+                <label class="compact-label">Domicilio<input name="guardianAddress" maxlength="120" placeholder="Si es distinto al del paciente" /></label>
+              </div>
+            </fieldset>
+            <!-- De aqui abajo se sigue el orden de la historia clinica en papel:
+                 de donde viene el paciente, como ubicarlo, por que vino y que
+                 trae de antes. El doctor y el tratamiento van al final porque
+                 los pone la clinica, no el paciente. -->
+            <div class="inline-fields">
+              <label class="compact-label">Lugar de nacimiento<input name="birthPlace" maxlength="80" /></label>
+              <label class="compact-label">Lugar de procedencia<input name="origin" maxlength="80" /></label>
+            </div>
+            <label>Domicilio actual<input name="address" maxlength="120" placeholder="Jr. Los Cedros 456" /></label>
+            <div class="inline-fields">
+              <label class="compact-label">Ocupaci&oacute;n<input name="occupation" maxlength="80" /></label>
+              <label class="compact-label">Grado de instrucci&oacute;n<input name="education" maxlength="60" list="patientEducationOptions" /></label>
+            </div>
+            <datalist id="patientEducationOptions">
+              <option value="Sin instrucci&oacute;n"></option>
+              <option value="Inicial"></option>
+              <option value="Primaria"></option>
+              <option value="Secundaria"></option>
+              <option value="T&eacute;cnica"></option>
+              <option value="Superior"></option>
+            </datalist>
+            <div class="inline-fields">
+              <label class="compact-label">Viajes en el &uacute;ltimo a&ntilde;o<input name="travels" maxlength="120" placeholder="Ninguno" /></label>
+              <label class="compact-label">En caso de emergencia comunicarse a<input name="emergencyContact" maxlength="140" placeholder="Nombre y tel&eacute;fono" /></label>
+            </div>
+            <label>Motivo de consulta<textarea name="chiefComplaint" rows="2" maxlength="300" placeholder="Por qu&eacute; viene el paciente, con sus palabras"></textarea></label>
+            <!-- La enfermedad actual, tal como la pide la hoja del COP. El
+                 detalle solo se abre si el paciente trae algo: al que viene a
+                 una limpieza no se le pregunta el relato cronologico. -->
+            <label>Enfermedad actual<textarea name="currentIllness" rows="2" placeholder="Lo que le pasa ahora, si viene por algo"></textarea></label>
+            <div class="stack" id="patientIllnessDetail" hidden>
+              <div class="inline-fields">
+                <label class="compact-label">Tiempo de enfermedad<input name="illnessTime" maxlength="80" /></label>
+                <label class="compact-label">Signos y s&iacute;ntomas principales<input name="symptoms" maxlength="160" /></label>
+              </div>
+              <label>Relato cronol&oacute;gico<textarea name="anamnesis" rows="2" placeholder="Como empezo y como fue cambiando"></textarea></label>
+              <label>Funciones biol&oacute;gicas<textarea name="biologicalFunctions" rows="2" placeholder="Apetito, sed, sue&ntilde;o, orina, deposiciones"></textarea></label>
+            </div>
+            <!-- Los antecedentes los toma recepcion al registrar, con lo que el
+                 paciente contesta; la doctora los revisa en la primera atencion. -->
+            <label>Antecedentes familiares<textarea name="familyHistory" rows="2" placeholder="Enfermedades de padres o hermanos"></textarea></label>
+            <label>Antecedentes personales<textarea name="personalHistory" rows="2" placeholder="Enfermedades, cirug&iacute;as, hospitalizaciones"></textarea></label>
+            <div class="inline-fields">
+              <label class="compact-label">Al&eacute;rgico a<input name="allergies" maxlength="160" placeholder="Ninguna conocida" /></label>
+              <label class="compact-label">Medicaci&oacute;n actual<input name="medications" maxlength="160" placeholder="Ninguna" /></label>
+            </div>
+            <div class="inline-fields">
+              <label class="compact-label">Doctor principal<select name="doctor"></select></label>
+              <label class="compact-label">Tratamiento principal<select name="mainTreatment"></select></label>
+            </div>
             <label>Observaciones<textarea name="notes" rows="3"></textarea></label>
             <button class="primary" type="submit">Guardar paciente</button>
             <p class="notice subtle" id="patientSaveMessage" hidden></p>
@@ -229,21 +315,21 @@
             <div class="panel-head">
               <h2>Historia del paciente</h2>
               <div class="history-sheet-actions">
+                <!-- Imprimir vive al final de la hoja, no aqui: se imprime cuando
+                     ya se termino de leerla y de firmarla, no antes. -->
                 <select id="historyPatientFilter"></select>
-                <button class="ghost" type="button" id="printHistoryBtn">Imprimir historia</button>
               </div>
             </div>
-            <div id="historyTimeline"></div>
-          </section>
-
-          <!-- El plan de tratamiento: el presupuesto que sale del odontograma,
-               la ventana de precios y las proformas entregadas. -->
-          <section class="panel plan-panel">
-            <div class="panel-head">
-              <h2>Plan de tratamiento</h2>
-              <span class="muted">Sale del paciente elegido arriba</span>
+            <!-- Las formas de mirar al mismo paciente: no son pantallas
+                 distintas, por eso van como pestanas y no como paneles. -->
+            <div class="hc-pestanas" id="historySheetTabs">
+              <button class="hc-pestana" type="button" data-hoja="historial">Historial</button>
+              <button class="hc-pestana" type="button" data-hoja="consentimiento">Consentimiento informado</button>
+              <button class="hc-pestana" type="button" data-hoja="historia">Historia cl&iacute;nica</button>
+              <button class="hc-pestana" type="button" data-hoja="odontograma">Odontograma</button>
+              <button class="hc-pestana" type="button" data-hoja="plan">Plan de tratamiento</button>
             </div>
-            <div id="planTimeline"></div>
+            <div id="historyTimeline"></div>
           </section>
 
           <section class="panel odontogram-copies-panel">
@@ -1206,7 +1292,22 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20261001-odontograma-norma"></script>
-    <script src="app.js?v=20261001-odontograma-norma"></script>
+    <dialog id="signatureDialog">
+      <form method="dialog" class="form modal-form signature-modal">
+        <div class="panel-head">
+          <h2>Firma del paciente</h2>
+          <button class="icon" data-close-dialog="signatureDialog" type="button" aria-label="Cerrar">x</button>
+        </div>
+        <p class="muted" id="signatureHint">Firma con el dedo o con el mouse dentro del recuadro.</p>
+        <canvas id="signatureCanvas" width="640" height="220"></canvas>
+        <div class="signature-actions">
+          <button class="ghost" type="button" id="clearSignatureBtn">Borrar y volver a firmar</button>
+          <button class="primary" type="button" id="saveSignatureBtn">Guardar firma</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="odontograma.js?v=20261001-historia-del-colegio"></script>
+    <script src="app.js?v=20261001-historia-del-colegio"></script>
   </body>
 </html>

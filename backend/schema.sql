@@ -247,6 +247,22 @@ CREATE TABLE IF NOT EXISTS proformas (
   FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
 );
 
+-- Los consentimientos informados que firma el paciente antes de un
+-- tratamiento. Una vez firmados no se tocan: son el papel que respalda la
+-- atencion, por eso guardan la firma dibujada tal cual se trazo.
+CREATE TABLE IF NOT EXISTS consentimientos (
+  id TEXT PRIMARY KEY,
+  patient_id TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  fecha TEXT NOT NULL,
+  firma TEXT NOT NULL,
+  firmante TEXT,
+  doctor TEXT,
+  registrado_por TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS app_config (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

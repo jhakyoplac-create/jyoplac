@@ -67,6 +67,14 @@ def today_lima():
     return date.today().isoformat()
 
 
+def now_lima():
+    """La hora del consultorio. Sin la zona horaria el servidor de Render
+    responde en UTC y la historia se abriria cinco horas despues."""
+    if ZoneInfo:
+        return datetime.now(ZoneInfo("America/Lima"))
+    return datetime.now()
+
+
 def add_days_iso(value, days):
     try:
         return date.fromordinal(date.fromisoformat(value).toordinal() + days).isoformat()
@@ -260,6 +268,61 @@ def migrate_db(conn):
     # el descuento y los tratamientos elegidos a mano. Va en JSON porque es una
     # propuesta, no un cobro: lo cobrado vive en payments.
     ensure_column(conn, "patients", "presupuesto", "TEXT")
+    # La hora en que se abrio la historia: la hoja la pide al lado de la fecha.
+    ensure_column(conn, "patients", "historia_hora", "TEXT")
+    # Lo que pide el formato de historia clinica del Colegio y la nota no
+    # guardaba: la enfermedad actual, los antecedentes, los signos vitales,
+    # el pronostico y la firma del profesional.
+    ensure_column(conn, "clinical_history", "current_illness", "TEXT")
+    ensure_column(conn, "clinical_history", "illness_time", "TEXT")
+    ensure_column(conn, "clinical_history", "symptoms", "TEXT")
+    ensure_column(conn, "clinical_history", "biological_functions", "TEXT")
+    ensure_column(conn, "clinical_history", "family_history", "TEXT")
+    ensure_column(conn, "clinical_history", "personal_history", "TEXT")
+    ensure_column(conn, "clinical_history", "blood_pressure", "TEXT")
+    ensure_column(conn, "clinical_history", "pulse", "TEXT")
+    ensure_column(conn, "clinical_history", "temperature", "TEXT")
+    ensure_column(conn, "clinical_history", "heart_rate", "TEXT")
+    ensure_column(conn, "clinical_history", "resp_rate", "TEXT")
+    ensure_column(conn, "clinical_history", "oral_exam", "TEXT")
+    ensure_column(conn, "clinical_history", "final_diagnosis", "TEXT")
+    ensure_column(conn, "clinical_history", "work_plan", "TEXT")
+    ensure_column(conn, "clinical_history", "prognosis", "TEXT")
+    ensure_column(conn, "clinical_history", "recommendations", "TEXT")
+    ensure_column(conn, "clinical_history", "follow_up", "TEXT")
+    ensure_column(conn, "clinical_history", "professional", "TEXT")
+    ensure_column(conn, "clinical_history", "firma", "TEXT")
+    ensure_column(conn, "clinical_history", "firmada_por", "TEXT")
+    ensure_column(conn, "clinical_history", "firmada_el", "TEXT")
+    ensure_column(conn, "clinical_history", "discharged", "INTEGER NOT NULL DEFAULT 0")
+    # Los datos que pide la historia clinica del Colegio: domicilio, el
+    # representante del menor y los antecedentes. Antes se escribian a mano
+    # en cada hoja; guardados aqui salen solos en todas.
+    ensure_column(conn, "patients", "address", "TEXT")
+    ensure_column(conn, "patients", "sexo", "TEXT")
+    ensure_column(conn, "patients", "birth_place", "TEXT")
+    ensure_column(conn, "patients", "origin", "TEXT")
+    ensure_column(conn, "patients", "education", "TEXT")
+    ensure_column(conn, "patients", "marital_status", "TEXT")
+    ensure_column(conn, "patients", "occupation", "TEXT")
+    ensure_column(conn, "patients", "travels", "TEXT")
+    ensure_column(conn, "patients", "emergency_contact", "TEXT")
+    ensure_column(conn, "patients", "chief_complaint", "TEXT")
+    ensure_column(conn, "patients", "companion", "TEXT")
+    ensure_column(conn, "patients", "allergies", "TEXT")
+    ensure_column(conn, "patients", "medications", "TEXT")
+    ensure_column(conn, "patients", "personal_history", "TEXT")
+    ensure_column(conn, "patients", "family_history", "TEXT")
+    ensure_column(conn, "patients", "current_illness", "TEXT")
+    ensure_column(conn, "patients", "illness_time", "TEXT")
+    ensure_column(conn, "patients", "symptoms", "TEXT")
+    ensure_column(conn, "patients", "anamnesis", "TEXT")
+    ensure_column(conn, "patients", "biological_functions", "TEXT")
+    ensure_column(conn, "patients", "guardian_name", "TEXT")
+    ensure_column(conn, "patients", "guardian_dni", "TEXT")
+    ensure_column(conn, "patients", "guardian_relation", "TEXT")
+    ensure_column(conn, "patients", "guardian_phone", "TEXT")
+    ensure_column(conn, "patients", "guardian_address", "TEXT")
     # Resultado de la llamada de seguimiento. contact_snooze evita que el mismo
     # paciente reaparezca al dia siguiente cuando ya se le llamo y quedo en algo.
     ensure_column(conn, "patients", "contact_date", "TEXT")
@@ -1292,6 +1355,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 # Los presupuestos entregados: se guardan congelados, con su
                 # numero y la fecha en que se dieron.
                 "proformas": list_table("proformas", "numero DESC"),
+                "consentimientos": list_table("consentimientos", "fecha DESC"),
                 "payments": list_table("payments", "date DESC, created_at DESC"),
                 "electronicReceipts": list_electronic_receipts(),
                 "expenses": list_table("expenses", "date DESC, created_at DESC"),
@@ -1470,7 +1534,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     return send_json(self, {"error": "Paciente no indicado."}, 400)
                 with db() as conn:
                     fila = conn.execute(
-                        "SELECT id, name, historia_numero, historia_desde FROM patients WHERE id = ?",
+                        "SELECT id, name, historia_numero, historia_desde, historia_hora FROM patients WHERE id = ?",
                         (item_id,),
                     ).fetchone()
                     if not fila:
@@ -1480,13 +1544,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             "ok": True,
                             "historiaNumero": int(fila["historia_numero"]),
                             "historiaDesde": fila["historia_desde"] or "",
+                            "historiaHora": fila["historia_hora"] or "",
                         })
                     ultimo = conn.execute("SELECT COALESCE(MAX(historia_numero), 0) AS n FROM patients").fetchone()["n"]
                     siguiente = int(ultimo or 0) + 1
                     desde = today_lima()
+                    # la hoja pide fecha y hora de apertura, y son las de ahora
+                    hora = now_lima().strftime("%H:%M")
                     conn.execute(
-                        "UPDATE patients SET historia_numero = ?, historia_desde = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (siguiente, desde, item_id),
+                        "UPDATE patients SET historia_numero = ?, historia_desde = ?, historia_hora = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (siguiente, desde, hora, item_id),
                     )
                     add_audit_event(
                         conn,
@@ -1495,7 +1562,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         f"Abrio la historia clinica N.{siguiente:04d} de {fila['name']}",
                         item_id,
                     )
-                return send_json(self, {"ok": True, "historiaNumero": siguiente, "historiaDesde": desde})
+                return send_json(self, {"ok": True, "historiaNumero": siguiente, "historiaDesde": desde, "historiaHora": hora})
             if data.get("delete"):
                 if not require_role(self, {"ADMIN", "DOCTOR"}):
                     return
@@ -1530,9 +1597,35 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     INSERT INTO patients (
                       id, dni, name, phone, birth_date, doctor, main_treatment, status, notes,
                       created_by_id, created_by_name, created_by_role, hide_from_reception_new,
-                      presupuesto
+                      presupuesto,
+                      historia_hora,
+                      address,
+                      sexo,
+                      birth_place,
+                      origin,
+                      education,
+                      marital_status,
+                      occupation,
+                      travels,
+                      emergency_contact,
+                      chief_complaint,
+                      companion,
+                      allergies,
+                      medications,
+                      personal_history,
+                      family_history,
+                      current_illness,
+                      illness_time,
+                      symptoms,
+                      anamnesis,
+                      biological_functions,
+                      guardian_name,
+                      guardian_dni,
+                      guardian_relation,
+                      guardian_phone,
+                      guardian_address
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       dni=excluded.dni, name=excluded.name, phone=excluded.phone,
                       birth_date=excluded.birth_date,
@@ -1540,6 +1633,32 @@ class DentalHandler(SimpleHTTPRequestHandler):
                       status=excluded.status, notes=excluded.notes,
                       hide_from_reception_new=excluded.hide_from_reception_new,
                       presupuesto=excluded.presupuesto,
+                      historia_hora=excluded.historia_hora,
+                      address=excluded.address,
+                      sexo=excluded.sexo,
+                      birth_place=excluded.birth_place,
+                      origin=excluded.origin,
+                      education=excluded.education,
+                      marital_status=excluded.marital_status,
+                      occupation=excluded.occupation,
+                      travels=excluded.travels,
+                      emergency_contact=excluded.emergency_contact,
+                      chief_complaint=excluded.chief_complaint,
+                      companion=excluded.companion,
+                      allergies=excluded.allergies,
+                      medications=excluded.medications,
+                      personal_history=excluded.personal_history,
+                      family_history=excluded.family_history,
+                      current_illness=excluded.current_illness,
+                      illness_time=excluded.illness_time,
+                      symptoms=excluded.symptoms,
+                      anamnesis=excluded.anamnesis,
+                      biological_functions=excluded.biological_functions,
+                      guardian_name=excluded.guardian_name,
+                      guardian_dni=excluded.guardian_dni,
+                      guardian_relation=excluded.guardian_relation,
+                      guardian_phone=excluded.guardian_phone,
+                      guardian_address=excluded.guardian_address,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -1557,6 +1676,32 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         normalize_role(user["role"]),
                         hidden_from_reception_new,
                         json.dumps(data.get("presupuesto"), ensure_ascii=False) if data.get("presupuesto") else None,
+                        str(data.get("historiaHora", "") or "").strip(),
+                        str(data.get("address", "") or "").strip(),
+                        str(data.get("sexo", "") or "").strip(),
+                        str(data.get("birthPlace", "") or "").strip(),
+                        str(data.get("origin", "") or "").strip(),
+                        str(data.get("education", "") or "").strip(),
+                        str(data.get("maritalStatus", "") or "").strip(),
+                        str(data.get("occupation", "") or "").strip(),
+                        str(data.get("travels", "") or "").strip(),
+                        str(data.get("emergencyContact", "") or "").strip(),
+                        str(data.get("chiefComplaint", "") or "").strip(),
+                        str(data.get("companion", "") or "").strip(),
+                        str(data.get("allergies", "") or "").strip(),
+                        str(data.get("medications", "") or "").strip(),
+                        str(data.get("personalHistory", "") or "").strip(),
+                        str(data.get("familyHistory", "") or "").strip(),
+                        str(data.get("currentIllness", "") or "").strip(),
+                        str(data.get("illnessTime", "") or "").strip(),
+                        str(data.get("symptoms", "") or "").strip(),
+                        str(data.get("anamnesis", "") or "").strip(),
+                        str(data.get("biologicalFunctions", "") or "").strip(),
+                        str(data.get("guardianName", "") or "").strip(),
+                        str(data.get("guardianDni", "") or "").strip(),
+                        str(data.get("guardianRelation", "") or "").strip(),
+                        str(data.get("guardianPhone", "") or "").strip(),
+                        str(data.get("guardianAddress", "") or "").strip(),
                     ),
                 )
                 action = "PATIENT_CREATED" if not existing_patient else "PATIENT_UPDATED"
@@ -1732,9 +1877,31 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     INSERT INTO clinical_history (
                       id, patient_id, date, attended_by, attended, reason, anamnesis,
                       exam, diagnosis, plan, procedure_done, instructions, agreed_price,
-                      credit_pending, credit_amount, credit_due_date, credit_note, plan_budget
+                      credit_pending, credit_amount, credit_due_date, credit_note, plan_budget,
+                      current_illness,
+                      illness_time,
+                      symptoms,
+                      biological_functions,
+                      family_history,
+                      personal_history,
+                      blood_pressure,
+                      pulse,
+                      temperature,
+                      heart_rate,
+                      resp_rate,
+                      oral_exam,
+                      final_diagnosis,
+                      work_plan,
+                      prognosis,
+                      recommendations,
+                      follow_up,
+                      professional,
+                      firma,
+                      firmada_por,
+                      firmada_el,
+                      discharged
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_id=excluded.patient_id, date=excluded.date,
                       attended_by=excluded.attended_by, attended=excluded.attended,
@@ -1745,6 +1912,28 @@ class DentalHandler(SimpleHTTPRequestHandler):
                       credit_pending=excluded.credit_pending, credit_amount=excluded.credit_amount,
                       credit_due_date=excluded.credit_due_date, credit_note=excluded.credit_note,
                       plan_budget=excluded.plan_budget,
+                      current_illness=excluded.current_illness,
+                      illness_time=excluded.illness_time,
+                      symptoms=excluded.symptoms,
+                      biological_functions=excluded.biological_functions,
+                      family_history=excluded.family_history,
+                      personal_history=excluded.personal_history,
+                      blood_pressure=excluded.blood_pressure,
+                      pulse=excluded.pulse,
+                      temperature=excluded.temperature,
+                      heart_rate=excluded.heart_rate,
+                      resp_rate=excluded.resp_rate,
+                      oral_exam=excluded.oral_exam,
+                      final_diagnosis=excluded.final_diagnosis,
+                      work_plan=excluded.work_plan,
+                      prognosis=excluded.prognosis,
+                      recommendations=excluded.recommendations,
+                      follow_up=excluded.follow_up,
+                      professional=excluded.professional,
+                      firma=excluded.firma,
+                      firmada_por=excluded.firmada_por,
+                      firmada_el=excluded.firmada_el,
+                      discharged=excluded.discharged,
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -1766,6 +1955,28 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("creditDueDate", ""),
                         data.get("creditNote", ""),
                         float(data.get("planBudget") or 0),
+                        str(data.get("currentIllness", "") or ""),
+                        str(data.get("illnessTime", "") or ""),
+                        str(data.get("symptoms", "") or ""),
+                        str(data.get("biologicalFunctions", "") or ""),
+                        str(data.get("familyHistory", "") or ""),
+                        str(data.get("personalHistory", "") or ""),
+                        str(data.get("bloodPressure", "") or ""),
+                        str(data.get("pulse", "") or ""),
+                        str(data.get("temperature", "") or ""),
+                        str(data.get("heartRate", "") or ""),
+                        str(data.get("respRate", "") or ""),
+                        str(data.get("oralExam", "") or ""),
+                        str(data.get("finalDiagnosis", "") or ""),
+                        str(data.get("workPlan", "") or ""),
+                        str(data.get("prognosis", "") or ""),
+                        str(data.get("recommendations", "") or ""),
+                        str(data.get("followUp", "") or ""),
+                        str(data.get("professional", "") or ""),
+                        str(data.get("firma", "") or ""),
+                        str(data.get("firmadaPor", "") or ""),
+                        str(data.get("firmadaEl", "") or ""),
+                        1 if data.get("discharged") else 0,
                     ),
                 )
                 if data.get("attended", True):
@@ -2575,6 +2786,37 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("cop", ""),
                         data.get("aceptadaEl", "") or None,
                         data.get("tratamientoId", "") or None,
+                    ),
+                )
+            return send_json(self, {"ok": True, "id": item_id})
+
+        if parsed.path == "/api/consentimientos":
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR"}):
+                return
+            data = read_json(self)
+            item_id = data.get("id")
+            if not item_id or not data.get("patientId") or not data.get("tipo"):
+                return send_json(self, {"error": "Consentimiento incompleto."}, 400)
+            # Un consentimiento firmado no se corrige: si hubo un error se firma
+            # otro. Por eso aqui no hay UPDATE, solo se ignora el repetido.
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO consentimientos (
+                      id, patient_id, tipo, fecha, firma, firmante, doctor, registrado_por
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO NOTHING
+                    """,
+                    (
+                        item_id,
+                        data.get("patientId"),
+                        data.get("tipo"),
+                        data.get("fecha", ""),
+                        data.get("firma", ""),
+                        data.get("firmante", ""),
+                        data.get("doctor", ""),
+                        data.get("registradoPor", ""),
                     ),
                 )
             return send_json(self, {"ok": True, "id": item_id})

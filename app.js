@@ -101,6 +101,7 @@ const seedData = {
   ],
   odontogramSnapshots: [],
   proformas: [],
+  consentimientos: [],
   // lo que el consultorio escribe en la ventana de Precios
   listaDePrecios: [],
   odontogram: [
@@ -230,6 +231,7 @@ function loadState() {
 function normalizeState(data) {
   const defaults = seedData.config;
   if (!Array.isArray(data.proformas)) data.proformas = [];
+  if (!Array.isArray(data.consentimientos)) data.consentimientos = [];
   if (!Array.isArray(data.listaDePrecios)) data.listaDePrecios = [];
   data.config = { ...defaults, ...(data.config || {}) };
   if (!Array.isArray(data.services) || !data.services.length) data.services = structuredClone(seedData.services);
@@ -350,6 +352,23 @@ function parsePresupuesto(valor) {
 
 /* La proforma llega con sus lineas en texto JSON: se congelaron el dia en que
    se entrego y no se vuelven a calcular. */
+/* El consentimiento viaja con la firma dibujada dentro: es una imagen en
+   texto, larga, pero sin ella el documento no vale nada. */
+function mapApiConsentimiento(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id || row.patientId || "",
+    tipo: row.tipo || "",
+    fecha: (row.fecha || "").slice(0, 10),
+    firma: row.firma || "",
+    firmante: row.firmante || "",
+    doctor: row.doctor || "",
+    registradoPor: row.registrado_por || row.registradoPor || "",
+    createdAt: row.created_at || row.createdAt || "",
+  };
+}
+
+
 function mapApiProforma(row) {
   let lineas = row.lineas;
   if (typeof lineas === "string") {
@@ -417,6 +436,33 @@ function mapApiPatient(row) {
     /* El presupuesto del paciente viaja como texto JSON desde el servidor: el
        precio que se dejo en cada linea, el descuento y lo elegido a mano. */
     presupuesto: parsePresupuesto(row.presupuesto),
+    /* Los datos de la historia clinica del Colegio: domicilio, el
+       representante del menor y los antecedentes. */
+    address: row.address || row.address || "",
+    sexo: row.sexo || row.sexo || "",
+    birthPlace: row.birth_place || row.birthPlace || "",
+    origin: row.origin || row.origin || "",
+    education: row.education || row.education || "",
+    maritalStatus: row.marital_status || row.maritalStatus || "",
+    occupation: row.occupation || row.occupation || "",
+    travels: row.travels || row.travels || "",
+    emergencyContact: row.emergency_contact || row.emergencyContact || "",
+    chiefComplaint: row.chief_complaint || row.chiefComplaint || "",
+    companion: row.companion || row.companion || "",
+    allergies: row.allergies || row.allergies || "",
+    medications: row.medications || row.medications || "",
+    personalHistory: row.personal_history || row.personalHistory || "",
+    familyHistory: row.family_history || row.familyHistory || "",
+    currentIllness: row.current_illness || row.currentIllness || "",
+    illnessTime: row.illness_time || row.illnessTime || "",
+    symptoms: row.symptoms || row.symptoms || "",
+    anamnesis: row.anamnesis || row.anamnesis || "",
+    biologicalFunctions: row.biological_functions || row.biologicalFunctions || "",
+    guardianName: row.guardian_name || row.guardianName || "",
+    guardianDni: row.guardian_dni || row.guardianDni || "",
+    guardianRelation: row.guardian_relation || row.guardianRelation || "",
+    guardianPhone: row.guardian_phone || row.guardianPhone || "",
+    guardianAddress: row.guardian_address || row.guardianAddress || "",
     // calculados por el servidor: el navegador no tiene todas las citas
     lastAttended: (row.last_attended || row.lastAttended || "").slice(0, 10),
     nextAppointment: (row.next_appointment || row.nextAppointment || "").slice(0, 10),
@@ -424,6 +470,7 @@ function mapApiPatient(row) {
     estado: row.estado || "",
     historiaNumero: Number(row.historia_numero ?? row.historiaNumero ?? 0) || 0,
     historiaDesde: row.historia_desde || row.historiaDesde || "",
+    historiaHora: row.historia_hora || row.historiaHora || "",
     createdAt: (row.created_at || "").slice(0, 10)
   };
 }
@@ -483,7 +530,31 @@ function mapApiClinicalHistory(row) {
     creditAmount: Number(row.credit_amount ?? row.creditAmount ?? 0),
     creditDueDate: row.credit_due_date || row.creditDueDate || "",
     creditNote: row.credit_note || row.creditNote || "",
-    planBudget: Number(row.plan_budget ?? row.planBudget ?? 0)
+    planBudget: Number(row.plan_budget ?? row.planBudget ?? 0),
+    /* Lo que pide el formato del Colegio: la enfermedad actual, los
+       antecedentes, los signos vitales, el pronostico y la firma. */
+    currentIllness: row.current_illness || row.currentIllness || "",
+    illnessTime: row.illness_time || row.illnessTime || "",
+    symptoms: row.symptoms || row.symptoms || "",
+    biologicalFunctions: row.biological_functions || row.biologicalFunctions || "",
+    familyHistory: row.family_history || row.familyHistory || "",
+    personalHistory: row.personal_history || row.personalHistory || "",
+    bloodPressure: row.blood_pressure || row.bloodPressure || "",
+    pulse: row.pulse || row.pulse || "",
+    temperature: row.temperature || row.temperature || "",
+    heartRate: row.heart_rate || row.heartRate || "",
+    respRate: row.resp_rate || row.respRate || "",
+    oralExam: row.oral_exam || row.oralExam || "",
+    finalDiagnosis: row.final_diagnosis || row.finalDiagnosis || "",
+    workPlan: row.work_plan || row.workPlan || "",
+    prognosis: row.prognosis || row.prognosis || "",
+    recommendations: row.recommendations || row.recommendations || "",
+    followUp: row.follow_up || row.followUp || "",
+    professional: row.professional || row.professional || "",
+    firma: row.firma || row.firma || "",
+    firmadaPor: row.firmada_por || row.firmadaPor || "",
+    firmadaEl: row.firmada_el || row.firmadaEl || "",
+    discharged: Boolean(row.discharged),
   };
 }
 
@@ -701,6 +772,7 @@ function applyApiBootstrap(payload) {
   state.odontogram = (payload.odontogram || []).map(mapApiOdontogram);
   state.odontogramSnapshots = (payload.odontogramSnapshots || []).map(mapApiOdontogramSnapshot);
   state.proformas = (payload.proformas || []).map(mapApiProforma);
+  state.consentimientos = (payload.consentimientos || []).map(mapApiConsentimiento);
   state.payments = (payload.payments || []).map(mapApiPayment);
   state.electronicReceipts = (payload.electronicReceipts || []).map(mapApiElectronicReceipt);
   refreshSunatStatus();
@@ -1049,7 +1121,33 @@ async function savePatientApi(patient) {
     status: patient.status || "NUEVO",
     notes: patient.notes,
     hideFromReceptionNew: Boolean(patient.hideFromReceptionNew),
-    presupuesto: patient.presupuesto || null
+    presupuesto: patient.presupuesto || null,
+    historiaHora: patient.historiaHora || "",
+    address: patient.address || "",
+    sexo: patient.sexo || "",
+    birthPlace: patient.birthPlace || "",
+    origin: patient.origin || "",
+    education: patient.education || "",
+    maritalStatus: patient.maritalStatus || "",
+    occupation: patient.occupation || "",
+    travels: patient.travels || "",
+    emergencyContact: patient.emergencyContact || "",
+    chiefComplaint: patient.chiefComplaint || "",
+    companion: patient.companion || "",
+    allergies: patient.allergies || "",
+    medications: patient.medications || "",
+    personalHistory: patient.personalHistory || "",
+    familyHistory: patient.familyHistory || "",
+    currentIllness: patient.currentIllness || "",
+    illnessTime: patient.illnessTime || "",
+    symptoms: patient.symptoms || "",
+    anamnesis: patient.anamnesis || "",
+    biologicalFunctions: patient.biologicalFunctions || "",
+    guardianName: patient.guardianName || "",
+    guardianDni: patient.guardianDni || "",
+    guardianRelation: patient.guardianRelation || "",
+    guardianPhone: patient.guardianPhone || "",
+    guardianAddress: patient.guardianAddress || "",
   };
   const result = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify(payload) });
   if (result.id) patient.id = result.id;
@@ -1058,6 +1156,12 @@ async function savePatientApi(patient) {
 async function saveProformaApi(proforma) {
   if (!API_ENABLED || !apiToken) return;
   await apiFetch("/api/proformas", { method: "POST", body: JSON.stringify(proforma) });
+}
+
+
+async function saveConsentimientoApi(consentimiento) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/consentimientos", { method: "POST", body: JSON.stringify(consentimiento) });
 }
 
 
@@ -1269,6 +1373,7 @@ function blankStateFromCurrent() {
     odontogram: [],
     odontogramSnapshots: [],
     proformas: [],
+    consentimientos: [],
     listaDePrecios: [],
     cashSessions: [],
     dailyClosures: [],
@@ -2811,6 +2916,14 @@ function setView(view) {
   }
   $$(".view").forEach((element) => element.classList.toggle("active", element.id === view));
   $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+  /* Registrar paciente es la ficha mas larga del sistema: ahi el menu se va a
+     la izquierda para que la ficha se lleve el ancho entero, y sus campos se
+     reparten en dos columnas. El menu vuelve por el borde izquierdo y se queda
+     hasta que se entre otra vez aqui. En los demas modulos, todo normal. */
+  const enRegistro = view === "pacientes";
+  document.body.classList.toggle("ficha-en-dos-columnas", enRegistro);
+  document.body.classList.toggle("sin-menu", enRegistro);
+  if (enRegistro) document.body.classList.remove("menu-a-la-vista");
   $("#viewTitle").textContent = {
     dashboard: "Dashboard",
     agenda: "Agenda diaria",
@@ -3981,6 +4094,87 @@ function ajustarGraficos(raiz) {
   });
 }
 
+/* La hoja es la HISTORIA CLINICA ODONTOLOGICA del formato 2019: los mismos
+   titulos, en el mismo orden y con las mismas rayas de puntos. En pantalla se
+   escribe encima -cada raya es el campo, y al salir de ella se guarda sola-;
+   impresa es el papel, con sus renglones en blanco para llenarlos a mano.
+   La filiacion sale del registro del paciente y la fecha y hora de su cita; lo
+   clinico, de su atencion. */
+/* Lo que la norma pide en la historia clinica y que solo escribe el doctor. Se
+   llena en la primera atencion -los controles siguen con la nota corta- y por
+   eso la hoja lo busca en la atencion mas antigua que tenga algo escrito.
+   Los nombres anamnesis, exam y diagnosis vienen de fichas viejas: se
+   reaprovechan para que lo ya guardado vuelva a verse. */
+const CAMPOS_CLINICOS = [
+  "currentIllness", "illnessTime", "symptoms", "anamnesis", "biologicalFunctions",
+  "familyHistory", "personalHistory",
+  "bloodPressure", "pulse", "temperature", "heartRate", "respRate", "exam", "oralExam",
+  "diagnosis", "finalDiagnosis", "workPlan", "prognosis", "recommendations", "followUp"
+];
+
+
+/* Guardar la historia es abrirla: se le da su numero y la fecha de apertura, y
+   ese numero la acompana el resto de su vida. Por eso se pregunta antes: no hay
+   vuelta atras y los numeros no se repiten. El numero lo da el servidor, para
+   que dos equipos no entreguen el mismo. */
+async function guardarHistoriaClinica(patientId) {
+  const patient = patientById(patientId);
+  if (!patient || patient.historiaNumero || !canManageClinical()) return;
+  if (!confirm(`Se abre la historia clínica de ${patient.name}.
+
+Se le asigna su número, que queda fijo y no se puede cambiar. ¿Continuar?`)) return;
+  try {
+    if (API_ENABLED && apiToken) {
+      const resultado = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify({ id: patient.id, asignarHistoria: true }) });
+      patient.historiaNumero = Number(resultado.historiaNumero || 0);
+      patient.historiaDesde = resultado.historiaDesde || todayISO();
+      patient.historiaHora = resultado.historiaHora || new Date().toTimeString().slice(0, 5);
+    } else {
+      patient.historiaNumero = Math.max(0, ...state.patients.map((item) => Number(item.historiaNumero || 0))) + 1;
+      patient.historiaDesde = todayISO();
+      // la hoja pide fecha y hora de apertura, y son las de este momento
+      patient.historiaHora = new Date().toTimeString().slice(0, 5);
+      saveState();
+    }
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  addLocalAuditEvent("HISTORIA_CLINICA_NUMERO", `Abrió la ${numeroDeHistoria(patient.historiaNumero)} de ${patient.name}`, patient.id);
+  renderClinicalHistory();
+}
+
+
+/* Guarda lo que se acaba de escribir sobre una raya de la historia clinica. El
+   campo dice a que registro pertenece -la atencion o la ficha del paciente- y
+   solo se guarda si cambio, para no escribir en la nube en cada clic. */
+function guardarCampoDeLaHoja(campo) {
+  const { destino, campo: nombre, registro } = campo.dataset;
+  if (campo.dataset.cancelado) {
+    delete campo.dataset.cancelado;
+    return;
+  }
+  if (!destino || !nombre || !registro) return;
+  if (!canManageClinical()) return;
+  const valor = String(campo.innerText || "").replace(/ /g, " ").trim();
+  if (destino === "paciente") {
+    const paciente = patientById(registro);
+    if (!paciente || String(paciente[nombre] || "") === valor) return;
+    paciente[nombre] = valor;
+    savePatientApi(paciente).catch((error) => alert(error.message));
+    if (!API_ENABLED) saveState();
+    renderClinicalHistory();
+    return;
+  }
+  const entrada = state.clinicalHistory.find((item) => item.id === registro);
+  if (!entrada || String(entrada[nombre] || "") === valor) return;
+  entrada[nombre] = valor;
+  saveClinicalHistoryApi(entrada).catch((error) => alert(error.message));
+  if (!API_ENABLED) saveState();
+  renderClinicalHistory();
+}
+
+
 function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   const patient = patientById(patientId);
   if (!patient) return `<p class="muted">Elige un paciente para ver su historia.</p>`;
@@ -3989,121 +4183,269 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   const notas = state.clinicalHistory
     .filter((entry) => entry.patientId === patientId)
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  const atenciones = notas.filter((entry) => !esSoloDeuda(entry));
-  const deudas = notas.filter((entry) => historyBalance(entry.id) > 0);
-  const tratamientos = tratamientosDelPaciente(patientId);
   const odontograma = odontogramaParaLaHoja(patientId);
-  const dato = (titulo, valor) => `<div><span>${titulo}</span><strong>${escapeHtml(valor || "-")}</strong></div>`;
+  const atenciones = notas.filter((entry) => !esSoloDeuda(entry));
+  const primeraAtencion = atenciones.length ? atenciones[atenciones.length - 1] : null;
+  /* La historia se escribe en la primera atencion y desde ahi acompana al
+     paciente: por eso se busca en la atencion mas antigua que tenga algo
+     escrito y, si ninguna lo tiene, en la primera. Los controles siguen con la
+     nota corta y salen en Control y evolucion. */
+  const nota = [...atenciones].reverse().find((entry) =>
+    CAMPOS_CLINICOS.some((campo) => String(entry[campo] || "").trim())) || primeraAtencion || {};
+  const alta = notas.find((entry) => entry.discharged);
+  /* La hora no la escribe nadie dos veces: es la de la cita de ese dia. */
+  const citaDeLaAtencion = primeraAtencion
+    ? (state.appointments || [])
+      .filter((cita) => cita.patientId === patientId && cita.date === primeraAtencion.date)
+      .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")))[0]
+    : null;
 
+  /* La fecha y la hora de la hoja son las de cuando se abrio la historia, que
+     es cuando se pulsa Guardar y se le da su numero. Mientras no se haya
+     guardado se adelanta lo que ya se sabe -el dia de la primera atencion y la
+     hora de su cita-, para que la hoja no salga en blanco. */
+  const fechaDeApertura = patient.historiaDesde
+    ? formatDate(patient.historiaDesde)
+    : (primeraAtencion ? formatDate(primeraAtencion.date) : "");
+  /* La hora se puede escribir a mano sobre la raya: las historias que se
+     abrieron antes de que se apuntara sola no tienen ninguna, y no habria
+     forma de completarlas. */
+  const horaDeApertura = patient.historiaHora || citaDeLaAtencion?.time || "";
+
+  const texto = (valor) => escapeHtml(String(valor || "").trim());
+  /* Un campo se escribe en la hoja cuando se esta viendo en pantalla y hay
+     donde guardarlo. En el papel es solo la raya. */
+  const sePuedeEscribir = pantalla && canManageClinical();
+  const deNota = (campo) => (nota.id ? `nota|${campo}|${nota.id}` : "");
+  const dePaciente = (campo) => `paciente|${campo}|${patient.id}`;
+  const escribible = (destino, pista = "") => {
+    if (!sePuedeEscribir || !destino) return "";
+    const [tipo, campo, registro] = destino.split("|");
+    return ` class="hcf-escribible" contenteditable="plaintext-only" role="textbox" tabindex="0"`
+      + ` data-destino="${tipo}" data-campo="${campo}" data-registro="${escapeHtml(registro)}"`
+      + (pista ? ` data-pista="${escapeHtml(pista)}"` : "");
+  };
+
+  /* Una fila del formato: el rotulo y su raya de puntos al lado, como en el
+     papel. Varios rotulos en la misma fila cuando el formato los junta. */
+  const fila = (...pares) => `<p class="hcf-fila">${pares
+    .map(([rotulo, valor, ancho = 1, destino = ""]) =>
+      `<span>${rotulo}</span><b style="flex:${ancho}"${escribible(destino)}>${texto(valor)}</b>`)
+    .join("")}</p>`;
+  /* Lo que se escribe largo va debajo del rotulo. En pantalla es una caja que
+     crece; en el papel, los renglones en blanco del formato. */
+  const bloque = (rotulo, valor, renglones = 2, destino = "") => {
+    const escrito = String(valor || "").trim();
+    const cabeza = rotulo ? `<span>${rotulo}</span>` : "";
+    if (sePuedeEscribir && destino) {
+      return `<div class="hcf-bloque">${cabeza}<b class="hcf-caja"${escribible(destino)}
+        style="min-height:${renglones * 17}px">${escapeHtml(escrito)}</b></div>`;
+    }
+    return `<div class="hcf-bloque">
+      ${cabeza}
+      ${escrito ? `<b>${escapeHtml(escrito)}</b>` : ""}
+      ${Array.from({ length: escrito ? 1 : renglones }, () => `<i class="hcf-raya"></i>`).join("")}
+    </div>`;
+  };
+  const titulo = (nombre) => `<h4 class="hcf-titulo">${nombre}</h4>`;
+  const subtitulo = (nombre) => `<p class="hcf-subtitulo">${nombre}</p>`;
+
+  /* Al lado del logo, guardar la historia: ahi se le asigna su numero y ese
+     numero ya no cambia nunca. Antes lo daba la impresion, que es un momento
+     raro para abrir un registro: se imprime tambien en blanco, o dos veces. */
   const cabecera = `<header class="hc-cabecera">
       <div class="hc-clinica">
         <img class="hc-logo" src="assets/logo-cm.png" alt="" onerror="this.remove()" />
         <div>
           <h3>${escapeHtml(config.clinicName || "CM Odontología Estética")}</h3>
-          <p>Historia clínica odontológica${config.issuerAddress ? ` · ${escapeHtml(config.issuerAddress)}` : ""}</p>
+          <p>${escapeHtml(config.issuerAddress || "")}</p>
         </div>
       </div>
-      <div class="hc-numero">
-        ${patient.historiaNumero
-          ? `<strong>${numeroDeHistoria(patient.historiaNumero)}</strong><p>Abierta el ${formatDate(patient.historiaDesde || todayISO())}</p>`
-          : pantalla ? `<strong>Sin N.° de historia</strong><p>Se asigna al imprimirla por primera vez</p>` : ""}
-        ${pantalla ? "" : `<p>Impresa el ${formatDate(todayISO())}</p>`}
-      </div>
+      ${pantalla
+        ? `<div class="hc-numero">
+            ${patient.historiaNumero
+              ? `<strong>${escapeHtml(numeroDeHistoria(patient.historiaNumero))}</strong>
+                 <p>Abierta el ${formatDate(patient.historiaDesde || patient.createdAt || "")}</p>`
+              : sePuedeEscribir
+                ? `<button class="primary" type="button" data-guardar-historia="${patient.id}">Guardar</button>
+                   <p>Al guardar se le asigna su número de historia</p>`
+                : `<strong>Sin N.° de historia</strong>`}
+          </div>`
+        : ""}
     </header>`;
 
-  const datos = `<section class="hc-seccion">
-      <h4>1. Datos del paciente</h4>
-      <div class="hc-datos">
-        ${dato("Nombre", patient.name)}
-        ${dato("DNI", patient.dni)}
-        ${dato("Edad", edad === null ? "" : `${edad} años`)}
-        ${dato("Fecha de nacimiento", patient.birthDate ? formatDate(patient.birthDate) : "")}
-        ${dato("Celular", patient.phone)}
-        ${dato("Doctor(a)", patient.doctor)}
-        ${dato("Tratamiento principal", patient.mainTreatment)}
-        ${dato("Paciente desde", patient.createdAt ? formatDate(patient.createdAt) : "")}
+  /* Sin una atencion guardada no hay donde escribir lo clinico: la historia se
+     cuelga de la atencion, no del aire. */
+  const aviso = sePuedeEscribir && !nota.id
+    ? `<p class="hcf-aviso">Escribe aquí mismo sobre cada línea. Lo clínico se guarda en la atención del paciente, así que primero registra su nota clínica arriba; la filiación ya se puede llenar.</p>`
+    : sePuedeEscribir
+      ? `<p class="hcf-aviso">Escribe aquí mismo sobre cada línea: se guarda solo al salir del campo.</p>`
+      : "";
+
+  const lugarYFecha = [patient.birthPlace, patient.birthDate ? formatDate(patient.birthDate) : ""]
+    .filter(Boolean).join(", ");
+
+  const filiacion = `${subtitulo("Filiación:")}
+    ${fila(
+      ["Nombres del paciente", patient.name, 4],
+      ["Edad", edad === null ? "" : `${edad} años`, 1],
+      ["Sexo", patient.sexo === "F" ? "Femenino" : patient.sexo === "M" ? "Masculino" : "", 1]
+    )}
+    ${fila(["Lugar y fecha de nacimiento", lugarYFecha])}
+    ${fila(["Dirección", patient.address, 1, dePaciente("address")])}
+    ${fila(["Procedencia", patient.origin, 2, dePaciente("origin")], ["Ocupación", patient.occupation, 2, dePaciente("occupation")])}
+    ${fila(["Viajes en el último año", patient.travels, 1, dePaciente("travels")])}
+    ${fila(["Teléfono", patient.phone, 1, dePaciente("phone")])}
+    ${fila(["En caso de emergencia comunicarse a", patient.emergencyContact, 1, dePaciente("emergencyContact")])}`;
+
+  /* El motivo sale de lo que el paciente dijo al registrarse; si ahi no se
+     anoto nada, del motivo de su primera atencion. */
+  const motivo = `${titulo("Motivo de consulta")}
+    ${bloque("", patient.chiefComplaint || primeraAtencion?.reason, 2, dePaciente("chiefComplaint"))}`;
+
+  /* La enfermedad actual la puede tomar recepcion al registrar; lo que escriba
+     la doctora en la atencion manda sobre eso, igual que en los antecedentes. */
+  const enfermedad = `${titulo("Enfermedad actual")}
+    ${bloque("", nota.currentIllness || patient.currentIllness, 2, deNota("currentIllness"))}
+    ${fila(["Tiempo de enfermedad", nota.illnessTime || patient.illnessTime, 1, deNota("illnessTime")])}
+    ${fila(["Signos y síntomas principales", nota.symptoms || patient.symptoms, 1, deNota("symptoms")])}
+    ${fila(["Relato cronológico", nota.anamnesis || patient.anamnesis, 1, deNota("anamnesis")])}
+    ${bloque("Funciones biológicas", nota.biologicalFunctions || patient.biologicalFunctions, 2, deNota("biologicalFunctions"))}`;
+
+  /* Los antecedentes los escribe la doctora en la historia; si recepcion ya
+     habia anotado algo al registrar al paciente, eso es lo que sale hasta que
+     ella lo cambie. La alergia va aparte y destacada: es el dato que puede
+     evitar un accidente y en una hoja larga se pierde. */
+  const antecedentes = `${titulo("Antecedentes")}
+    ${String(patient.allergies || "").trim() ? `<p class="hcf-alergia"><span>Alérgico a:</span> ${escapeHtml(patient.allergies)}</p>` : ""}
+    ${bloque("Antecedentes familiares", nota.familyHistory || patient.familyHistory, 2, deNota("familyHistory"))}
+    ${bloque("Antecedentes personales", nota.personalHistory || patient.personalHistory, 2, deNota("personalHistory"))}`;
+
+  const examen = `${titulo("Examen clínico")}
+    ${fila(
+      ["Signos vitales. P.A.", nota.bloodPressure, 1, deNota("bloodPressure")],
+      ["Pulso", nota.pulse, 1, deNota("pulse")],
+      ["Temp.", nota.temperature, 1, deNota("temperature")],
+      ["F.C.", nota.heartRate, 1, deNota("heartRate")],
+      ["F. Resp.", nota.respRate, 1, deNota("respRate")]
+    )}
+    ${bloque("Examen clínico general", nota.exam, 2, deNota("exam"))}
+    ${bloque("Examen clínico odontoestomatológico", nota.oralExam, 2, deNota("oralExam"))}`;
+
+  const diagnostico = `${titulo("Diagnóstico (CIE 10)")}
+    ${bloque("Diagnóstico presuntivo", nota.diagnosis, 2, deNota("diagnosis"))}
+    ${bloque("Diagnóstico definitivo", nota.finalDiagnosis, 2, deNota("finalDiagnosis"))}`;
+
+  const plan = `${titulo("Plan de tratamiento")}
+    ${bloque("", nota.workPlan, 2, deNota("workPlan"))}`;
+
+  const pronostico = `${titulo("Pronóstico")}
+    ${bloque("", nota.prognosis, 1, deNota("prognosis"))}`;
+
+  const recomendaciones = `${titulo("Tratamiento / Recomendaciones")}
+    <p class="hcf-aclaracion">(Nombre genérico del medicamento, dosis, vía de administración, tiempo de administración, cuidados, medidas higiénico-dietéticas, preventivas)</p>
+    ${bloque("", nota.recommendations, 3, deNota("recommendations"))}`;
+
+  /* Control y evolucion tiene dos partes: lo que la doctora escribe a mano y,
+     debajo, lo que cada control dejo dicho por si solo. Lo segundo no se toca:
+     es lo que ya ocurrio, con su fecha. */
+  const controles = atenciones
+    .filter((entry) => entry.id !== nota.id)
+    .slice()
+    .reverse()
+    .map((entry) => {
+      const detalle = [entry.reason, entry.procedure, entry.followUp]
+        .map((valor) => String(valor || "").trim()).filter(Boolean).join(" · ");
+      return detalle ? `<li><strong>${formatDate(entry.date)}</strong> ${escapeHtml(detalle)}</li>` : "";
+    })
+    .filter(Boolean)
+    .join("");
+  const evolucion = `${titulo("Control y evolución")}
+    ${bloque("", nota.followUp, controles ? 2 : 5, deNota("followUp"))}
+    ${controles ? `<ul class="hcf-controles">${controles}</ul>` : ""}`;
+
+  const altaDelPaciente = `${titulo("Alta del paciente")}
+    ${bloque("", alta ? `Dada de alta el ${formatDate(alta.date)}` : "", 1)}`;
+
+  /* Quien firma la historia se elige: en un consultorio con varios doctores no
+     siempre atiende el de la ficha, y el nombre del pie tiene que ser el de
+     quien de verdad la cierra. */
+  const profesional = nombreCompletoDelDoctor(nota.professional)
+    || nombreCompletoDelDoctor(nota.attendedBy)
+    || nombreCompletoDelDoctor(patient.doctor)
+    || "";
+  const usuarioQueFirma = usuarioDelDoctor(profesional);
+  const cop = usuarioQueFirma?.cop || "";
+  // el sello es de quien firma, no del consultorio: cada doctor tiene el suyo
+  const sello = usuarioQueFirma?.sello || "";
+  const doctores = (config.doctors || []).filter(Boolean);
+  const elegirProfesional = sePuedeEscribir && nota.id && doctores.length
+    ? `<p class="hcf-fila"><span>Nombres y apellidos del profesional</span>
+        <select class="hcf-doctor" data-profesional="${nota.id}">
+          ${doctores.map((nombre) => `<option value="${escapeHtml(nombre)}"${nombre === profesional ? " selected" : ""}>${escapeHtml(nombre)}</option>`).join("")}
+        </select></p>`
+    : fila(["Nombres y apellidos del profesional", profesional]);
+
+  /* La firma NO se guarda en la configuracion para volver a estamparla: eso
+     dejaria que cualquiera con acceso sacara historias firmadas. Se dibuja en
+     el momento, se guarda dentro de esta historia y queda anotado quien firmo y
+     cuando. El sello del consultorio si es fijo: identifica al consultorio, no
+     autoriza nada por si solo. */
+  const firmada = Boolean(nota.firma);
+  const cierre = `<div class="hcf-cierre">
+      ${elegirProfesional}
+      ${cop ? `<p class="hcf-cop">COP N.° ${escapeHtml(cop)}</p>` : ""}
+      ${sello ? `<img class="hcf-sello-imagen" src="${escapeHtml(sello)}" alt="Sello de ${escapeHtml(profesional)}" />` : ""}
+      <div class="hcf-sello">
+        ${firmada ? `<img class="hcf-firma" src="${escapeHtml(nota.firma)}" alt="Firma del profesional" />` : ""}
+        <span>Sello y firma</span>
+        ${sePuedeEscribir && nota.id
+          ? `<button class="small-btn" type="button" data-firmar-profesional="${nota.id}">${firmada ? "Firmar de nuevo" : "Firmar"}</button>`
+          : ""}
+        ${/* Imprimir vive al final de la hoja, no arriba: se imprime cuando ya
+              se termino de leerla y de firmarla, no antes. */
+          pantalla ? `<button class="ghost hcf-imprimir" type="button" data-imprimir-historia="${patient.id}">Imprimir historia</button>` : ""}
       </div>
-      ${String(patient.notes || "").trim() ? `<p class="hc-observacion"><span>Observaciones:</span> ${escapeHtml(patient.notes)}</p>` : ""}
+      ${firmada
+        ? `<p class="hcf-firmada">Firmada por ${escapeHtml(nota.firmadaPor || profesional)} el ${formatDate(String(nota.firmadaEl || "").slice(0, 10))}${String(nota.firmadaEl || "").slice(11, 16) ? ` a las ${String(nota.firmadaEl).slice(11, 16)}` : ""}</p>`
+        : pantalla ? `<p class="hcf-sin-firma">Todavía sin firmar.</p>` : ""}
+    </div>`;
+
+  /* En pantalla el odontograma vive en su propia pestana -con el inicial y el
+     de evolucion, como pide la norma-, asi que aqui se omite para no verlo dos
+     veces. En la hoja impresa si va, al final: el papel que se archiva se
+     entrega completo. */
+  const odonto = pantalla || !odontograma ? "" : `<section class="hcf-odontograma">
+      ${titulo(`Odontograma · ${escapeHtml(odontograma.origen)}`)}
+      <div class="hc-grafico"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${odontograma.html}</div></div></div>
+      ${odontograma.hallazgos.length ? `<ul class="hc-hallazgos">${odontograma.hallazgos.map((item) => `<li><strong>${escapeHtml(item.pieza)}</strong> ${escapeHtml(item.texto)}</li>`).join("")}</ul>` : ""}
+      ${odontograma.especificaciones ? `<p class="hc-observacion"><span>Especificaciones:</span> ${escapeHtml(odontograma.especificaciones)}</p>` : ""}
     </section>`;
 
-  const tratamiento = `<section class="hc-seccion">
-      <h4>2. Tratamiento en curso</h4>
-      ${tratamientos.length ? tratamientos.map((t) => {
-        const pagadoPct = t.presupuesto ? Math.min(100, Math.round((t.pagado / t.presupuesto) * 100)) : 0;
-        const usadoPct = t.presupuesto ? Math.min(100, Math.round((t.usado / t.presupuesto) * 100)) : 0;
-        return `<div class="hc-tratamiento">
-          <div class="hc-tratamiento-cabeza">
-            <strong>${escapeHtml(t.entry.plan)} <small>desde el ${formatDate(t.entry.date)}</small></strong>
-            <span class="status ${t.terminado ? "" : "warn"}">${t.terminado ? "TERMINADO" : "EN CURSO"}</span>
-          </div>
-          <div class="hc-tratamiento-montos">
-            <span>Presupuesto <strong>${money(t.presupuesto)}</strong></span>
-            <span>Pagado <strong>${money(t.pagado)}</strong></span>
-            <span>Usado <strong>${money(t.usado)}</strong></span>
-            <span>Disponible <strong>${money(t.disponible)}</strong></span>
-            ${t.porPagar > 0 ? `<span>Por pagar <strong class="hc-falta">${money(t.porPagar)}</strong></span>` : ""}
-          </div>
-          <div class="hc-barra" role="img" aria-label="Pagado ${pagadoPct}%, usado ${usadoPct}%"><i class="hc-barra-pagado" style="width:${pagadoPct}%"></i><i class="hc-barra-usado" style="width:${usadoPct}%"></i></div>
-        </div>`;
-      }).join("") : `<p class="muted">Sin tratamiento. Se abre escribiendo plan y costo total en la nota clínica.</p>`}
-    </section>`;
-
-  const odonto = `<section class="hc-seccion hc-seccion-odontograma">
-      <h4>3. Odontograma${odontograma ? ` <small>· ${escapeHtml(odontograma.origen)}</small>` : ""}</h4>
-      ${odontograma
-        ? `<div class="hc-grafico"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${odontograma.html}</div></div></div>
-          ${odontograma.hallazgos.length ? `<ul class="hc-hallazgos">${odontograma.hallazgos.map((item) => `<li><strong>${escapeHtml(item.pieza)}</strong> ${escapeHtml(item.texto)}</li>`).join("")}</ul>` : ""}
-          ${odontograma.especificaciones ? `<p class="hc-observacion"><span>Especificaciones:</span> ${escapeHtml(odontograma.especificaciones)}</p>` : ""}`
-        : `<p class="muted">Sin odontograma registrado.</p>`}
-    </section>`;
-
-  const filas = atenciones.map((entry) => {
-    const precio = Number(entry.agreedPrice || 0);
-    const saldo = historyBalance(entry.id);
-    const detalle = [
-      entry.reason ? `<strong>${escapeHtml(entry.reason)}</strong>` : "",
-      entry.procedure ? escapeHtml(entry.procedure) : "",
-      entry.plan ? `<em>Plan: ${escapeHtml(entry.plan)}${Number(entry.planBudget || 0) > 0 ? ` · costo total ${money(entry.planBudget)}` : ""}</em>` : "",
-      String(entry.instructions || "").trim() ? `<em>Presupuesto: ${escapeHtml(entry.instructions)}</em>` : ""
-    ].filter(Boolean).join("<br>");
-    const delTratamiento = state.payments.some((payment) => payment.historyId === entry.id && esDescuentoDeTratamiento(payment));
-    const pago = saldo > 0 ? `<span class="status warn">Debe ${money(saldo)}</span>` : precio > 0 ? (delTratamiento ? "Del tratamiento" : "Pagado") : "-";
-    return `<tr>
-        <td class="hc-fecha">${formatDate(entry.date)}</td>
-        <td>${escapeHtml(entry.attendedBy || "-")}</td>
-        <td>${detalle || "-"}</td>
-        <td class="num">${money(precio)}</td>
-        <td class="num">${pago}</td>
-        ${pantalla ? `<td class="num"><button class="small-btn" type="button" data-edit-history="${entry.id}">Editar</button></td>` : ""}
-      </tr>`;
-  }).join("");
-
-  const tablaAtenciones = `<section class="hc-seccion">
-      <h4>4. Atenciones</h4>
-      ${atenciones.length
-        ? `<div class="table-wrap"><table class="hc-tabla"><thead><tr><th>Fecha</th><th>Atendió</th><th>Motivo y procedimiento</th><th class="num">Precio</th><th class="num">Pago</th>${pantalla ? "<th></th>" : ""}</tr></thead><tbody>${filas}</tbody></table></div>`
-        : `<p class="muted">Todavía no tiene atenciones registradas.</p>`}
-    </section>`;
-
-  const totalDeudas = deudas.reduce((suma, entry) => suma + historyBalance(entry.id), 0);
-  const tablaDeudas = `<section class="hc-seccion">
-      <h4>5. Deudas pendientes</h4>
-      ${deudas.length
-        ? `<div class="table-wrap"><table class="hc-tabla"><thead><tr><th>Fecha</th><th>Concepto</th><th>Paga hasta</th><th class="num">Saldo</th></tr></thead><tbody>${deudas.map((entry) => `<tr>
-            <td class="hc-fecha">${formatDate(entry.date)}</td>
-            <td>${esSoloDeuda(entry) ? `Cuenta por cobrar${entry.creditNote ? ` · ${escapeHtml(entry.creditNote)}` : ""}` : escapeHtml(entry.reason || "Atención")}</td>
-            <td>${entry.creditDueDate ? formatDate(entry.creditDueDate) : "-"}</td>
-            <td class="num"><strong>${money(historyBalance(entry.id))}</strong></td>
-          </tr>`).join("")}</tbody><tfoot><tr><td colspan="3">Total</td><td class="num"><strong>${money(totalDeudas)}</strong></td></tr></tfoot></table></div>`
-        : `<p>Ninguna.</p>`}
-    </section>`;
-
-  const firma = `<footer class="hc-firma">
-      <div>Firma y sello del cirujano dentista<br>COP N.°</div>
-      <div>Firma del paciente</div>
-    </footer>`;
-
-  return `<article class="hc-hoja">${cabecera}${datos}${tratamiento}${odonto}${tablaAtenciones}${tablaDeudas}${firma}</article>`;
+  return `<article class="hc-hoja hcf">
+    ${cabecera}
+    <h3 class="hcf-encabezado">Historia clínica odontológica</h3>
+    ${aviso}
+    ${fila(
+      ["HC:", patient.historiaNumero ? String(patient.historiaNumero).padStart(4, "0") : (pantalla ? "Se asigna al guardarla" : ""), 2],
+      ["Fecha:", fechaDeApertura, 2],
+      ["Hora:", horaDeApertura, 1, dePaciente("historiaHora")]
+    )}
+    ${titulo("Anamnesis")}
+    ${filiacion}
+    ${motivo}
+    ${enfermedad}
+    ${antecedentes}
+    ${examen}
+    ${diagnostico}
+    ${plan}
+    ${pronostico}
+    ${recomendaciones}
+    ${evolucion}
+    ${altaDelPaciente}
+    ${cierre}
+    ${odonto}
+  </article>`;
 }
 
 function renderClinicalHistory() {
@@ -4119,9 +4461,27 @@ function renderClinicalHistory() {
   const caja = $("#historyTimeline");
   if (!caja) return;
   const patientId = $("#historyPatientFilter").value || state.patients[0]?.id || "";
-  caja.innerHTML = hojaDeLaHistoria(patientId, { pantalla: true });
+  const hoja = historySheetTab || "historia";
+  $("#historySheetTabs")?.querySelectorAll("[data-hoja]").forEach((boton) => {
+    boton.classList.toggle("activa", boton.dataset.hoja === hoja);
+  });
+  /* La lista de copias acompana al odontograma y a nada mas: colgada debajo del
+     historial de pagos no pinta nada. */
+  const copias = document.querySelector(".odontogram-copies-panel");
+  if (copias) copias.hidden = hoja !== "odontograma";
+  caja.innerHTML = contenidoDeLaPestana(patientId);
+  if (hoja === "plan") alinearBotonDePrecios(caja);
   ajustarGraficos(caja);
-  renderPlanDeTratamiento();
+}
+
+
+function contenidoDeLaPestana(patientId) {
+  const hoja = historySheetTab || "historia";
+  if (hoja === "plan") return hojaDelPlan(patientId);
+  if (hoja === "historial") return historialDePagos(patientId);
+  if (hoja === "odontograma") return hojaDelOdontograma(patientId);
+  if (hoja === "consentimiento") return hojaDelConsentimiento(patientId);
+  return hojaDeLaHistoria(patientId, { pantalla: true });
 }
 
 /* El numero de historia se da la primera vez que se imprime: no todos los
@@ -4134,32 +4494,15 @@ async function imprimirHistoria(patientId) {
     alert("Elige primero un paciente.");
     return;
   }
-  const esPrimera = !patient.historiaNumero;
-  if (esPrimera && !confirm(`Es la primera vez que se imprime la historia de ${patient.name}. Se le asigna su número de historia clínica y ese número queda fijo. ¿Continuar?`)) return;
+  /* El numero lo da el boton Guardar de la hoja, no la impresion: se imprime
+     tambien en blanco, o dos veces, y abrir un registro ahi es un mal momento. */
+  if (!patient.historiaNumero
+    && !confirm(`La historia de ${patient.name} todavía no tiene número. Se imprimirá sin él. ¿Continuar?`)) return;
   // la ventana se abre antes de cualquier espera: despues el navegador la bloquea
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
     alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
-  }
-  if (esPrimera) {
-    ventana.document.write(`<p style="font-family:sans-serif;padding:24px">Preparando la historia clínica…</p>`);
-    try {
-      if (API_ENABLED && apiToken) {
-        const resultado = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify({ id: patient.id, asignarHistoria: true }) });
-        patient.historiaNumero = Number(resultado.historiaNumero || 0);
-        patient.historiaDesde = resultado.historiaDesde || todayISO();
-      } else {
-        patient.historiaNumero = Math.max(0, ...state.patients.map((item) => Number(item.historiaNumero || 0))) + 1;
-        patient.historiaDesde = todayISO();
-        saveState();
-      }
-      addLocalAuditEvent("HISTORIA_CLINICA_NUMERO", `Abrió la ${numeroDeHistoria(patient.historiaNumero)} de ${patient.name}`, patient.id);
-    } catch (error) {
-      ventana.close();
-      alert(error.message);
-      return;
-    }
   }
   const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
     .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
@@ -4377,6 +4720,829 @@ function piezaVacia(diente) {
     && !String(diente?.nota || "").trim();
 }
 
+function fichaDeLaCopia(copia) {
+  return Odontograma.normalizarFicha(parseFindings(copia.ficha));
+}
+
+
+/* El dinero del paciente visto desde su historia: lo que pago, cuando y con
+   que. Es la primera pestaña porque es lo que mas se consulta al atender -"¿ya
+   pago?"-, y hasta ahora habia que salir a Pagos y caja a buscarlo. */
+function historialDePagos(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) return `<p class="muted">Elige un paciente para ver su historial.</p>`;
+  /* Todo lo que le paso al paciente en una sola linea de tiempo: la atencion y
+     el dinero. Se atiende sin cobrar mas seguido de lo que parece -un control,
+     una atencion que se paga despues- y una lista de solo pagos hacia parecer
+     que ese dia no vino nadie. */
+  const notas = (state.clinicalHistory || [])
+    .filter((entry) => entry.patientId === patientId)
+    .map((entry) => {
+      const saldo = historyBalance(entry.id);
+      const precio = Number(entry.agreedPrice || 0);
+      const detalle = [entry.reason, entry.procedure].map((texto) => String(texto || "").trim()).filter(Boolean).join(" · ");
+      return {
+        fecha: entry.date || "",
+        orden: 0,
+        etiqueta: esSoloDeuda(entry) ? "Deuda" : "Atención",
+        clase: esSoloDeuda(entry) ? "warn" : "",
+        detalle: detalle || (esSoloDeuda(entry) ? "Cuenta por cobrar" : "Atención sin motivo escrito"),
+        segunda: [entry.attendedBy ? `Atendió ${entry.attendedBy}` : "", saldo > 0 ? `Debe ${money(saldo)}` : ""].filter(Boolean).join(" · "),
+        medio: "",
+        comprobante: "",
+        monto: precio,
+        sinMonto: precio <= 0,
+        // la atencion se abre desde aqui para escribirle la historia clinica
+        notaId: entry.id,
+      };
+    });
+  const pagos = (state.payments || [])
+    .filter((pago) => pago.patientId === patientId)
+    .map((pago) => {
+      const descuento = esDescuentoDeTratamiento(pago);
+      /* Lo que se le vendio en ese cobro -una cera, un cepillo- vive dentro del
+         propio pago. Sin esto la fila decia solo "Pago" y el producto no se
+         veia por ningun lado en la historia del paciente. */
+      const productos = (Array.isArray(pago.productItems) ? pago.productItems : [])
+        .map((item) => {
+          const producto = inventoryProductById(item.productId);
+          const cantidad = Number(item.quantity || 0);
+          const nombre = producto?.name || "Producto";
+          return cantidad > 1 ? `${nombre} x${cantidad}` : nombre;
+        })
+        .filter(Boolean)
+        .join(", ");
+      const escrito = String(pago.receipt || "").trim();
+      return {
+        fecha: pago.date || "",
+        orden: 1,
+        etiqueta: descuento ? "Del tratamiento" : "Pago",
+        clase: "",
+        detalle: [escrito || (descuento ? "Descuento del tratamiento" : "Pago"), productos].filter(Boolean).join(" · "),
+        segunda: descuento ? "No entra a caja: se usa del tratamiento ya pagado" : "",
+        medio: descuento ? "Tratamiento" : (pago.method || ""),
+        comprobante: pago.comprobante || (pago.sunatComprobante?.serie ? `${pago.sunatComprobante.serie}-${pago.sunatComprobante.numero}` : ""),
+        monto: descuento ? Number(pago.descontado || 0) : Number(pago.amount || 0),
+        sinMonto: false,
+        esPago: !descuento,
+      };
+    });
+  const movimientos = [...notas, ...pagos]
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || a.orden - b.orden);
+  if (!movimientos.length) return `<p class="muted">${escapeHtml(patient.name)} todavía no tiene atenciones ni pagos registrados.</p>`;
+  const cobrado = pagos.filter((item) => item.esPago).reduce((suma, item) => suma + item.monto, 0);
+  const filas = movimientos.map((item) => `<tr>
+      <td class="hc-fecha">${formatDate(item.fecha)}</td>
+      <td><span class="status ${item.clase}">${escapeHtml(item.etiqueta)}</span></td>
+      <td>${escapeHtml(item.detalle)}${item.segunda ? `<br><span class="muted">${escapeHtml(item.segunda)}</span>` : ""}</td>
+      <td>${escapeHtml(item.medio || "-")}</td>
+      <td>${escapeHtml(item.comprobante || "-")}</td>
+      <td class="num">${item.sinMonto
+        ? `<span class="muted">-</span>`
+        // el precio de la atencion va en gris: lo que entro a caja es el pago
+        : item.orden === 0 ? `<span class="muted">${money(item.monto)}</span>` : `<strong>${money(item.monto)}</strong>`}</td>
+      <td class="num">${item.notaId ? `<button class="small-btn" type="button" data-edit-history="${item.notaId}">Editar</button>` : ""}</td>
+    </tr>`).join("");
+  /* El boton lleva la atencion al formulario de arriba, con todo lo que ya
+     tiene: es donde el doctor escribe la historia clinica de esa visita. Antes
+     vivia en la hoja de Historia clinica, que ahora es el formato en papel. */
+  return `<article class="hc-hoja">
+    <section class="hc-seccion">
+      <h4>Historial · ${escapeHtml(patient.name)}</h4>
+      <div class="table-wrap"><table class="hc-tabla">
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Medio</th><th>Comprobante</th><th class="num">Monto</th><th></th></tr></thead>
+        <tbody>${filas}</tbody>
+        <tfoot><tr><td colspan="5">Total cobrado</td><td class="num"><strong>${money(cobrado)}</strong></td><td></td></tr></tfoot>
+      </table></div>
+    </section>
+  </article>`;
+}
+
+/* La hoja del odontograma como la pide la norma: el inicial, que es la primera
+   revision y no se vuelve a tocar, y el final, que se va actualizando con cada
+   control. Cada uno con sus hallazgos, sus especificaciones y la observacion
+   que se escribio al guardar esa copia. */
+
+
+/* La hoja del odontograma como la pide la norma: el inicial, que es la primera
+   revision y no se vuelve a tocar, y el final, que se va actualizando con cada
+   control. Cada uno con sus hallazgos, sus especificaciones y la observacion
+   que se escribio al guardar esa copia. */
+function bloqueDelOdontograma(titulo, copia, { pie = "", aviso = "", completo = false } = {}) {
+  const dibujo = copia ? dibujoDelOdontograma(fichaDeLaCopia(copia), { completo }) : null;
+  const fecha = copia ? `${formatDate(copia.date)}${copia.doctor ? ` · ${escapeHtml(copia.doctor)}` : ""}` : "";
+  /* Las dos se escriben en la pantalla del Odontograma -las especificaciones en
+     su campo, la observacion al pulsar "Guardar en la historia"- y aqui solo se
+     leen: esta hoja es la historia del paciente, no el lugar de trabajo. */
+  // las copias viejas guardaban la observacion solo en la nota de la copia
+  const observaciones = copia ? (fichaDeLaCopia(copia).obs || copia.note || "") : "";
+  const textos = copia
+    ? `<p class="hc-observacion"><span>Especificaciones:</span> ${escapeHtml(dibujo?.especificaciones || "-")}</p>
+      <p class="hc-observacion"><span>Observaciones:</span> ${escapeHtml(observaciones || "-")}</p>`
+    : "";
+  return `<section class="hc-seccion hc-seccion-odontograma">
+      <div class="odo-hoja-cabecera">
+        <h4>${titulo}</h4>
+        <p class="odo-hoja-fecha">Fecha: ${fecha ? fecha : "&nbsp;"}</p>
+      </div>
+      ${aviso ? `<p class="muted">${aviso}</p>` : ""}
+      ${dibujo
+        ? `<div class="hc-grafico"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${dibujo.html}</div></div></div>
+          ${dibujo.hallazgos.length ? `<ul class="hc-hallazgos">${dibujo.hallazgos.map((item) => `<li><strong>${escapeHtml(item.pieza)}</strong> ${escapeHtml(item.texto)}</li>`).join("")}</ul>` : ""}`
+        : `<p class="muted">Todavía no hay una copia guardada. Se guarda desde la pantalla del Odontograma, con "Guardar en la historia".</p>`}
+      ${textos}
+      ${pie}
+    </section>`;
+}
+
+
+function hojaDelOdontograma(patientId, { pantalla = true } = {}) {
+  const patient = patientById(patientId);
+  if (!patient) return `<p class="muted">Elige un paciente para ver su odontograma.</p>`;
+  // de la mas nueva a la mas vieja: la primera revision es la ultima de la lista
+  const copias = copiasDelOdontograma(patientId);
+  const inicial = copias[copias.length - 1] || null;
+  const ultima = copias[0] || null;
+  /* Los dos botones del pie: imprimir la hoja, y seguir marcando donde se
+     quedo -editar lleva a la pantalla del odontograma con la ultima copia
+     cargada, para no volver a empezar-. */
+  const imprimir = pantalla && (inicial || ultima)
+    ? `<p class="hc-editar-odontograma">
+        <button class="small-btn" type="button" data-editar-odontograma="${patientId}">Editar odontograma</button>
+        <button class="small-btn" type="button" data-imprimir-odontograma="${patientId}">Imprimir odontograma</button>
+      </p>`
+    : "";
+  const unaSola = inicial && ultima && inicial.id === ultima.id;
+  return `<article class="hc-hoja hc-hoja-odontograma">
+    ${bloqueDelOdontograma("ODONTOGRAMA INICIAL", inicial, { completo: !pantalla })}
+    ${bloqueDelOdontograma("ODONTOGRAMA DE EVOLUCIÓN", ultima, {
+      completo: !pantalla,
+      pie: imprimir,
+      aviso: unaSola ? "Todavía es la misma copia inicial: al guardar el odontograma otro día, este bloque pasa a mostrar el último control." : "",
+    })}
+  </article>`;
+}
+
+
+/* Las dos hojas del paciente -la inicial y la de evolucion- salen como en el
+   formato del Colegio: una por pagina, con su titulo en el recuadro, la fecha
+   al costado y, debajo del dibujo, las especificaciones y las observaciones. */
+function imprimirOdontogramas(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) {
+    alert("Elige primero un paciente.");
+    return;
+  }
+  if (!copiasDelOdontograma(patientId).length) {
+    alert("Todavía no hay ninguna copia guardada del odontograma. Se guarda desde la pantalla del Odontograma, con \"Guardar en la historia\".");
+    return;
+  }
+  // la ventana se abre antes de cualquier espera: despues el navegador la bloquea
+  const ventana = window.open("", "_blank", "width=1100,height=900");
+  if (!ventana) {
+    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    return;
+  }
+  const config = state.config || {};
+  const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
+    .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
+    .join("");
+  const edad = ageFromBirthDate(patient.birthDate);
+  const cabecera = `<header class="odo-impreso-cabecera">
+      <div class="hc-clinica">
+        ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+        <div>
+          <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+          <p>${escapeHtml(config.issuerAddress || "")}</p>
+        </div>
+      </div>
+      <div class="odo-impreso-paciente">
+        <strong>${escapeHtml(patient.name)}</strong>
+        <p>DNI ${escapeHtml(patient.dni || "-")}${edad === null ? "" : ` · ${edad} años`}${patient.historiaNumero ? ` · HC N.° ${escapeHtml(numeroDeHistoria(patient.historiaNumero))}` : ""}</p>
+      </div>
+    </header>`;
+  ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+    <base href="${escapeHtml(location.href)}">
+    <title>Odontograma ${escapeHtml(patient.name)}</title>
+    ${hojasDeEstilo}
+    <style>
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff !important; }
+      body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .hc-hoja-odontograma { border: 0 !important; border-radius: 0 !important; padding: 0 !important; max-width: 186mm; margin: 0 auto; }
+      /* la cabecera vive fuera de la hoja, asi que necesita su mismo ancho y
+         centrado: sin esto el logo y el nombre del paciente quedaban pegados
+         a los bordes del papel */
+      .odo-impreso-cabecera { max-width: 186mm; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12mm 0 4mm; border-bottom: 1.5px solid #000; }
+      .odo-impreso-cabecera .hc-clinica { display: flex; align-items: center; gap: 12px; }
+      .odo-impreso-cabecera .hc-logo { max-height: 18mm; max-width: 34mm; object-fit: contain; }
+      .odo-impreso-cabecera h3 { margin: 0; font-size: 15px; }
+      .odo-impreso-cabecera .hc-clinica p { margin: 3px 0 0; font-size: 11px; }
+      .odo-impreso-paciente { text-align: right; font-size: 11px; }
+      .odo-impreso-paciente p { margin: 2px 0 0; }
+      /* cada odontograma en su hoja, como las dos paginas del formato */
+      .hc-seccion-odontograma { break-inside: avoid; padding-top: 6mm; }
+      .hc-seccion-odontograma + .hc-seccion-odontograma { break-before: page; padding-top: 10mm; }
+      .hc-editar-odontograma { display: none !important; }
+      .table-wrap { overflow: visible !important; }
+    </style></head><body>
+    ${cabecera}
+    ${hojaDelOdontograma(patient.id, { pantalla: false })}
+    <script>
+      (function () {
+        var impreso = false;
+        /* Cuanto mide una hoja A4 de verdad, en los pixeles de esta ventana. Se
+           mide en vez de calcularla: asi vale igual en cualquier pantalla. */
+        function altoDeLaHoja() {
+          var regla = document.createElement("div");
+          regla.style.cssText = "position:absolute;visibility:hidden;height:297mm";
+          document.body.appendChild(regla);
+          var alto = regla.getBoundingClientRect().height;
+          regla.parentNode.removeChild(regla);
+          return alto;
+        }
+        /* El dibujo se achica hasta que su bloque entre entero en la hoja, a lo
+           ancho y a lo alto. Antes solo se miraba el ancho: el bloque salia mas
+           alto que el papel, el navegador lo empujaba a la pagina siguiente y
+           dejaba la anterior en blanco. */
+        function ajustar() {
+          var hoja = altoDeLaHoja();
+          var cabecera = document.querySelector(".odo-impreso-cabecera");
+          var arriba = cabecera ? cabecera.getBoundingClientRect().height : 0;
+          var secciones = document.querySelectorAll(".hc-seccion-odontograma");
+          Array.prototype.forEach.call(secciones, function (seccion, i) {
+            var caja = seccion.querySelector(".hc-grafico");
+            var lienzo = caja && caja.firstElementChild;
+            if (!lienzo || !caja.clientWidth) return;
+            lienzo.style.zoom = "1";
+            var ancho = lienzo.scrollWidth;
+            var alto = lienzo.scrollHeight;
+            if (!ancho || !alto) return;
+            // lo que ocupa el resto del bloque: el titulo, los hallazgos y los textos
+            var resto = seccion.getBoundingClientRect().height - caja.getBoundingClientRect().height;
+            // la cabecera con el logo solo comparte hoja con el primer bloque
+            var sitio = hoja - resto - (i === 0 ? arriba : 0) - 20;
+            lienzo.style.zoom = String(Math.max(0.3, Math.min(1, caja.clientWidth / ancho, sitio / alto)));
+          });
+        }
+        function imprimir() {
+          if (impreso) return;
+          impreso = true;
+          ajustar();
+          window.focus();
+          window.print();
+        }
+        window.addEventListener("load", function () { setTimeout(imprimir, 300); });
+        setTimeout(imprimir, 2500);
+      })();
+    <\/script></body></html>`);
+  ventana.document.close();
+}
+
+
+/* La firma que se esta dibujando ahora mismo: de quien es, sobre que documento
+   y si ya hay trazos. Vive fuera porque el lienzo y el boton de guardar la
+   miran desde sitios distintos. */
+let firmaEnCurso = null;
+/* Cual de los consentimientos se esta mirando en la pestana. */
+let consentimientoElegido = "";
+
+
+/* ==================== CONSENTIMIENTOS ====================
+   Los textos que el paciente firma antes de cada tratamiento, con su firma
+   dibujada. Vienen del sistema dental de EmpresaFacil; aqui se guardan en el
+   servidor, en la tabla consentimientos.
+   ========================================================== */
+
+/* Los consentimientos que firma el consultorio, tal como estan en sus hojas de
+   Word, uno por tratamiento. Viven aparte de clinical.js porque son texto largo
+   y fijo: quien los corrija no tiene que entrar al codigo de la historia.
+
+   Cada uno devuelve sus parrafos. El marco -quien firma, el DECLARO con el
+   nombre del dentista, la ciudad, la fecha y las firmas- lo pone clinical.js,
+   que es igual en todos. Una entrada puede ser texto o { lista: [...] } para
+   las enumeraciones de riesgos. */
+
+const CONSENTIMIENTOS = [
+  { clave: "ortodoncia", titulo: "Ortodoncia", encabezado: "Consentimiento informado para ortodoncia" },
+  { clave: "exodoncia", titulo: "Exodoncia simple", encabezado: "Consentimiento informado para la exodoncia simple" },
+  { clave: "tercer-molar", titulo: "Tercer molar", encabezado: "Consentimiento informado para exodoncia quirúrgica de terceros molares incluidos" },
+  { clave: "endodoncia", titulo: "Endodoncia", encabezado: "Consentimiento informado para endodoncia" },
+  { clave: "rehabilitacion", titulo: "Rehabilitación oral", encabezado: "Consentimiento informado en rehabilitación oral" },
+  { clave: "implantes", titulo: "Implantes", encabezado: "Consentimiento informado para implantes dentales" },
+];
+
+const CIERRE_COMUN = [
+  "He comprendido lo que se me ha explicado de forma clara, con un lenguaje sencillo, habiendo resuelto todas las dudas que se me han planteado, y la información complementaria que he solicitado.",
+  "Me queda claro que en cualquier momento y sin necesidad de dar ninguna explicación, puedo revocar este consentimiento.",
+];
+
+const ANESTESIA = "El tratamiento que voy a recibir implica la administración de anestesia local, que consiste en proporcionar, mediante una inyección, sustancias que provocan un bloqueo reversible de los nervios, de tal manera que se inhibe transitoriamente la sensibilidad con el fin de realizar el tratamiento sin dolor. Tendré la sensación de adormecimiento del labio o de la cara, que normalmente desaparece en dos o tres horas. La administración de la anestesia puede provocar, en el punto de la inyección, ulceración de la mucosa y dolor, y menos frecuentemente, limitaciones en el movimiento de apertura de la boca, que pueden requerir tratamiento posterior; también puede provocar baja de la presión arterial que, en casos menos frecuentes, puede provocar un síncope o fibrilación ventricular, que deben tratarse posteriormente e, incluso, excepcionalmente, la muerte. Comprendo que, aunque de mis antecedentes personales no se deducen posibles alergias al agente anestésico, la anestesia puede provocar urticaria, dermatitis, asma o edema angioneurótico (asfixia), que en casos extremos puede requerir tratamiento urgente.";
+
+const TEXTOS = {
+  ortodoncia: () => [
+    "me ha explicado que es conveniente en mi situación proceder a realizar un tratamiento ortodóntico, con objeto de conseguir una mejor alineación de los dientes, para de esta manera prevenir problemas posteriores, mejorando a la vez la masticación y la estética.",
+    "Para ello se emplean aparatos de ortodoncia que pueden ser removibles o fijos.",
+    "Sé que es posible que los aparatos removibles se pierdan fácilmente si no están en la boca, y que en este caso el costo de reposición correrá por mi cuenta.",
+    "El Dentista me ha explicado que los aparatos pueden producir úlceras o llagas, dolor en los dientes que están con los aparatos y que es frecuente que con el tiempo se produzca reabsorción de las raíces, de manera que estas queden más pequeñas, así como la disminución de las encías, que pueden requerir tratamiento posterior. También me ha explicado que el tratamiento puede requerir la extracción de algún o algunos dientes sanos, incluso puede ser necesaria la extracción de las muelas del juicio.",
+    "También sé que el tratamiento ortodóntico puede ser largo en el tiempo, meses e incluso años, lo que no depende de la técnica empleada ni de su correcta realización sino de factores generalmente biológicos y de la respuesta de mi organismo, totalmente impredecibles, y que durante todo este tiempo deberé extremar las medidas de higiene de la boca para evitar caries y enfermedad de las encías.",
+    "El Dentista me ha explicado que suspenderá el tratamiento si la higiene no es la adecuada, porque corre gran riesgo mi dentición de sufrir lesiones cariosas múltiples u otros padecimientos derivados de la escasez de higiene oral.",
+    "Asimismo, me ha informado que tras la conclusión del tratamiento se pueden producir algunos movimientos dentarios no deseados y que deberé acudir periódicamente para ser revisado, para evitar recaídas.",
+    ...CIERRE_COMUN,
+    "Estoy satisfecho con la información recibida y comprendido el alcance y riesgos de este tratamiento, y por ello, <strong>DOY MI CONSENTIMIENTO</strong> para que se me practique el tratamiento de ortodoncia.",
+  ],
+
+  exodoncia: () => [
+    "me ha explicado que es conveniente en mi situación realizar la extracción de una o más piezas dentarias:",
+    "1. En consecuencia, comprendo que no mantendré esa o esas piezas dentarias y que únicamente podrán ser sustituidas por una prótesis o implante. Que podría recurrir a técnicas conservadoras como la periodoncia o la endodoncia, y las descarto por el estado que presenta, que no hace razonable su conservación.",
+    `2. ${ANESTESIA}`,
+    "3. La intervención consiste en el empleo alternado de instrumental especializado quirúrgico, aplicando fuerza manual, de leve a moderada, cuya finalidad es movilizar y finalmente extraer del alveolo la pieza o piezas dentales problema.",
+    "4. Aunque se me han realizado los medios diagnósticos que se han estimado precisos, comprendo que es posible que el estado inflamatorio del diente o molar que se me va a extraer pueda producir un proceso infeccioso, que puede requerir tratamiento con antibióticos y/o antiinflamatorios; del mismo modo, en el curso del procedimiento puede producirse una hemorragia, que exigiría para cohibirla la colocación en el alvéolo de una torunda de algodón seca u otro producto hemostático, incluso sutura. También sé que en el curso del procedimiento pueden producirse, aunque no es frecuente, la rotura de la corona, heridas en la mucosa de la mejilla o en la lengua, intrusión de la raíz en el seno maxilar o fractura del maxilar, que no dependen de la forma o modo de practicarse la intervención ni de su correcta realización, sino que son imprevisibles, en cuyo caso el cirujano dentista tomará las medidas pertinentes para continuar con el tratamiento.",
+    "5. Mi dentista me ha explicado que todo acto quirúrgico lleva implícitas una serie de complicaciones comunes y potencialmente serias que podrían requerir tratamientos complementarios, tanto médicos como quirúrgicos.",
+    ...CIERRE_COMUN,
+    "Estoy satisfecho con la información recibida y comprendido el alcance y riesgos de este tratamiento, y por ello, <strong>DOY MI CONSENTIMIENTO</strong> para que se me practique el tratamiento de extracción simple.",
+  ],
+
+  "tercer-molar": () => [
+    "me ha explicado que es conveniente en mi situación proceder a la extracción quirúrgica de terceros molares incluidos, y en consecuencia lo autorizo, junto con sus colaboradores, para que me sea realizado ese procedimiento.",
+    "La extracción de las muelas del juicio incluidas está indicada en ocasiones para evitar problemas como dolor, inflamación, infección, formación de quistes, enfermedad periodontal, caries, maloclusión, pérdida prematura de otros dientes y pérdida prematura de hueso.",
+    "Este procedimiento se realiza con el fin de conseguir un indudable beneficio; sin embargo, no está exento de posibles complicaciones, algunas de ellas inevitables en casos excepcionales, siendo las estadísticamente más frecuentes:",
+    { lista: [
+      "Alergia al anestésico u otro medicamento utilizado, antes, durante o después de la cirugía.",
+      "Hematoma e hinchazón de la región, hemorragia e infección postoperatoria.",
+      "Apertura de los puntos de sutura.",
+      "Apertura limitada de la boca durante días o semanas.",
+      "Daño a los dientes o tejidos vecinos.",
+      "Abandono accidental de un pequeño fragmento de raíz, cuya extracción supondría una ampliación injustificada de la cirugía.",
+      "Falta de sensibilidad parcial o total, temporal o permanente, del nervio dentario inferior (labio inferior).",
+      "Falta de sensibilidad parcial o total, temporal o permanente, del nervio lingual (lengua y gusto).",
+      "Sinusitis o comunicación entre la boca y la nariz o los senos maxilares.",
+      "Fracturas óseas y desplazamiento de dientes a estructuras vecinas.",
+      "Tragado o aspiración de dientes o de alguna de sus partes.",
+      "Rotura de instrumentos o de la aguja de anestesia.",
+    ] },
+    "En fumadores, los riesgos de infección o de apertura de la herida son mayores. La intervención puede realizarse con anestesia general o local, con el riesgo inherente asociado a las mismas, y los fármacos utilizados pueden producir alteraciones del nivel de conciencia, por lo que no podré realizar determinadas actividades inmediatamente, como conducir un vehículo.",
+    "En ocasiones excepcionales, durante la cirugía pueden surgir situaciones imprevistas que obliguen al cirujano a realizar algún procedimiento adicional o distinto al planificado. En ese caso, autorizo al cirujano a tomar las decisiones que crea más justificadas y convenientes para mi salud.",
+    ...CIERRE_COMUN,
+    "Estoy satisfecho con la información recibida y comprendido el alcance y riesgos de este tratamiento, y por ello, <strong>DOY MI CONSENTIMIENTO</strong> para que se me practique la exodoncia quirúrgica de terceros molares.",
+  ],
+
+  endodoncia: () => [
+    "me ha explicado que es conveniente en mi situación proceder a realizar el tratamiento endodóntico de mi pieza dentaria, para lo que me ha informado debidamente de lo siguiente:",
+    "El propósito principal de la intervención es la eliminación del tejido pulpar inflamado o infectado del interior del diente, para evitar secuelas dolorosas o infecciosas.",
+    ANESTESIA,
+    "La intervención consiste en la eliminación y el relleno de la cámara pulpar y los tejidos radiculares con un material que selle la cavidad e impida el paso a las bacterias y toxinas infecciosas, conservando el diente o molar.",
+    "Se me ha informado que, a pesar de realizarse correctamente la técnica, cabe la posibilidad de que la infección o el proceso quístico o granulomatoso no se eliminen totalmente, por lo que puede ser necesario acudir a la cirugía periapical al cabo de algunas semanas, meses o incluso años. Igualmente, es posible que no se obtenga el relleno total de los conductos, por lo que también puede ser necesario repetir el tratamiento, como en el caso de que el relleno quede corto o largo.",
+    "También me ha advertido que es muy posible que después de la endodoncia el diente cambie de color y se oscurezca ligeramente, y que es frecuente que el diente o molar tratado se debilite y tienda a fracturarse, por lo que puede ser necesario realizar coronas protésicas e insertar refuerzos interradiculares.",
+    "Me ha informado de que todo acto quirúrgico lleva implícitas una serie de complicaciones comunes y potencialmente serias que podrían requerir tratamientos complementarios, tanto médicos como quirúrgicos.",
+    ...CIERRE_COMUN,
+    "Estoy satisfecho con la información recibida y comprendido el alcance y riesgos de este tratamiento, y por ello, <strong>DOY MI CONSENTIMIENTO</strong> para que se me practique el tratamiento de endodoncia.",
+  ],
+
+  rehabilitacion: () => [
+    "me ha explicado que es conveniente en mi situación proceder a realizar un tratamiento de rehabilitación oral, que puede precisar distintos tipos de técnicas y tratamientos, entre ellos:",
+    `1. Anestesia local. ${ANESTESIA}`,
+    "2. Extracciones simples. La intervención consiste en la aplicación de un fórceps a la corona, practicando la luxación con movimientos de lateralidad, de manera que pueda desprenderse fácilmente del alvéolo donde está insertada. Comprendo que el estado inflamatorio del diente puede producir un proceso infeccioso que requiera antibióticos y/o antiinflamatorios, y que en el curso del procedimiento puede producirse una hemorragia, la rotura de la corona, heridas en la mucosa de la mejilla o en la lengua, inserción de la raíz en el seno maxilar o fractura del maxilar o de la tuberosidad, que son imprevisibles.",
+    "3. Obturaciones o empastes. El propósito principal es restaurar los tejidos dentarios duros y proteger la pulpa, para conservar el diente o molar y su función, restableciendo al tiempo, siempre que sea posible, la estética adecuada. Es frecuente que se produzca una mayor sensibilidad, sobre todo al frío, que normalmente desaparecerá de modo espontáneo. Comprendo que el sellado hermético puede reactivar procesos infecciosos que hagan necesaria la endodoncia y que, especialmente si la caries es profunda, el diente puede quedar frágil y ser necesario otro tipo de reconstrucción o una funda protésica. También comprendo que es posible que no me encuentre satisfecho con la forma o el color del diente tras el tratamiento, porque las cualidades de los empastes nunca serán idénticas a su aspecto sano.",
+    "4. Endodoncia. El propósito principal es la eliminación del tejido pulpar inflamado o infectado, o de un proceso granulomatoso o quístico, rellenando la cámara pulpar y los tejidos radiculares con un material que selle la cavidad. A pesar de realizarse correctamente la técnica, cabe la posibilidad de que la infección no se elimine totalmente y sea necesaria una apicectomía al cabo de semanas, meses o años; que no se obtenga el relleno total de los conductos y haya que repetir el tratamiento; que el diente cambie de color y se oscurezca; y que se debilite y tienda a fracturarse, por lo que puede ser necesario realizar coronas protésicas e insertar espigos.",
+    "5. Prótesis. Me ha explicado la necesidad de tallar los pilares de la prótesis, lo que conlleva la posibilidad de aproximación excesiva a la cámara pulpar, que obligaría a realizar una endodoncia y, en algunos casos, si el muñón quedase frágil, a realizar un espigo colado o de fibra. También se me ha explicado la necesidad de mantener una higiene escrupulosa para evitar caries, gingivitis y enfermedad periodontal, y la importancia de las visitas periódicas —entre seis meses y un año— para controlar la situación de la prótesis y su entorno. Existe la posibilidad de fractura de cualquiera de los componentes de la prótesis, muy relacionada con el uso que yo haga de la misma.",
+    "El Dentista me ha explicado que todo acto odontológico lleva implícitas una serie de complicaciones comunes y potencialmente serias que podrían requerir tratamientos complementarios, tanto médicos como quirúrgicos.",
+    ...CIERRE_COMUN,
+    "Estoy satisfecho con la información recibida y comprendido el alcance y riesgos de este tratamiento, y por ello, <strong>DOY MI CONSENTIMIENTO</strong> para que se me practique el tratamiento de rehabilitación oral.",
+  ],
+
+  implantes: () => [
+    "me ha explicado que el propósito de la intervención es la reposición de los dientes perdidos mediante la fijación de tornillos o láminas al hueso, y posteriormente la colocación de uno o más pilares metálicos que soportarán las futuras piezas dentales artificiales.",
+    "He sido informado de otras alternativas de tratamiento mediante la utilización de prótesis convencionales. Para llevar a cabo el procedimiento se aplicará anestesia, de cuyos posibles riesgos también he sido informado. Igualmente se me ha informado de que existen ciertos riesgos potenciales en toda intervención quirúrgica realizada en la boca, concretamente:",
+    { lista: [
+      "Alergia al anestésico, antes, durante o después de la cirugía.",
+      "Molestias, hematomas e inflamación postoperatoria durante los primeros días.",
+      "Sangrado e infección postoperatoria que requiera tratamiento posterior.",
+      "Lesión de raíces de dientes adyacentes.",
+      "Lesión nerviosa que provoque hipoestesia o anestesia del labio inferior, superior, mentón, dientes, encía y/o lengua, que suele ser transitoria y excepcionalmente permanente.",
+      "Comunicación con los senos nasales o con las fosas nasales.",
+      "Aspiración o deglución de algún instrumento quirúrgico de pequeño tamaño.",
+      "Desplazamiento del implante a estructuras vecinas y rotura de instrumentos.",
+    ] },
+    "Los implantes se utilizan ampliamente en todo el mundo desde hace más de 25 años y son un procedimiento considerado seguro por la comunidad internacional; sin embargo, se me ha explicado que, aunque la técnica se realice correctamente, existe un porcentaje de fracasos de entre el 8 y el 10 por ciento. He sido informado de las complicaciones potenciales de este procedimiento quirúrgico, que incluyen además de las anteriores:",
+    { lista: [
+      "Apertura de la sutura y exposición del implante.",
+      "Falta de integración del implante con el hueso que lo rodea, con la consiguiente pérdida precoz o tardía del implante y la posible replanificación de la prótesis.",
+      "Imposibilidad de colocar un implante en la localización prevista, por las características del hueso remanente.",
+      "En casos excepcionales, con atrofia ósea importante, fractura mandibular que requiera tratamiento posterior.",
+      "Fractura del implante o de algún componente de la prótesis.",
+      "Complicaciones inherentes a la prótesis dental: no cumplir las expectativas estéticas, dificultad para la fonación, etc.",
+    ] },
+    "Entiendo que el tratamiento no concluye con la colocación del implante, sino que será preciso visitar periódicamente al profesional y seguir escrupulosamente las normas de higiene que me ha explicado.",
+    ...CIERRE_COMUN,
+    "Estoy satisfecho con la información recibida y comprendido el alcance y riesgos de este tratamiento, y por ello, <strong>DOY MI CONSENTIMIENTO</strong> para que se me practique el tratamiento de implantes.",
+  ],
+};
+
+
+// lo que el sistema todavia no sabe se imprime como linea para llenar a mano
+const RAYA = `<span class="ci-raya"></span>`;
+
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "setiembre", "octubre", "noviembre", "diciembre"];
+
+/* Mayor o menor de edad sale de la fecha de nacimiento que ya esta en la ficha;
+   sin fecha no se afirma nada y queda la linea para escribirlo.
+
+   El parrafo del representante legal va siempre, tambien en la hoja de un
+   adulto, porque asi esta el papel que se firma. */
+function bloqueDeQuienFirma(patient) {
+  const edad = ageFromBirthDate(patient.birthDate);
+  /* El nombre del representado solo se escribe en la hoja de un menor: en la de
+     un adulto ese parrafo entero queda en blanco, porque nadie firma por el. */
+  const menor = edad !== null && edad < 18;
+  const condicion = edad === null ? RAYA : (menor ? "menor de edad" : "mayor de edad");
+  // lo que la ficha ya sabe se escribe; lo que falta queda como linea
+  const dato = (valor) => (String(valor || "").trim() ? `<strong>${escapeHtml(String(valor).trim())}</strong>` : RAYA);
+  /* Sin representante registrado la linea queda vacia entera: poner ahi el
+     domicilio del paciente seria atribuirselo a alguien que no existe. Si hay
+     representante y no se anoto su domicilio, se asume el del paciente, que es
+     lo normal en un menor que vive con quien lo acompaña. */
+  const domicilioDelRepresentante = String(patient.guardianName || "").trim()
+    ? (patient.guardianAddress || patient.address)
+    : "";
+  return `<p class="ci-parrafo">Yo <strong>${escapeHtml(patient.name)}</strong> (como paciente), con DNI No. <strong>${escapeHtml(patient.dni || "")}</strong>, ${condicion}, y con domicilio en ${dato(patient.address)}</p>
+    <p class="ci-parrafo">o Yo ${dato(patient.guardianName)} con DNI No. ${dato(patient.guardianDni)} mayor de edad, y con domicilio en ${dato(domicilioDelRepresentante)} en calidad de representante legal de ${menor ? `<strong>${escapeHtml(patient.name)}</strong>${patient.guardianRelation ? ` (${escapeHtml(patient.guardianRelation)})` : ""}` : RAYA}.</p>`;
+}
+
+/* En la agenda la doctora se llama por su nombre corto -"Maghy"-, pero un
+   consentimiento es un documento y ahi va el nombre completo. Se busca entre
+   los usuarios registrados por su primer nombre; si hubiera dos que empiezan
+   igual no se adivina: se deja lo que diga la ficha. */
+function usuarioDelDoctor(etiqueta) {
+  const corto = String(etiqueta || "").trim();
+  if (!corto) return null;
+  const enMinusculas = (texto) => String(texto || "").trim().toLocaleLowerCase("es");
+  const usuarios = (state.users || []).filter((usuario) => usuario.active !== false && String(usuario.name || "").trim());
+  const exacto = usuarios.find((usuario) => enMinusculas(usuario.name) === enMinusculas(corto));
+  if (exacto) return exacto;
+  const clinicos = ["DOCTOR", "DOCTOR_TRABAJADOR", "ADMIN"];
+  const candidatos = usuarios.filter((usuario) =>
+    clinicos.includes(usuario.role) && enMinusculas(usuario.name).split(/\s+/)[0] === enMinusculas(corto));
+  return candidatos.length === 1 ? candidatos[0] : null;
+}
+
+function nombreCompletoDelDoctor(etiqueta) {
+  const corto = String(etiqueta || "").trim();
+  return usuarioDelDoctor(corto)?.name.trim() || corto;
+}
+
+
+/* Una sola hoja para todos: cambia el titulo y los parrafos, que viven en
+   consentimientos.js. El resto -quien firma, el DECLARO con el nombre del
+   dentista, la ciudad, la fecha y las firmas- es igual en todos los
+   tratamientos y se arma aqui. */
+function armarConsentimiento(clave, patient, opciones = {}) {
+  const definicion = CONSENTIMIENTOS.find((item) => item.clave === clave);
+  const parrafos = TEXTOS[clave];
+  if (!definicion || !parrafos) return "";
+  const config = state.config || {};
+  const hoy = new Date();
+  const ciudad = config.issuerDistrict || config.issuerProvince || "";
+  const dentista = nombreCompletoDelDoctor(patient.doctor || (config.doctors || [])[0] || "");
+  const bloques = parrafos().map((parrafo, indice) => {
+    if (parrafo && parrafo.lista) {
+      return `<ul class="ci-lista">${parrafo.lista.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+    }
+    // el primero cuelga del DECLARO y lleva el nombre del cirujano dentista
+    return indice === 0
+      ? `<p class="ci-parrafo">Que el Cirujano Dentista ${dentista ? `<strong>${escapeHtml(dentista)}</strong>` : RAYA} ${parrafo}</p>`
+      : `<p class="ci-parrafo">${parrafo}</p>`;
+  }).join("");
+  return `<h5 class="ci-titulo">${escapeHtml(definicion.encabezado)}</h5>
+    ${bloqueDeQuienFirma(patient)}
+    <p class="ci-declaro">DECLARO</p>
+    ${bloques}
+    <p class="ci-parrafo">En ${ciudad ? `<strong>${escapeHtml(ciudad)}</strong>` : RAYA}, ${hoy.getDate()} de ${MESES[hoy.getMonth()]} del ${hoy.getFullYear()}.</p>
+    ${bloqueDeFirmas(patient, clave, opciones)}`;
+}
+
+/* Un consentimiento firmado no se cambia: es el documento que respalda la
+   atencion. Si hubo un error se firma uno nuevo, no se corrige el anterior. */
+function guardarFirmaDelConsentimiento(patientId, tipo, firma) {
+  const patient = patientById(patientId);
+  if (!patient || !tipo || !firma) return false;
+  if (!canManageClinical()) {
+    alert("Tu usuario no puede registrar consentimientos.");
+    return false;
+  }
+  if (consentimientoFirmado(patientId, tipo)) {
+    alert("Este consentimiento ya está firmado.");
+    return false;
+  }
+  const consentimiento = {
+    id: uid("consent"),
+    patientId,
+    tipo,
+    fecha: todayISO(),
+    firma,
+    firmante: patient.name || "",
+    doctor: patient.doctor || "",
+    registradoPor: currentUser()?.name || "",
+    createdAt: new Date().toISOString(),
+  };
+  state.consentimientos.push(consentimiento);
+  /* Se guarda en el servidor sin hacer esperar al paciente: la hoja ya se ve
+     firmada en pantalla. Si el envio falla se avisa y se quita de la lista,
+     para que nadie se quede creyendo que firmo algo que no se guardo. */
+  saveConsentimientoApi(consentimiento).catch((error) => {
+    state.consentimientos = state.consentimientos.filter((item) => item.id !== consentimiento.id);
+    renderClinicalHistory();
+    alert("No se pudo guardar el consentimiento: " + (error?.message || "error de conexión"));
+  });
+  addLocalAuditEvent(
+    "CONSENTIMIENTO_FIRMADO",
+    `Firmó el consentimiento de ${tipo}: ${patient.name || "Paciente"}`,
+    patientId
+  );
+  return true;
+}
+
+function consentimientoFirmado(patientId, tipo) {
+  return (state.consentimientos || []).find((item) => item.patientId === patientId && item.tipo === tipo) || null;
+}
+
+/* La firma del paciente se dibuja en la pantalla y se queda con el documento.
+   La del dentista va a mano sobre el papel: es quien lo entrega, y su sello y
+   su colegiatura van ahi mismo. */
+function bloqueDeFirmas(patient, tipo, { pantalla = true } = {}) {
+  const firmado = consentimientoFirmado(patient.id, tipo);
+  const firma = firmado?.firma
+    ? `<img class="ci-firma" src="${escapeHtml(firmado.firma)}" alt="Firma del paciente" />
+      <small>Firmado el ${formatDate(firmado.fecha)}${firmado.firmante ? ` por ${escapeHtml(firmado.firmante)}` : ""}</small>`
+    : pantalla
+      ? `<button class="small-btn" type="button" data-firmar-consentimiento="${tipo}">Firmar aquí</button>`
+      : "";
+  // el COP se guarda en el usuario de la doctora; si no lo puso, queda la linea
+  const cop = usuarioDelDoctor(patient.doctor || (state.config?.doctors || [])[0] || "")?.cop || "";
+  return `<div class="ci-firmas">
+      <div>${firma}Paciente o Representante legal</div>
+      <div>Cirujano Dentista<br>COP N.º ${cop ? escapeHtml(cop) : RAYA}</div>
+    </div>`;
+}
+
+function hojaDelConsentimiento(patientId) {
+  const patient = patientById(patientId);
+  if (!patient) return `<p class="muted">Elige un paciente para ver su consentimiento.</p>`;
+  const config = state.config || {};
+  const elegido = consentimientoElegido || "";
+  const opciones = CONSENTIMIENTOS.map((item) =>
+    `<button class="hc-pestana${item.clave === elegido ? " activa" : ""}" type="button" data-consentimiento="${item.clave}">${escapeHtml(item.titulo)}</button>`
+  ).join("");
+  const titulo = CONSENTIMIENTOS.find((item) => item.clave === elegido)?.titulo || "";
+  const hayTexto = Boolean(TEXTOS[elegido]);
+  const cuerpo = hayTexto
+    ? `<div class="ci-hoja">
+        <header class="hc-cabecera">
+          <div class="hc-clinica">
+            ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+            <div>
+              <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+              <p>${escapeHtml(config.issuerAddress || "")}</p>
+            </div>
+          </div>
+        </header>
+        ${armarConsentimiento(elegido, patient)}
+        <p class="hc-editar-odontograma"><button class="small-btn" type="button" data-imprimir-consentimiento="${elegido}">Imprimir consentimiento</button></p>
+      </div>`
+    : `<p class="muted">${elegido
+      ? `Consentimiento de ${escapeHtml(titulo.toLowerCase())} para ${escapeHtml(patient.name)}: en preparación.`
+      : "Elige el tratamiento del que se firma el consentimiento."}</p>`;
+  return `<article class="hc-hoja">
+    <section class="hc-seccion">
+      <h4>Consentimiento informado</h4>
+      <div class="hc-pestanas hc-pestanas-hijas">${opciones}</div>
+      ${cuerpo}
+    </section>
+  </article>`;
+}
+
+/* La hoja firmada se entrega en papel, asi que se imprime sola, sin la pantalla
+   alrededor: misma ventana aparte que usa la historia clinica. */
+function imprimirConsentimiento(patientId, clave) {
+  const patient = patientById(patientId);
+  if (!patient || !TEXTOS[clave]) return;
+  const config = state.config || {};
+  const ventana = window.open("", "_blank");
+  if (!ventana) {
+    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes e inténtalo de nuevo.");
+    return;
+  }
+  ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8" />
+    <title>Consentimiento · ${escapeHtml(patient.name)}</title>
+    <base href="${location.origin}${location.pathname}" />
+    <link rel="stylesheet" href="../../assets/css/design-system.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* Sin margen de pagina el navegador no imprime su encabezado con el
+         titulo y la direccion -"about:blank"- encima de la hoja del paciente.
+         El margen real lo pone el documento. */
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff !important; }
+      body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; }
+      .ci-hoja { max-width: 178mm; margin: 0 auto; padding: 16mm 0; }
+      .ci-parrafo { break-inside: avoid; }
+    </style></head><body>
+    <div class="ci-hoja">
+      <header class="hc-cabecera">
+        <div class="hc-clinica">
+          ${config.logoDataUrl ? `<img class="hc-logo" src="${escapeHtml(config.logoDataUrl)}" alt="" />` : ""}
+          <div>
+            <h3>${escapeHtml(config.clinicName || "Consultorio dental")}</h3>
+            <p>${escapeHtml(config.issuerAddress || "")}</p>
+          </div>
+        </div>
+      </header>
+      ${armarConsentimiento(clave, patient, { pantalla: false })}
+    </div>
+    <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });<\/script>
+    </body></html>`);
+  ventana.document.close();
+}
+
+
+function abrirFirmaDelConsentimiento(patientId, tipo) {
+  if (!patientId || !tipo) return;
+  if (!canManageClinical()) {
+    alert("Tu usuario no puede registrar consentimientos.");
+    return;
+  }
+  prepararLienzoDeFirma(
+    { patientId, tipo },
+    `${patientById(patientId)?.name || "El paciente"} firma con el dedo o con el mouse dentro del recuadro.`
+  );
+}
+
+
+/* La firma del profesional se dibuja en el momento, en el mismo recuadro que la
+   del paciente, y se guarda DENTRO de esa historia junto con quien firmo y
+   cuando. No se guarda una firma reutilizable: una imagen guardada dejaria que
+   cualquiera con acceso al sistema sacara historias firmadas sin que el doctor
+   se entere. */
+function abrirFirmaDelProfesional(historiaId) {
+  if (!canManageClinical()) {
+    alert("Tu usuario no puede firmar historias clínicas.");
+    return;
+  }
+  const entrada = state.clinicalHistory.find((item) => item.id === historiaId);
+  if (!entrada) return;
+  if (entrada.firma && !confirm(`Esta historia ya está firmada por ${entrada.firmadaPor || "el profesional"}. ¿Reemplazar la firma por la tuya?`)) return;
+  const quien = currentUser();
+  prepararLienzoDeFirma(
+    { destino: "historia", historiaId },
+    `${quien?.name || "El profesional"} firma con el dedo o con el mouse dentro del recuadro.`
+  );
+}
+
+
+/* El recuadro de firmar es grande y en una tablet se dibuja al doble de puntos
+   por pulgada, asi que la imagen tal cual pesa cinco veces mas de lo que hace
+   falta y se guarda dentro del estado que viaja a la nube en cada cambio. Se
+   recorta al trazo -casi todo el recuadro es aire- y se baja a un ancho fijo,
+   que para una firma sobra: queda en una fraccion de lo que pesaba. */
+function firmaComprimida(lienzo, anchoMaximo = 420) {
+  const pincel = lienzo.getContext("2d");
+  let datos;
+  try {
+    datos = pincel.getImageData(0, 0, lienzo.width, lienzo.height).data;
+  } catch (error) {
+    return lienzo.toDataURL("image/png");
+  }
+  let izq = lienzo.width;
+  let der = -1;
+  let arr = lienzo.height;
+  let aba = -1;
+  for (let y = 0; y < lienzo.height; y += 1) {
+    for (let x = 0; x < lienzo.width; x += 1) {
+      if (datos[(y * lienzo.width + x) * 4 + 3] > 12) {
+        if (x < izq) izq = x;
+        if (x > der) der = x;
+        if (y < arr) arr = y;
+        if (y > aba) aba = y;
+      }
+    }
+  }
+  if (der < 0) return "";
+  const margen = 8;
+  izq = Math.max(0, izq - margen);
+  arr = Math.max(0, arr - margen);
+  der = Math.min(lienzo.width - 1, der + margen);
+  aba = Math.min(lienzo.height - 1, aba + margen);
+  const ancho = der - izq + 1;
+  const alto = aba - arr + 1;
+  const escala = Math.min(1, anchoMaximo / ancho);
+  const destino = document.createElement("canvas");
+  destino.width = Math.max(1, Math.round(ancho * escala));
+  destino.height = Math.max(1, Math.round(alto * escala));
+  const copia = destino.getContext("2d");
+  copia.imageSmoothingQuality = "high";
+  copia.drawImage(lienzo, izq, arr, ancho, alto, 0, 0, destino.width, destino.height);
+  /* Se queda con la mas liviana de las dos: webp suele pesar la cuarta parte en
+     un trazo como este, pero si el navegador no lo sabe hacer devuelve un png
+     disfrazado y entonces gana el png de verdad. */
+  const png = destino.toDataURL("image/png");
+  const webp = destino.toDataURL("image/webp", 0.9);
+  return webp.startsWith("data:image/webp") && webp.length < png.length ? webp : png;
+}
+
+
+function prepararLienzoDeFirma(datos, pistaTexto) {
+  const dialogo = $("#signatureDialog");
+  const lienzo = $("#signatureCanvas");
+  if (!dialogo || !lienzo) return;
+  firmaEnCurso = { ...datos, trazos: false };
+  const pista = $("#signatureHint");
+  if (pista) pista.textContent = pistaTexto;
+  dialogo.showModal();
+  const escala = window.devicePixelRatio || 1;
+  const ancho = lienzo.clientWidth || 640;
+  const alto = lienzo.clientHeight || 220;
+  lienzo.width = Math.round(ancho * escala);
+  lienzo.height = Math.round(alto * escala);
+  const pincel = lienzo.getContext("2d");
+  pincel.scale(escala, escala);
+  pincel.clearRect(0, 0, ancho, alto);
+  pincel.lineWidth = 2.2;
+  pincel.lineCap = "round";
+  pincel.lineJoin = "round";
+  pincel.strokeStyle = "#17323d";
+  firmaEnCurso.pincel = pincel;
+}
+
+function bindFirmaDelConsentimiento() {
+  const lienzo = $("#signatureCanvas");
+  if (!lienzo) return;
+  let dibujando = false;
+  const punto = (evento) => {
+    const caja = lienzo.getBoundingClientRect();
+    return { x: evento.clientX - caja.left, y: evento.clientY - caja.top };
+  };
+  lienzo.addEventListener("pointerdown", (evento) => {
+    if (!firmaEnCurso?.pincel) return;
+    evento.preventDefault();
+    dibujando = true;
+    lienzo.setPointerCapture(evento.pointerId);
+    const p = punto(evento);
+    firmaEnCurso.pincel.beginPath();
+    firmaEnCurso.pincel.moveTo(p.x, p.y);
+  });
+  lienzo.addEventListener("pointermove", (evento) => {
+    if (!dibujando || !firmaEnCurso?.pincel) return;
+    evento.preventDefault();
+    const p = punto(evento);
+    firmaEnCurso.pincel.lineTo(p.x, p.y);
+    firmaEnCurso.pincel.stroke();
+    firmaEnCurso.trazos = true;
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach((nombre) => {
+    lienzo.addEventListener(nombre, () => { dibujando = false; });
+  });
+
+  // addEventListener directo: "on" vive dentro de bindEvents y aqui no existe
+  $("#clearSignatureBtn")?.addEventListener("click", () => {
+    if (!firmaEnCurso?.pincel) return;
+    firmaEnCurso.pincel.clearRect(0, 0, lienzo.width, lienzo.height);
+    firmaEnCurso.trazos = false;
+  });
+
+  $("#saveSignatureBtn")?.addEventListener("click", () => {
+    if (!firmaEnCurso) return;
+    if (!firmaEnCurso.trazos) {
+      alert("Todavía no hay ninguna firma dibujada.");
+      return;
+    }
+    const imagen = firmaComprimida(lienzo);
+    if (!imagen) return;
+    if (firmaEnCurso.destino === "historia") {
+      const entrada = state.clinicalHistory.find((item) => item.id === firmaEnCurso.historiaId);
+      if (!entrada) return;
+      const quien = currentUser();
+      entrada.firma = imagen;
+      entrada.firmadaPor = quien?.name || "";
+      // la hora del consultorio, no la de Greenwich: toISOString restaba 5 horas
+      const ahora = new Date();
+      entrada.firmadaEl = `${todayISO()}T${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
+      saveClinicalHistoryApi(entrada).catch((error) => alert(error.message));
+          addLocalAuditEvent("HISTORIA_CLINICA_FIRMADA", `Firmó la historia clínica de ${patientById(entrada.patientId)?.name || "un paciente"}`, entrada.patientId);
+      firmaEnCurso = null;
+      $("#signatureDialog")?.close("ok");
+      renderClinicalHistory();
+      return;
+    }
+    const guardado = guardarFirmaDelConsentimiento(firmaEnCurso.patientId, firmaEnCurso.tipo, imagen);
+    if (!guardado) return;
+    firmaEnCurso = null;
+    $("#signatureDialog")?.close("ok");
+    // render vive dentro de bindEvents; aqui se redibuja la hoja del paciente
+    renderClinicalHistory();
+  });
+}
+
+
 /* ==================== PLAN DE TRATAMIENTO ====================
    El presupuesto que sale del odontograma, la ventana de precios donde el
    consultorio escribe lo que cobra, y las proformas que se le entregan al
@@ -4384,6 +5550,7 @@ function piezaVacia(diente) {
    aqui el presupuesto del paciente y la lista de precios viven en el servidor.
    ============================================================ */
 
+let historySheetTab = "historia";
 let planSubTab = "plan";
 let serviciosBorrador = null;
 
@@ -5033,14 +6200,10 @@ function hojaDelPlan(patientId) {
 }
 
 
-/* El plan vive en su propio panel, debajo de la historia del paciente. */
+/* El plan es una pestana mas de la historia: redibujarlo es redibujar la hoja
+   que se este viendo. */
 function renderPlanDeTratamiento() {
-  const caja = $("#planTimeline");
-  if (!caja) return;
-  const patientId = $("#historyPatientFilter")?.value || state.patients[0]?.id || "";
-  caja.innerHTML = hojaDelPlan(patientId);
-  alinearBotonDePrecios(caja);
-  ajustarGraficos(caja);
+  renderClinicalHistory();
 }
 
 
@@ -7529,6 +8692,46 @@ function bindEvents() {
     if (element) element.addEventListener(eventName, handler);
   };
 
+  /* El menu vuelve solo por el borde izquierdo: acercando el puntero o
+     deslizando el dedo desde ahi. No hay boton, y no se cierra por retirar el
+     puntero ni por tiempo: se queda hasta que se vuelva a entrar a Registrar
+     paciente. Son clases, no un redibujado: lo escrito en la ficha no se toca. */
+  on("#edgeZone", "pointerenter", () => {
+    document.body.classList.add("menu-a-la-vista");
+  });
+  /* Al salir el puntero del menu se vuelve a esconder: en Registrar paciente
+     estorba encima de la ficha. Si se eligio otro modulo ya no hay nada que
+     esconder, porque el menu volvio a su sitio. */
+  on(".sidebar", "pointerleave", () => {
+    document.body.classList.remove("menu-a-la-vista");
+  });
+  // en una tablet no hay puntero que se retire: se cierra tocando fuera
+  document.addEventListener("pointerdown", (event) => {
+    if (!document.body.classList.contains("menu-a-la-vista")) return;
+    if (event.target.closest(".sidebar") || event.target.closest("#edgeZone")) return;
+    document.body.classList.remove("menu-a-la-vista");
+  });
+  let dedo = null;
+  document.addEventListener("touchstart", (event) => {
+    if (!document.body.classList.contains("sin-menu")) return;
+    if (document.body.classList.contains("menu-a-la-vista")) return;
+    const toque = event.touches[0];
+    dedo = toque && toque.clientX <= 28 ? { x: toque.clientX, y: toque.clientY } : null;
+  }, { passive: true });
+  document.addEventListener("touchmove", (event) => {
+    if (!dedo) return;
+    const toque = event.touches[0];
+    if (!toque) return;
+    const aLoAncho = toque.clientX - dedo.x;
+    // si el dedo va mas hacia abajo que de lado, es desplazar la ficha
+    if (Math.abs(toque.clientY - dedo.y) > Math.abs(aLoAncho)) { dedo = null; return; }
+    if (aLoAncho > 40) {
+      document.body.classList.add("menu-a-la-vista");
+      dedo = null;
+    }
+  }, { passive: true });
+  document.addEventListener("touchend", () => { dedo = null; }, { passive: true });
+
   document.addEventListener("click", async (event) => {
     const generalDetail = event.target.closest("[data-open-general-detail]");
     if (generalDetail) {
@@ -7689,6 +8892,54 @@ function bindEvents() {
     ultimoDniConsultado = numero;
     await lookupPatientDni();
   }
+  /* El representante legal solo se pide si el paciente es menor: a un adulto
+     no se le pregunta quien firma por el. */
+  const ajustarRepresentante = () => {
+    const bloque = $("#patientGuardian");
+    if (!bloque) return;
+    const fecha = $('#patientForm input[name="birthDate"]')?.value || "";
+    const edad = ageFromBirthDate(fecha);
+    bloque.hidden = !(edad !== null && edad < 18);
+  };
+  on('#patientForm input[name="birthDate"]', "change", ajustarRepresentante);
+  on('#patientForm input[name="birthDate"]', "input", ajustarRepresentante);
+  on("#patientForm", "reset", () => setTimeout(ajustarRepresentante, 0));
+
+  /* El detalle de la enfermedad nace cerrado: el que viene a una limpieza no
+     tiene relato cronologico que contar. Se abre al escribir la enfermedad
+     actual y se queda abierto si ya habia algo dentro. */
+  const ajustarDetalleDeEnfermedad = () => {
+    const detalle = $("#patientIllnessDetail");
+    if (!detalle) return;
+    const form = $("#patientForm");
+    const hayMal = String(form?.elements?.currentIllness?.value || "").trim();
+    const hayDetalle = ["illnessTime", "symptoms", "anamnesis", "biologicalFunctions"]
+      .some((campo) => String(form?.elements?.[campo]?.value || "").trim());
+    detalle.hidden = !(hayMal || hayDetalle);
+  };
+  on('#patientForm [name="currentIllness"]', "input", ajustarDetalleDeEnfermedad);
+  on("#patientForm", "reset", () => setTimeout(ajustarDetalleDeEnfermedad, 0));
+
+  /* Si el paciente es menor, a quien se llama en una emergencia es a quien lo
+     trae: se copia el representante con su celular. Se deja de copiar en cuanto
+     alguien escribe otra cosa ahi, porque puede ser otra persona. */
+  const copiarEmergenciaDelRepresentante = () => {
+    const form = $("#patientForm");
+    const destino = form?.elements?.emergencyContact;
+    const bloque = $("#patientGuardian");
+    if (!destino || !bloque || bloque.hidden) return;
+    const nombre = String(form.elements.guardianName?.value || "").trim();
+    const celular = String(form.elements.guardianPhone?.value || "").trim();
+    const copia = [nombre, celular].filter(Boolean).join(" - ");
+    const escrito = String(destino.value || "").trim();
+    if (escrito && escrito !== destino.dataset.copiado) return;
+    destino.value = copia;
+    destino.dataset.copiado = copia;
+  };
+  ["guardianName", "guardianPhone"].forEach((campo) => {
+    on(`#patientForm [name="${campo}"]`, "input", copiarEmergenciaDelRepresentante);
+  });
+
   on('#patientForm input[name="dni"]', "input", autocompletarPacientePorDni);
   on('#patientForm input[name="dni"]', "blur", autocompletarPacientePorDni);
   on("#patientForm", "reset", () => {
@@ -7710,6 +8961,8 @@ function bindEvents() {
     refreshReportsRange();
   });
   on("#historyPatientFilter", "change", () => {
+    // el consentimiento abierto era de ese paciente, no del siguiente
+    consentimientoElegido = "";
     renderClinicalHistory();
     renderOdontogramSnapshots();
   });
@@ -8133,6 +9386,41 @@ function bindEvents() {
       createdByName: existingPatient?.createdByName || user?.name || "",
       createdByRole: existingPatient?.createdByRole || user?.role || "",
       hideFromReceptionNew: Boolean(existingPatient?.hideFromReceptionNew),
+      // el presupuesto que el doctor ajusto: no se pierde al editar la ficha
+      presupuesto: existingPatient?.presupuesto,
+      /* El numero de historia y el momento en que se abrio no se tocan desde la
+         ficha: se dan una sola vez y acompanan al paciente. */
+      historiaNumero: existingPatient?.historiaNumero || 0,
+      historiaDesde: existingPatient?.historiaDesde || "",
+      historiaHora: existingPatient?.historiaHora || "",
+      // el acompanante dejo de pedirse, pero lo ya escrito se conserva
+      companion: existingPatient?.companion || "",
+      /* Domicilio, representante y antecedentes: los pide la historia del
+         Colegio y hasta ahora se llenaban a mano en cada hoja. */
+      address: String(data.address || "").trim(),
+      sexo: data.sexo === "F" || data.sexo === "M" ? data.sexo : "",
+      birthPlace: String(data.birthPlace || "").trim(),
+      origin: String(data.origin || "").trim(),
+      education: String(data.education || "").trim(),
+      maritalStatus: String(data.maritalStatus || "").trim(),
+      occupation: String(data.occupation || "").trim(),
+      travels: String(data.travels || "").trim(),
+      emergencyContact: String(data.emergencyContact || "").trim(),
+      chiefComplaint: String(data.chiefComplaint || "").trim(),
+      allergies: String(data.allergies || "").trim(),
+      medications: String(data.medications || "").trim(),
+      personalHistory: String(data.personalHistory || "").trim(),
+      familyHistory: String(data.familyHistory || "").trim(),
+      currentIllness: String(data.currentIllness || "").trim(),
+      illnessTime: String(data.illnessTime || "").trim(),
+      symptoms: String(data.symptoms || "").trim(),
+      anamnesis: String(data.anamnesis || "").trim(),
+      biologicalFunctions: String(data.biologicalFunctions || "").trim(),
+      guardianName: String(data.guardianName || "").trim().toUpperCase(),
+      guardianDni: String(data.guardianDni || "").trim(),
+      guardianRelation: String(data.guardianRelation || "").trim(),
+      guardianPhone: String(data.guardianPhone || "").trim(),
+      guardianAddress: String(data.guardianAddress || "").trim(),
       notes: data.notes
     };
     const previousPatient = existingPatient ? { ...existingPatient } : null;
@@ -8208,8 +9496,18 @@ function bindEvents() {
       patientEditingId = patient.id;
       Object.entries(patient).forEach(([key, value]) => {
         const field = form.elements.namedItem(key);
-        if (field) field.value = value;
+        if (!field) return;
+        // el sexo son dos redondeles, no un cuadro de texto
+        if (field instanceof RadioNodeList || field.type === "radio") {
+          form.querySelectorAll(`[name="${key}"]`).forEach((radio) => { radio.checked = radio.value === value; });
+          return;
+        }
+        field.value = value;
       });
+      /* El representante y el detalle de la enfermedad se abren solos si el
+         paciente los tiene: al editar hay que volver a mirarlos. */
+      ajustarRepresentante();
+      ajustarDetalleDeEnfermedad();
       const submitButton = form.querySelector('button[type="submit"]');
       if (submitButton) submitButton.textContent = "Actualizar paciente";
     }
@@ -8527,7 +9825,6 @@ function bindEvents() {
     }
   });
 
-  $("#printHistoryBtn")?.addEventListener("click", () => imprimirHistoria($("#historyPatientFilter")?.value || ""));
   // plan y presupuesto se abre desde un boton junto al titulo de la nota
   $("#historyForm .hn-plan-toggle")?.addEventListener("click", () => {
     const pliegue = $("#historyForm .form-more");
@@ -8570,6 +9867,100 @@ function bindEvents() {
     if (avisoDeuda) avisoDeuda.hidden = true;
   });
 
+  /* La hoja de la historia se escribe encima: cada raya es su campo y al salir
+     de ella se guarda sola, sin boton. Es como se llena en papel, y evita ir y
+     volver al formulario de la nota por cada dato. */
+  $("#historyTimeline")?.addEventListener("focusout", (event) => {
+    const campo = event.target.closest("[data-campo][contenteditable]");
+    if (campo) guardarCampoDeLaHoja(campo);
+  });
+  /* Enter cierra el campo de una linea en vez de partirlo en dos; en las cajas
+     de varias lineas se escribe con Enter como en cualquier otro sitio. */
+  $("#historyTimeline")?.addEventListener("keydown", (event) => {
+    const campo = event.target.closest("[data-campo][contenteditable]");
+    if (!campo) return;
+    if (event.key === "Escape") {
+      campo.dataset.cancelado = "1";
+      campo.blur();
+      renderClinicalHistory();
+      return;
+    }
+    if (event.key === "Enter" && !campo.classList.contains("hcf-caja")) {
+      event.preventDefault();
+      campo.blur();
+    }
+  });
+  /* Quien firma la historia se elige: en un consultorio con varios doctores no
+     siempre atiende el de la ficha. */
+  $("#historyTimeline")?.addEventListener("change", (event) => {
+    const select = event.target.closest("[data-profesional]");
+    if (!select || !canManageClinical()) return;
+    const entrada = state.clinicalHistory.find((item) => item.id === select.dataset.profesional);
+    if (!entrada || entrada.professional === select.value) return;
+    entrada.professional = select.value;
+    saveClinicalHistoryApi(entrada).catch((error) => alert(error.message));
+    if (!API_ENABLED) saveState();
+    renderClinicalHistory();
+  });
+  /* Abrir la historia, firmarla e imprimirla: los tres botones del pie. */
+  $("#historyTimeline")?.addEventListener("click", (event) => {
+    const abrirHistoria = event.target.closest("[data-guardar-historia]");
+    if (abrirHistoria) {
+      guardarHistoriaClinica(abrirHistoria.dataset.guardarHistoria);
+      return;
+    }
+    const firmarHistoria = event.target.closest("[data-firmar-profesional]");
+    if (firmarHistoria) {
+      abrirFirmaDelProfesional(firmarHistoria.dataset.firmarProfesional);
+      return;
+    }
+    const imprimirHoja = event.target.closest("[data-imprimir-historia]");
+    if (imprimirHoja) imprimirHistoria(imprimirHoja.dataset.imprimirHistoria);
+  });
+
+  bindFirmaDelConsentimiento();
+
+  /* El consentimiento: elegir el tratamiento, firmarlo e imprimirlo. */
+  $("#historyTimeline")?.addEventListener("click", (event) => {
+    const elegir = event.target.closest("[data-consentimiento]");
+    if (elegir) {
+      consentimientoElegido = elegir.dataset.consentimiento;
+      renderClinicalHistory();
+      return;
+    }
+    const firmar = event.target.closest("[data-firmar-consentimiento]");
+    if (firmar) {
+      abrirFirmaDelConsentimiento($("#historyPatientFilter")?.value || "", firmar.dataset.firmarConsentimiento);
+      return;
+    }
+    const imprimir = event.target.closest("[data-imprimir-consentimiento]");
+    if (imprimir) imprimirConsentimiento($("#historyPatientFilter")?.value || "", imprimir.dataset.imprimirConsentimiento);
+  });
+
+  $("#historySheetTabs")?.addEventListener("click", (event) => {
+    const pestana = event.target.closest("[data-hoja]");
+    if (!pestana) return;
+    historySheetTab = pestana.dataset.hoja;
+    if (historySheetTab !== "plan") olvidarBorradorDePrecios();
+    renderClinicalHistory();
+  });
+
+  /* Los dos botones del pie del odontograma: seguir marcando donde se quedo, o
+     llevarse la hoja impresa. */
+  $("#historyTimeline")?.addEventListener("click", (event) => {
+    const editar = event.target.closest("[data-editar-odontograma]");
+    if (editar) {
+      const patientId = editar.dataset.editarOdontograma;
+      if (!patientId) return;
+      odontogramPatientId = patientId;
+      setView("odontograma");
+      render();
+      return;
+    }
+    const imprimir = event.target.closest("[data-imprimir-odontograma]");
+    if (imprimir) imprimirOdontogramas(imprimir.dataset.imprimirOdontograma);
+  });
+
   /* ---------- Plan de tratamiento ---------- */
   const guardarPresupuesto = async (paciente) => {
     try {
@@ -8590,7 +9981,7 @@ function bindEvents() {
     };
   };
 
-  $("#planTimeline")?.addEventListener("change", async (event) => {
+  $("#historyTimeline")?.addEventListener("change", async (event) => {
     const precio = event.target.closest("[data-precio]");
     const rebaja = event.target.closest("[data-descuento]");
     if (precio || rebaja) {
@@ -8646,7 +10037,7 @@ function bindEvents() {
     await guardarPresupuesto(paciente);
   });
 
-  $("#planTimeline")?.addEventListener("click", async (event) => {
+  $("#historyTimeline")?.addEventListener("click", async (event) => {
     const subPestana = event.target.closest("[data-plan-hoja]");
     if (subPestana) {
       planSubTab = subPestana.dataset.planHoja;
