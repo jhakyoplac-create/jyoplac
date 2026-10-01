@@ -8041,6 +8041,10 @@ function renderConfig() {
   const form = $("#configForm");
   if (!(document.activeElement && form.contains(document.activeElement))) {
     form.clinicName.value = state.config.clinicName;
+    /* La direccion y la ciudad salen en el membrete de la historia, del
+       consentimiento y de la proforma, y en el "En Moyobamba" del cierre. */
+    if (form.issuerAddress) form.issuerAddress.value = state.config.issuerAddress || "";
+    if (form.issuerDistrict) form.issuerDistrict.value = state.config.issuerDistrict || "";
     form.start.value = state.config.start;
     form.end.value = state.config.end;
     form.interval.value = state.config.interval;
@@ -10804,6 +10808,8 @@ function bindEvents() {
     state.config = {
       ...state.config,
       clinicName: data.clinicName,
+      issuerAddress: String(data.issuerAddress || "").trim(),
+      issuerDistrict: String(data.issuerDistrict || "").trim(),
       start: data.start,
       end: data.end,
       interval: Number(data.interval),
@@ -10817,6 +10823,8 @@ function bindEvents() {
     try {
       await saveConfigApi({
         clinicName: state.config.clinicName,
+        issuerAddress: state.config.issuerAddress,
+        issuerDistrict: state.config.issuerDistrict,
         start: state.config.start,
         end: state.config.end,
         interval: state.config.interval,

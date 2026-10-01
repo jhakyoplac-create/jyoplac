@@ -2865,7 +2865,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 values["monthlyOpenings"] = data["monthlyOpenings"]
             if "clinicName" in data:
                 values["clinicName"] = data["clinicName"]
-            for key in ["start", "end", "interval", "inactiveDays", "enableAgendaPayments", "whatsapp", "doctors", "units"]:
+            # La direccion y la ciudad del consultorio: salen en el membrete de
+            # las hojas que se entregan y en el cierre del consentimiento.
+            for key in ["issuerAddress", "issuerDistrict", "start", "end", "interval", "inactiveDays", "enableAgendaPayments", "whatsapp", "doctors", "units"]:
                 if key in data:
                     values[key] = data[key]
             if "services" in data:
