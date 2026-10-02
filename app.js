@@ -621,6 +621,7 @@ function mapApiPayment(row) {
     receipt: row.receipt || "",
     comprobante: row.comprobante || "",
     registeredBy: row.registered_by || row.registeredBy || "",
+    attendedBy: row.attended_by || row.attendedBy || "",
     treatmentId: row.treatment_id || row.treatmentId || "",
     tipo: row.tipo || "",
     descontado: Number(row.descontado ?? 0),
@@ -3181,7 +3182,11 @@ function hydrateForms() {
   });
   $$('select[name="source"]').forEach((select) => fillSelect(select, state.config.expenseSources, select.value));
   $$('#staffPaymentForm select[name="type"]').forEach((select) => fillSelect(select, state.config.staffPaymentTypes, select.value));
-  $$('select[name="attendedBy"]').forEach((select) => fillSelect(select, state.config.doctors, select.value));
+  $$('select[name="attendedBy"]').forEach((select) => {
+    // el del cobro lo arma sugerirDoctorDelPago, que ademas lo ordena
+    if (select.closest("#paymentForm")) return;
+    fillSelect(select, state.config.doctors, select.value);
+  });
   $$('select[name="patientId"]').forEach((select) => {
     if (select.closest("#paymentForm")) return;
     if (select.closest("#historyForm")) return;
@@ -3263,6 +3268,36 @@ function renderTreatmentPaymentOptions() {
 }
 
 function updatePaymentDue() {
+  recalcularSaldoDelPago();
+  sugerirDoctorDelPago();
+}
+
+/* "Atendio" llega puesto solo, con la misma cadena que reparte la comision: lo
+   que muestra el formulario es exactamente a quien le va a tocar el dinero si
+   nadie lo cambia. Recepcion solo lo toca el dia que atendio otra persona. */
+function sugerirDoctorDelPago() {
+  const form = $("#paymentForm");
+  const select = form?.elements.namedItem("attendedBy");
+  if (!select) return;
+  const seleccion = form.patientId.value;
+  const valor = String(form.historyId.value || "");
+  const esTratamiento = valor.startsWith("trat:");
+  const sugerido = doctorDelPago({
+    patientId: patientIdFromPaymentSelection(seleccion),
+    appointmentId: appointmentFromPaymentSelection(seleccion)?.id || "",
+    historyId: esTratamiento ? "" : valor,
+    treatmentId: esTratamiento ? valor.slice(5) : ""
+  });
+  const actual = sugerido || select.value;
+  /* El que ya atiende va primero y debajo quedan solo los que lo pueden
+     reemplazar, que es como se lee la lista: "atiende Maghy, o en su lugar
+     Carlos o Mili". Se queda en la lista aunque este elegido, para poder
+     volver atras si alguien se equivoco al cambiarlo. */
+  const lista = [actual, ...state.config.doctors.filter((doctor) => doctor && doctor !== actual)];
+  fillSelect(select, lista.filter(Boolean), actual);
+}
+
+function recalcularSaldoDelPago() {
   const form = $("#paymentForm");
   if (!form) return;
   const clearDebtBtn = $("#clearHistoryDebtBtn");
@@ -3743,7 +3778,10 @@ function receivableEntryFromForm(data) {
        quien se atendio ayer quedaba colgando del dia equivocado, y si ese
        paciente tenia cita hoy lo sacaba de la lista de Historial de hoy. */
     date: data.attentionDate || todayISO(),
-    attendedBy: patient?.doctor || currentUser()?.name || "",
+    /* Lo que se eligio en el formulario, que normalmente es el doctor asignado
+       pero puede ser quien lo reemplazo ese dia. De aqui sale la comision
+       cuando el paciente venga a pagar, asi que no se deduce: se anota. */
+    attendedBy: String(data.attendedBy || "").trim() || patient?.doctor || currentUser()?.name || "",
     attended: true,
     reason: "Cuenta por cobrar",
     anamnesis: "",
@@ -3779,8 +3817,23 @@ function selectReceivablePatient(patient) {
   form.patientId.value = patient.id;
   form.patientSearch.value = patientOptionLabel(patient);
   if (form.attentionDate) form.attentionDate.value = fechaDeAtencionSugerida(patient.id);
+  sugerirDoctorDeLaCuenta();
   const suggestions = $("#receivablePatientSuggestions");
   if (suggestions) suggestions.innerHTML = "";
+}
+
+/* Quien atendio queda anotado el dia que se atendio, por quien estuvo ahi. Es
+   lo que hace que la comision caiga bien cuando el paciente viene a pagar
+   semanas despues: para entonces nadie se acuerda de quien lo vio. Igual que en
+   el cobro, el asignado va arriba y debajo los que lo reemplazan. */
+function sugerirDoctorDeLaCuenta() {
+  const form = $("#manualReceivableForm");
+  const select = form?.elements.namedItem("attendedBy");
+  if (!select) return;
+  const asignado = patientById(form.patientId.value)?.doctor || "";
+  const actual = asignado || select.value;
+  const lista = [actual, ...state.config.doctors.filter((doctor) => doctor && doctor !== actual)];
+  fillSelect(select, lista.filter(Boolean), actual);
 }
 
 function renderReceivablePatientSuggestions() {
@@ -7844,6 +7897,10 @@ function porcentajeDeComision(doctor) {
 }
 
 function doctorDelPago(payment) {
+  /* Lo que se eligio al cobrar manda sobre todo lo demas: es lo unico que
+     alguien escribio a proposito sabiendo quien atendio ese dia. Lo de abajo
+     son deducciones, buenas pero deducciones. */
+  if (payment.attendedBy) return payment.attendedBy;
   const nota = payment.historyId ? historyById(payment.historyId) : null;
   if (nota?.attendedBy) return nota.attendedBy;
   const cita = payment.appointmentId ? state.appointments.find((a) => a.id === payment.appointmentId) : null;
@@ -10014,6 +10071,8 @@ function bindEvents() {
     form.reset();
     form.creditDueDate.value = todayISO();
     if (form.attentionDate) form.attentionDate.value = todayISO();
+    // sin paciente vuelve a la lista sin ordenar: la siguiente seleccion manda
+    sugerirDoctorDeLaCuenta();
     const suggestions = $("#receivablePatientSuggestions");
     if (suggestions) suggestions.innerHTML = "";
     if (!API_ENABLED) saveState();
@@ -10654,6 +10713,10 @@ function bindEvents() {
       receipt: tratamientoCobrado && !String(data.receipt || "").trim()
         ? `Tratamiento: ${tratamientoCobrado.entry.plan}`
         : buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
+      /* Quien atendio ese dia, que no siempre es el doctor asignado: si Carlos
+         se demora, lo atiende otra y la comision le toca a ella. Se guarda en el
+         pago porque es ahi donde se sabe y donde se cuenta el dinero. */
+      attendedBy: String(data.attendedBy || "").trim(),
       /* El servidor guarda quien cobro tomandolo de la sesion, no de aqui. Se
          anota igual en la copia local para que la fila lo muestre al momento y
          no recien despues de recargar; es el mismo usuario, asi que coincide. */

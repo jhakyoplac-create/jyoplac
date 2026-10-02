@@ -851,8 +851,8 @@ label {
 
 .receivable-form {
   display: grid;
-  /* paciente, fecha de atencion, fecha de pago, monto, detalle y el boton */
-  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.75fr) minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(200px, 1.1fr) auto;
+  /* paciente, fecha de pago, monto, quien atendio, detalle y el boton */
+  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(130px, 0.6fr) minmax(200px, 1.1fr) auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 14px;
@@ -5857,4 +5857,55 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
 }
 .doctor-summary-panel .panel-head h2 {
   white-space: nowrap;
+}
+
+/* "Atendió" en el formulario de pago. Va en el hueco libre a la derecha de la
+   etiqueta Notas, no en una fila propia: es un dato que casi nunca se cambia
+   -el doctor asignado ya viene puesto- y una fila entera para eso alargaba el
+   formulario sin ganar nada. El cuadro de Notas no se mueve ni se encoge. */
+#paymentForm .payment-notes-field {
+  display: grid;
+  gap: 7px;
+}
+
+#paymentForm .payment-notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 20px;
+}
+
+#paymentForm .payment-notes-head > label {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+#paymentForm #paymentAttendedBy {
+  width: auto;
+  max-width: 55%;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 13px;
+  text-align: right;
+  cursor: pointer;
+}
+
+/* El nombre cerrado va pegado a la derecha, pero la lista desplegada se lee de
+   izquierda a derecha como cualquier lista: sin esto hereda el text-align del
+   select y los nombres quedan contra el borde derecho. */
+#paymentForm #paymentAttendedBy option {
+  text-align: left;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+#paymentForm #paymentAttendedBy:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 6px;
 }

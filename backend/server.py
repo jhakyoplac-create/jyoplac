@@ -356,6 +356,9 @@ def migrate_db(conn):
     # decir de donde salio cada abono: esos cobros los hace recepcion y quien
     # no lo registro no tenia como saber si ese dinero entro.
     ensure_column(conn, "payments", "registered_by", "TEXT")
+    # Quien atendio ese dia. Puede no ser el doctor asignado al paciente, y es
+    # quien se lleva la comision de este cobro.
+    ensure_column(conn, "payments", "attended_by", "TEXT")
     # Tratamiento con costo total que nace de la nota clinica. El dinero se
     # maneja en Pagos: cobros con treatment_id que entran a caja, y descuentos de
     # cada control (tipo DESCUENTO_TRATAMIENTO) que van en S/ 0 y llevan lo
@@ -2524,9 +2527,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           id, patient_id, history_id, appointment_id, date, amount, product_total, cash_received,
                           change_amount, cash_amount, yape_amount, plin_amount,
                           card_amount, transfer_amount, method, receipt, comprobante,
-                          registered_by, closed, treatment_id, tipo, descontado
+                          registered_by, attended_by, closed, treatment_id, tipo, descontado
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           patient_id=excluded.patient_id, history_id=excluded.history_id,
                           appointment_id=excluded.appointment_id,
@@ -2544,6 +2547,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           -- quien cobro se anota una sola vez: corregir el pago
                           -- despues no debe cambiar de quien era el cobro
                           registered_by=COALESCE(payments.registered_by, excluded.registered_by),
+                          -- a quien se le acredita si se corrige el cobro: esto
+                          -- si se actualiza, porque corregir quien atendio es
+                          -- justamente para lo que existe el campo
+                          attended_by=excluded.attended_by,
                           closed=excluded.closed,
                           treatment_id=excluded.treatment_id,
                           tipo=excluded.tipo,
@@ -2568,6 +2575,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             receipt_value,
                             str(data.get("comprobante") or "").strip(),
                             quien_cobra["name"] or None,
+                            str(data.get("attendedBy") or "").strip() or None,
                             1 if data.get("closed") else 0,
                             treatment_id or None,
                             "DESCUENTO_TRATAMIENTO" if es_descuento else None,

@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261001-comision-por-doctor-titulo" />
+    <link rel="stylesheet" href="styles.css?v=20261002-doctor-que-atendio" />
     <link rel="stylesheet" href="odontograma.css?v=20261001-comision-por-doctor-titulo" />
   </head>
   <body class="locked">
@@ -395,7 +395,13 @@
               <p class="mixed-payment-summary" id="mixedPaymentSummary">Falta S/ 0</p>
               <button class="ghost" id="openMixedPaymentBtn" type="button">Editar pago mixto</button>
             </div>
-            <label>Notas<input name="receipt" placeholder="Qué se le hizo, o el número de boleta" /></label>
+            <div class="payment-notes-field">
+              <div class="payment-notes-head">
+                <label for="paymentReceiptInput">Notas</label>
+                <select id="paymentAttendedBy" name="attendedBy" aria-label="Doctor que atendió" title="Doctor que atendió"></select>
+              </div>
+              <input id="paymentReceiptInput" name="receipt" placeholder="Qué se le hizo, o el número de boleta" />
+            </div>
             <button class="primary" type="submit">Guardar pago</button>
           </form>
 
@@ -715,16 +721,21 @@
             <label>Paciente
               <input name="patientSearch" autocomplete="off" placeholder="Escribe nombre o DNI" required />
               <input name="patientId" type="hidden" />
+              <!-- La fecha de atencion ya no se escribe: se deduce de la cita
+                   del paciente y no se muestra en ninguna parte de la tabla.
+                   Sigue viajando porque con ella se marca la cita como
+                   atendida y la deuda queda colgada del dia correcto. -->
+              <input name="attentionDate" type="hidden" />
               <div class="patient-suggestions" id="receivablePatientSuggestions"></div>
-            </label>
-            <label>Fecha de atención
-              <input name="attentionDate" type="date" required />
             </label>
             <label>Fecha de pago
               <input name="creditDueDate" type="date" required />
             </label>
             <label>Monto S/
               <input name="creditAmount" type="number" min="0.01" step="0.01" required />
+            </label>
+            <label>Atendió
+              <select name="attendedBy"></select>
             </label>
             <label>Detalle
               <input name="creditNote" placeholder="Ej. En la noche paga" />
@@ -1329,6 +1340,6 @@
     </dialog>
 
     <script src="odontograma.js?v=20261001-comision-por-doctor-titulo"></script>
-    <script src="app.js?v=20261001-comision-por-doctor-titulo"></script>
+    <script src="app.js?v=20261002-doctor-que-atendio"></script>
   </body>
 </html>
