@@ -1346,6 +1346,15 @@ async function saveConfigApi(values) {
   await apiFetch("/api/config", { method: "POST", body: JSON.stringify(values) });
 }
 
+/* Borrar un usuario es quitarle la cuenta, no su rastro: su nombre se queda
+   escrito en las atenciones que firmo y en el registro de accesos, porque eso
+   ya ocurrio. Lo que se va es la llave para entrar. */
+async function deleteUserApi(id) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/users", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+}
+
+
 async function saveUserApi(user) {
   if (!API_ENABLED || !apiToken) return;
   const payload = {
@@ -8252,6 +8261,9 @@ function renderUsers() {
     <td>
       <button class="ghost" data-edit-user="${user.id}">Editar</button>
       ${user.id !== "u-admin" ? `<button class="ghost" data-toggle-user="${user.id}">${user.active ? "Desactivar" : "Activar"}</button>` : ""}
+      ${user.id !== "u-admin" && user.id !== currentUserId
+        ? `<button class="ghost danger-btn" data-delete-user="${user.id}">Eliminar</button>`
+        : ""}
     </td>
   </tr>`).join("");
 }
@@ -11423,6 +11435,32 @@ function bindEvents() {
 
   $("#usersTable").addEventListener("click", (event) => {
     if (!isAdmin()) return;
+    /* Eliminar deja al consultorio sin esa cuenta: no se puede volver atras y
+       no hace falta para cerrarle el paso -un usuario desactivado ya no entra-.
+       Por eso se pregunta nombrando a la persona y se ofrece lo otro. */
+    const borrar = event.target.closest("[data-delete-user]");
+    if (borrar) {
+      const user = state.users.find((item) => item.id === borrar.dataset.deleteUser);
+      if (!user || user.id === "u-admin" || user.id === currentUserId) return;
+      if (!confirm(`Se elimina la cuenta de ${user.name}.
+
+No podrá volver a entrar y la cuenta no se puede recuperar. Lo que atendió y firmó se queda en las historias, con su nombre.
+
+Si solo quieres cerrarle el paso, usa Desactivar.
+
+¿Eliminar la cuenta?`)) return;
+      const antes = [...state.users];
+      state.users = state.users.filter((item) => item.id !== user.id);
+      deleteUserApi(user.id).catch((error) => {
+        state.users = antes;
+        alert(error.message);
+        render();
+      });
+      addLocalAuditEvent("USUARIO_ELIMINADO", `Eliminó la cuenta de ${user.name}`, "");
+      if (!API_ENABLED) saveState();
+      render();
+      return;
+    }
     const edit = event.target.closest("[data-edit-user]");
     const toggle = event.target.closest("[data-toggle-user]");
     if (edit) {

@@ -1541,6 +1541,30 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not require_role(self, {"ADMIN"}):
                 return
             data = read_json(self)
+            # Borrar la cuenta: se va la llave para entrar, no lo que la persona
+            # atendio. El administrador principal no se borra, ni uno a si mismo.
+            if data.get("delete"):
+                item_id = data.get("id")
+                if not item_id:
+                    return send_json(self, {"error": "Usuario no indicado."}, 400)
+                if item_id == "u-admin":
+                    return send_json(self, {"error": "El administrador principal no se puede eliminar."}, 400)
+                quien = require_auth(self)
+                if not quien:
+                    return
+                if quien["id"] == item_id:
+                    return send_json(self, {"error": "No puedes eliminar tu propia cuenta."}, 400)
+                with db() as conn:
+                    fila = conn.execute("SELECT id, name FROM users WHERE id = ?", (item_id,)).fetchone()
+                    if not fila:
+                        return send_json(self, {"error": "Usuario no encontrado."}, 404)
+                    conn.execute("DELETE FROM users WHERE id = ?", (item_id,))
+                    add_audit_event(conn, quien, "USUARIO_ELIMINADO", f"Elimino la cuenta de {fila['name']}", item_id)
+                # las sesiones abiertas de esa cuenta dejan de valer al momento
+                for token, sesion in list(sessions.items()):
+                    if sesion.get("user_id") == item_id:
+                        sessions.pop(token, None)
+                return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("user")
             password = str(data.get("password") or "")
             with db() as conn:
