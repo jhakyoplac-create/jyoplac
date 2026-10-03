@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261002-eliminar-usuario" />
+    <link rel="stylesheet" href="styles.css?v=20261003-corregir-pago" />
     <link rel="stylesheet" href="odontograma.css?v=20261001-comision-por-doctor-titulo" />
   </head>
   <body class="locked">
@@ -591,8 +591,10 @@
         <div class="content-grid general-layout lower">
           <form class="panel form" id="staffPaymentForm">
             <div class="panel-head">
-              <h2>Pago personal / terceros</h2>
+              <h2 id="staffPaymentFormTitle">Pago personal / terceros</h2>
+              <button class="ghost" id="cancelStaffPaymentEditBtn" type="button" hidden>Cancelar</button>
             </div>
+            <input type="hidden" name="id" />
             <label>Fecha<input name="date" type="date" required /></label>
             <label>Persona / proveedor<input name="person" required placeholder="Doctor, asistente, contador, laboratorio" /></label>
             <label>Tipo<select name="type"></select></label>
@@ -1340,6 +1342,6 @@
     </dialog>
 
     <script src="odontograma.js?v=20261001-comision-por-doctor-titulo"></script>
-    <script src="app.js?v=20261002-eliminar-usuario"></script>
+    <script src="app.js?v=20261003-corregir-pago"></script>
   </body>
 </html>

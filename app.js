@@ -700,7 +700,9 @@ function mapApiExpense(row) {
     category: row.category || "",
     person: row.person || "",
     type: row.type || "",
-    closed: Boolean(row.closed)
+    closed: Boolean(row.closed),
+    // cuando se registro: de ahi se cuentan los dias para poder corregirlo
+    createdAt: (row.created_at || row.createdAt || "").slice(0, 10)
   };
 }
 
@@ -8799,6 +8801,27 @@ function renderStaffPaymentMonths() {
   else if (meses.length) select.value = meses[0];
 }
 
+/* Un pago mal escrito se corrige, pero no para siempre: pasados cuatro dias
+   la caja de ese periodo ya se reviso y rehacerla a destiempo descuadra lo que
+   ya se dio por bueno. El administrador si puede, porque es quien arregla los
+   errores que se descubren tarde.
+
+   Los dias se cuentan desde que se registro el pago, no desde la fecha que
+   dice: si contaran desde la fecha escrita, poner una futura daria ventana de
+   sobra. Los pagos de antes de este cambio no tienen fecha de registro; para
+   esos se usa la del pago, que es lo mas cercano que hay. */
+const DIAS_PARA_EDITAR_PAGO = 4;
+
+function sePuedeEditarPagoDePersonal(pago) {
+  if (!pago) return false;
+  if (isAdmin()) return true;
+  const registrado = String(pago.createdAt || pago.date || "").slice(0, 10);
+  if (!registrado) return false;
+  const dias = Math.floor((Date.parse(`${todayISO()}T00:00:00`) - Date.parse(`${registrado}T00:00:00`)) / 86400000);
+  return dias >= 0 && dias < DIAS_PARA_EDITAR_PAGO;
+}
+
+
 function renderStaffPayments() {
   const table = $("#staffPaymentsTable");
   if (!table) return;
@@ -8819,7 +8842,9 @@ function renderStaffPayments() {
     <td>${escapeHtml(payment.method || "")}</td>
     <td><strong>${money(payment.amount)}</strong></td>
     <td>${escapeHtml(payment.detail || "")}</td>
-    <td class="row-actions">${isAdmin() ? `<button class="small-btn danger-btn" data-delete-staff-payment="${payment.id}">Eliminar</button>` : ""}</td>
+    <td class="row-actions">${sePuedeEditarPagoDePersonal(payment)
+      ? `<button class="small-btn" data-edit-staff-payment="${payment.id}">Editar</button>`
+      : ""}${isAdmin() ? `<button class="small-btn danger-btn" data-delete-staff-payment="${payment.id}">Eliminar</button>` : ""}</td>
   </tr>`).join("") || `<tr><td colspan="7">${staffPayments().length ? "No hay pagos en el mes elegido." : "Aún no hay pagos de personal o terceros."}</td></tr>`;
 }
 
@@ -9983,7 +10008,56 @@ function bindEvents() {
     if (!API_ENABLED) saveState();
     render();
   });
+  /* Lleva el pago al formulario de arriba: es el mismo con el que se creo,
+     asi que no hay dos sitios donde escribir lo mismo. */
+  function entrarEnLaEdicionDelPago(expense) {
+    const form = $("#staffPaymentForm");
+    if (!form || !expense) return;
+    form.id.value = expense.id;
+    form.date.value = expense.date || todayISO();
+    form.person.value = expense.person || "";
+    form.type.value = expense.type || "OTRO";
+    form.detail.value = expense.detail || "";
+    form.amount.value = expense.amount ?? "";
+    form.method.value = expense.method || "";
+    const titulo = $("#staffPaymentFormTitle");
+    if (titulo) titulo.textContent = "Corregir pago";
+    const guardar = form.querySelector('button[type="submit"]');
+    if (guardar) guardar.textContent = "Guardar corrección";
+    const cancelar = $("#cancelStaffPaymentEditBtn");
+    if (cancelar) cancelar.hidden = false;
+    form.scrollIntoView({ block: "center" });
+    form.person.focus();
+  }
+
+  function salirDeLaEdicionDelPago() {
+    const form = $("#staffPaymentForm");
+    if (!form) return;
+    form.reset();
+    form.id.value = "";
+    form.date.value = todayISO();
+    const titulo = $("#staffPaymentFormTitle");
+    if (titulo) titulo.textContent = "Pago personal / terceros";
+    const guardar = form.querySelector('button[type="submit"]');
+    if (guardar) guardar.textContent = "Guardar pago";
+    const cancelar = $("#cancelStaffPaymentEditBtn");
+    if (cancelar) cancelar.hidden = true;
+  }
+
+  $("#cancelStaffPaymentEditBtn")?.addEventListener("click", salirDeLaEdicionDelPago);
+
   $("#staffPaymentsTable")?.addEventListener("click", async (event) => {
+    const editar = event.target.closest("[data-edit-staff-payment]");
+    if (editar) {
+      const expense = state.expenses.find((item) => item.id === editar.dataset.editStaffPayment && item.category === "PERSONAL_TERCERO");
+      if (!expense) return;
+      if (!sePuedeEditarPagoDePersonal(expense)) {
+        alert(`Ese pago ya tiene más de ${DIAS_PARA_EDITAR_PAGO} días registrado y solo el administrador puede corregirlo.`);
+        return;
+      }
+      entrarEnLaEdicionDelPago(expense);
+      return;
+    }
     const del = event.target.closest("[data-delete-staff-payment]");
     if (!del || !isAdmin()) return;
     const expense = state.expenses.find((item) => item.id === del.dataset.deleteStaffPayment && item.category === "PERSONAL_TERCERO");
@@ -11511,9 +11585,26 @@ Si solo quieres cerrarle el paso, usa Desactivar.
       }
       return;
     }
+    /* Corregir no es volver a pagar: si el formulario trae un id, se reescribe
+       ese pago en vez de crear otro. */
+    const editandoId = String(data.id || "").trim();
+    const anterior = editandoId ? state.expenses.find((item) => item.id === editandoId) : null;
+    if (editandoId && (!anterior || !sePuedeEditarPagoDePersonal(anterior))) {
+      alert(anterior
+        ? `Ese pago ya tiene más de ${DIAS_PARA_EDITAR_PAGO} días registrado y solo el administrador puede corregirlo.`
+        : "Ese pago ya no está en la lista.");
+      delete form.dataset.saving;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = previousText;
+      }
+      return;
+    }
     const normalizedPerson = data.person.trim().toUpperCase();
     const normalizedDetail = data.detail.trim().toUpperCase();
+    // al corregir, el propio pago no cuenta como duplicado de si mismo
     const duplicate = state.expenses.find((expense) =>
+      expense.id !== editandoId &&
       expense.category === "PERSONAL_TERCERO" &&
       expense.date === (data.date || todayISO()) &&
       String(expense.person || "").toUpperCase() === normalizedPerson &&
@@ -11530,7 +11621,8 @@ Si solo quieres cerrarle el paso, usa Desactivar.
       return;
     }
     const expense = {
-      id: uid("staff"),
+      ...(anterior || {}),
+      id: editandoId || uid("staff"),
       date: data.date || todayISO(),
       person: normalizedPerson,
       type: data.type || "OTRO",
@@ -11552,9 +11644,13 @@ Si solo quieres cerrarle el paso, usa Desactivar.
       }
       return;
     }
-    state.expenses.push(expense);
-    form.reset();
-    form.date.value = todayISO();
+    if (anterior) {
+      Object.assign(anterior, expense);
+      addLocalAuditEvent("PAGO_PERSONAL_CORREGIDO", `Corrigió el pago a ${expense.person}: ${expense.detail}`, "");
+    } else {
+      state.expenses.push(expense);
+    }
+    salirDeLaEdicionDelPago();
     delete form.dataset.saving;
     if (submitButton) {
       submitButton.disabled = false;

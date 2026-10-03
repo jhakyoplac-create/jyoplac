@@ -57,6 +57,20 @@ DOC_LOOKUP_RUC_URL = os.environ.get("DOC_LOOKUP_RUC_URL", "").strip()
 sessions = {}
 
 
+# Cuantos dias se puede corregir un pago de personal o terceros. Pasados esos
+# dias la caja de ese periodo ya se reviso; solo el administrador la reabre.
+DIAS_PARA_EDITAR_PAGO = 4
+
+
+def dias_desde(fecha_iso):
+    """Dias cumplidos entre esa fecha y hoy. Vive aqui arriba a proposito: en
+    do_POST el nombre date se usa como variable local y tapa al del modulo."""
+    try:
+        return (date.fromisoformat(today_lima()) - date.fromisoformat(str(fecha_iso)[:10])).days
+    except ValueError:
+        return None
+
+
 def now_id(prefix):
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
@@ -2806,6 +2820,23 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("exp")
             with db() as conn:
+                # La ventana para corregir se comprueba tambien aqui: el boton
+                # desaparece de la pantalla, pero sin esto bastaria con llamar a
+                # la direccion a mano para reescribir la caja de un mes cerrado.
+                # El administrador no tiene limite.
+                previo = conn.execute(
+                    "SELECT created_at FROM expenses WHERE id = ?", (item_id,)
+                ).fetchone()
+                if previo is not None and normalize_role(user["role"]) != "ADMIN":
+                    dias = dias_desde(previo["created_at"] or "")
+                    if dias is not None:
+                        if dias >= DIAS_PARA_EDITAR_PAGO:
+                            return send_json(self, {
+                                "error": (
+                                    f"Ese pago ya tiene mas de {DIAS_PARA_EDITAR_PAGO} dias registrado "
+                                    "y solo el administrador puede corregirlo."
+                                )
+                            }, 403)
                 expense_date = data.get("date") or open_cash_date(conn) or today_lima()
                 conn.execute(
                     """
