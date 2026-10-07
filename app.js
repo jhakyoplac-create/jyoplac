@@ -8195,6 +8195,33 @@ function renderReports() {
   renderReceptionNewPatientsWidget(month);
 }
 
+/* Un precio por cada servicio escrito arriba. Sale de la caja de servicios y no
+   de la lista guardada, para que al escribir uno nuevo aparezca su fila; lo ya
+   tecleado en una fila se respeta mientras se escribe. Al pintar desde cero
+   manda lo guardado, que puede venir de otro equipo. */
+function renderPreciosDeConfig(conservarTecleado = false) {
+  const form = $("#configForm");
+  const caja = $("#configPreciosLista");
+  if (!form || !caja) return;
+  const tecleados = new Map(!conservarTecleado ? [] : [...caja.querySelectorAll("[data-precio-de]")]
+    .map((campo) => [campo.dataset.precioDe.toLowerCase(), campo.value]));
+  const guardados = new Map(state.services.map((service) => [service.name.toLowerCase(), service.price]));
+  const nombres = String(form.services.value || "").split(",").map((item) => item.trim()).filter(Boolean);
+  caja.innerHTML = nombres.length
+    ? nombres.map((nombre, i) => {
+      const clave = nombre.toLowerCase();
+      const original = Number(guardados.get(clave) || 0);
+      const valor = tecleados.has(clave) ? tecleados.get(clave) : original;
+      return `<div class="config-precio-item">
+        <label for="cfg-precio-${i}">${escapeHtml(nombre)}</label>
+        <span class="muted">S/</span>
+        <input id="cfg-precio-${i}" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHtml(String(valor))}" data-precio-de="${escapeHtml(nombre)}" data-original="${original}" />
+      </div>`;
+    }).join("")
+    : `<p class="muted">Escribe primero los servicios.</p>`;
+}
+
+
 function renderConfig() {
   const form = $("#configForm");
   if (!(document.activeElement && form.contains(document.activeElement))) {
@@ -8213,6 +8240,7 @@ function renderConfig() {
     form.units.value = state.config.units.join(", ");
     form.services.value = state.services.filter((service) => service.active).map((service) => service.name).join(", ");
   }
+  renderPreciosDeConfig();
   renderUsers();
 }
 
@@ -11052,6 +11080,7 @@ function bindEvents() {
     render();
   });
 
+  $("#configForm").services?.addEventListener("input", () => renderPreciosDeConfig(true));
   $("#configForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!puedeConfigurar()) {
@@ -11063,13 +11092,18 @@ function bindEvents() {
     const units = data.units.split(",").map((item) => item.trim()).filter(Boolean);
     const serviceNames = data.services.split(",").map((item) => item.trim()).filter(Boolean);
     const previousServices = new Map(state.services.map((service) => [service.name.toLowerCase(), service]));
+    /* Solo los precios que de verdad se tocaron: si no, una fila que ni se miro
+       pisaria con un cero el precio puesto desde otro equipo. */
+    const preciosEscritos = new Map([...event.currentTarget.querySelectorAll("[data-precio-de]")]
+      .filter((campo) => campo.value !== "" && Number(campo.value) !== Number(campo.dataset.original ?? NaN))
+      .map((campo) => [campo.dataset.precioDe.toLowerCase(), Math.max(0, Number(campo.value) || 0)]));
     state.services = (serviceNames.length ? serviceNames : seedData.services.map((service) => service.name)).map((name) => {
       const existing = previousServices.get(name.toLowerCase()) || seedData.services.find((service) => service.name.toLowerCase() === name.toLowerCase());
       return {
         name,
         category: existing?.category || "General",
         duration: Number(existing?.duration || state.config.interval || 30),
-        price: Number(existing?.price || 0),
+        price: preciosEscritos.has(name.toLowerCase()) ? preciosEscritos.get(name.toLowerCase()) : Number(existing?.price || 0),
         active: true
       };
     });

@@ -5909,3 +5909,36 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* ---- Los precios de los tratamientos, en Configuracion ----
+   Un renglon por servicio, con su precio a la derecha. Va plegado porque la
+   lista es larga y no se toca todos los dias. */
+
+.config-precios {
+  margin: 4px 0 14px;
+}
+
+.config-precio-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 110px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.config-precio-item:last-child {
+  border-bottom: 0;
+}
+
+.config-precio-item > label {
+  display: block;
+  margin: 0;
+  min-width: 0;
+}
+
+.config-precio-item > input {
+  width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
