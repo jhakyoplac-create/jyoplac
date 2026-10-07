@@ -6289,51 +6289,16 @@ function hojaDelPlan(patientId) {
         : ""}
     </div>`;
 
-  /* El odontograma no marca todo lo que se cobra: unos brackets, una limpieza,
-     una endodoncia o una PPR no salen de la boca pintada de rojo. Se eligen de
-     la lista de tratamientos, con su cantidad, igual que en el talonario del
-     consultorio. */
-  const catalogo = (() => {
-    if (!puedeEditar) return "";
-    const activos = (state.services || []).filter((service) => service.active !== false);
-    if (!activos.length) {
-      return `<details class="plan-catalogo"><summary>Agregar tratamientos de la lista</summary>
-        <p class="muted">Todavía no hay tratamientos en la lista.</p>
-      </details>`;
-    }
-    const porCategoria = new Map();
-    activos.forEach((service) => {
-      const grupo = String(service.category || "").trim() || "General";
-      if (!porCategoria.has(grupo)) porCategoria.set(grupo, []);
-      porCategoria.get(grupo).push(service);
-    });
-    return `<details class="plan-catalogo">
-      <summary>Agregar tratamientos de la lista</summary>
-      <p class="muted">Marca lo que se le va a hacer y pon cuántas veces. El precio entra solo, y se puede retocar después línea por línea.</p>
-      ${[...porCategoria.entries()].map(([grupo, servicios]) => `<div class="plan-catalogo-grupo">
-        <h5>${escapeHtml(grupo)}</h5>
-        ${servicios.map((service, i) => {
-          const campo = `svc-${grupo.replace(/\W+/g, "")}-${i}`;
-          return `<div class="plan-catalogo-item">
-          <input type="checkbox" id="${campo}" data-servicio-elegido="${escapeHtml(service.name)}" />
-          <label for="${campo}">${escapeHtml(service.name)}</label>
-          <span class="plan-catalogo-precio">${money(service.price || 0)}</span>
-          <input class="plan-catalogo-cantidad" type="number" min="1" step="1" value="1" aria-label="Cantidad de ${escapeHtml(service.name)}" data-cantidad-de="${escapeHtml(service.name)}" />
-        </div>`;
-        }).join("")}
-      </div>`).join("")}
-      <button class="primary plan-guardar" type="button" data-agregar-tratamientos="${patientId}">Agregar al presupuesto</button>
-    </details>`;
-  })();
-
+  /* La lista "Agregar tratamientos de la lista" se quito a pedido del usuario,
+     igual que en el dental de EmpresaFacil: lo que no sale del odontograma
+     -brackets, limpieza, una protesis- se agrega desde la ventana de Precios. */
   const presupuesto = `<section class="hc-seccion">
       <h4>Presupuesto del paciente</h4>
       ${lineas.length
         ? `<div class="plan-columnas">
           <div class="plan-izquierda">
             ${cuadroDelTotal}
-            <p class="muted">Las líneas con número de pieza salen de lo que está marcado en rojo en el odontograma; las demás se eligieron de la lista. Si cambias un precio aquí, se guarda para este paciente.</p>
-            ${catalogo}
+            <p class="muted">Las líneas con número de pieza salen de lo que está marcado en rojo en el odontograma; las demás se agregaron desde Precios. Si cambias un precio aquí, se guarda para este paciente.</p>
           </div>
           <div class="plan-derecha">
             ${dibujo
@@ -6342,8 +6307,7 @@ function hojaDelPlan(patientId) {
             ${patientId ? `<p class="hc-editar-odontograma"><button class="small-btn" type="button" data-editar-odontograma="${patientId}">Editar odontograma</button></p>` : ""}
           </div>
         </div>`
-        : `<p class="muted">El odontograma de ${escapeHtml(patient.name)} no tiene nada marcado como pendiente. Marca en rojo lo que hay que hacer -caries, piezas por extraer- y el presupuesto se arma solo; lo que no sale de la boca -brackets, limpieza, una prótesis- se agrega aquí abajo.</p>
-          ${catalogo}`}
+        : `<p class="muted">El odontograma de ${escapeHtml(patient.name)} no tiene nada marcado como pendiente. Marca en rojo lo que hay que hacer -caries, piezas por extraer- y el presupuesto se arma solo; lo que no sale de la boca -brackets, limpieza, una prótesis- se agrega desde el botón Precios.</p>`}
     </section>`;
 
   /* Las proformas ya dadas: cada una con su numero, su fecha y su total, y la
