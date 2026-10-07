@@ -229,8 +229,11 @@
     { cat: "pieza", k: "intruido", n: "Intruido", c: "azul", hint: "Flecha vertical azul hacia el ápice." },
     { cat: "pieza", k: "giroversion", n: "Giroversión", c: "azul", sig: ["horaria", "antihoraria"],
       hint: "Flecha curva azul siguiendo el sentido de la rotación." },
-    { cat: "pieza", k: "migracion", n: "Migración", c: "azul", sig: ["mesial", "distal"],
-      hint: "Flecha recta horizontal azul en el sentido del desplazamiento." },
+    /* 5.3.16 de la norma. Se llamaba "Migración" y solo tenia mesial y distal,
+       dibujadas como una flecha sobre el diente. La norma no pide flecha: pide
+       la letra en el recuadro, y son cinco posiciones, no dos. */
+    { cat: "pieza", k: "posicion", n: "Posición dentaria", c: "azul", sig: ["M", "D", "V", "P", "L"],
+      hint: "La letra va en el recuadro de la pieza, en azul." },
     { cat: "pieza", k: "gemina", n: "Geminación", c: "azul",
       hint: "Circunferencia azul sobre el número de la pieza." },
     { cat: "pieza", k: "clavija", n: "Diente en clavija", c: "azul",
@@ -286,6 +289,37 @@
     PIEZAS.forEach(function (t) { d[t] = { sup: {}, pieza: {}, box: [], num: null, nota: "" }; });
     return { dientes: d, spans: [], arcada: { up: null, down: null }, nino: false, esp: "", obs: "" };
   }
+  /* Lo que significa cada sigla, con el texto de la norma. Los botones solo
+     decian "TC" o "MB": quien no se las sabe de memoria elegia a ciegas, y en
+     una historia clinica eso se paga caro. */
+  var SIGLAS = {
+    MB: "Mancha blanca",
+    CE: "Caries en el esmalte",
+    CD: "Caries en la dentina",
+    CDP: "Caries en dentina con compromiso pulpar",
+    AM: "Amalgama dental",
+    R: "Resina",
+    IV: "Ionómero de vidrio",
+    IM: "Incrustación metálica",
+    IE: "Incrustación estética",
+    C: "Carilla estética",
+    S: "Sellante",
+    CM: "Corona metálica",
+    CF: "Corona fenestrada",
+    CMC: "Corona metal-cerámica",
+    CV: "Corona veneer",
+    CJ: "Corona jacket",
+    CT: "Corona temporal",
+    TC: "Tratamiento de conductos",
+    PC: "Pulpectomía",
+    PP: "Pulpotomía",
+    M: "Mesializado",
+    D: "Distalizado",
+    V: "Vestibularizado",
+    P: "Palatinizado",
+    L: "Lingualizado"
+  };
+
   function normalizarFicha(f) {
     var base = fichaVacia();
     if (!f || typeof f !== "object") return base;
@@ -297,6 +331,17 @@
         box: Array.isArray(o.box) ? o.box : [],
         num: o.num || null, nota: o.nota || ""
       };
+      /* Lo marcado como "Migración" antes de seguir la norma no se pierde: pasa
+         a Posición dentaria con su letra, y la letra entra al recuadro, que es
+         donde la norma la quiere. */
+      var vieja = base.dientes[t].pieza.migracion;
+      if (vieja !== undefined) {
+        delete base.dientes[t].pieza.migracion;
+        var letra = vieja === "distal" ? "D" : "M";
+        base.dientes[t].pieza.posicion = letra;
+        var yaEsta = base.dientes[t].box.some(function (b) { return b.k === letra; });
+        if (!yaEsta) base.dientes[t].box.push({ k: letra, c: "azul" });
+      }
     });
     base.spans = Array.isArray(f.spans) ? f.spans.filter(function (s) { return meta(s.k); }) : [];
     base.arcada = { up: (f.arcada || {}).up || null, down: (f.arcada || {}).down || null };
@@ -501,9 +546,6 @@
           out += L("M" + (invertida ? der : izq) + "," + hasta + " L" + (invertida ? izq : der) + "," + desde);
         } else if (k === "erupcion") {
           out += zigzag(W / 2, cuello + (H - cuello) * 0.26, H * 0.11, W * 0.12, c, gr);
-        } else if (k === "migracion") {
-          var der = sig !== "mesial";
-          out += flecha(der ? x0 : x1, -H * 0.09, der ? x1 : x0, -H * 0.09, c, gr);
         } else if (k === "rr") {
           var yy = cuello + (H - cuello) * 0.5;
           var g = arriba ? ' transform="translate(0,' + (2 * yy) + ') scale(1,-1)"' : "";
@@ -801,10 +843,14 @@
       var m = meta(tool.k);
       if (m && m.sig) {
         html += '<div class="odo-sigrow"><em>' +
-          (m.k === "giroversion" || m.k === "migracion" ? "Sentido" : "Tipo") + "</em>" +
+          (m.k === "giroversion" ? "Sentido" : "Tipo") + "</em>" +
           m.sig.map(function (s) {
-            return '<button type="button" class="odo-sig' + (tool.sig === s ? " on" : "") + '" data-sig="' + esc(s) + '">' + esc(s) + "</button>";
-          }).join("") + "</div>";
+            var que = SIGLAS[s];
+            return '<button type="button" class="odo-sig' + (tool.sig === s ? " on" : "") + '" data-sig="' + esc(s) + '"' +
+              (que ? ' title="' + esc(que) + '"' : "") + ">" + esc(s) + "</button>";
+          }).join("") +
+          (SIGLAS[tool.sig] ? '<small class="odo-sigque">' + esc(SIGLAS[tool.sig]) + "</small>" : "") +
+          "</div>";
       }
       var hint = m ? m.hint : "";
       if (pendiente) hint = "<b>Pieza " + pendiente + " seleccionada.</b> Ahora haz clic en la segunda pieza del mismo maxilar.";
@@ -1030,7 +1076,7 @@
         } else {
           d.pieza[tool.k] = m.sig ? tool.sig : "";
           // las siglas de corona y tratamiento pulpar van al recuadro
-          if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar")) ponerBox(t, tool.sig, colorDe(m));
+          if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar" || tool.k === "posicion")) ponerBox(t, tool.sig, colorDe(m));
           // y las que la norma manda escribir siempre, como CT o RR
           if (m.box) ponerBox(t, m.box, colorDe(m));
         }

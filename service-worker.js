@@ -1,12 +1,12 @@
-const CACHE_NAME = "cm-dental-shell-v148";
+const CACHE_NAME = "cm-dental-shell-v149";
 const SHELL_FILES = [
   "/",
   "/index.html",
   "/styles.css?v=20261003-corregir-pago",
-  "/odontograma.css?v=20261001-comision-por-doctor-titulo",
+  "/odontograma.css?v=20261007-posicion-dentaria",
   "/app.js?v=20261003-corregir-pago",
   "/ver-contrasena.js?v=20261005-ojo-contrasena",
-  "/odontograma.js?v=20261001-comision-por-doctor-titulo",
+  "/odontograma.js?v=20261007-posicion-dentaria",
   "/assets/dientes/incisivo.png",
   "/assets/dientes/canino.png",
   "/assets/dientes/premolar.png",
