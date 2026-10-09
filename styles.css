@@ -6650,3 +6650,15 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   mix-blend-mode: multiply;
   pointer-events: none;
 }
+
+/* Lo escrito sobre la hoja nunca se sale del renglon: una palabra larga sin
+   espacios se corta y sigue abajo, igual que el texto normal. */
+.hc-hoja [contenteditable],
+.hcf-escribible,
+.hcf-caja,
+.hcf-bloque > b {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
+}
