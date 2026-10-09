@@ -4737,24 +4737,18 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
      el momento, se guarda dentro de esta historia y queda anotado quien firmo y
      cuando. El sello del consultorio si es fijo: identifica al consultorio, no
      autoriza nada por si solo. */
-  const firmada = Boolean(nota.firma);
+  /* La firma dibujada en pantalla ya no sale en la historia: se sella y se
+     firma a mano sobre el papel (pedido del 2026-10-09). */
   const cierre = `<div class="hcf-cierre">
       ${elegirProfesional}
       ${cop ? `<p class="hcf-cop">COP N.° ${escapeHtml(cop)}</p>` : ""}
       ${sello ? `<img class="hcf-sello-imagen" src="${escapeHtml(sello)}" alt="Sello de ${escapeHtml(profesional)}" />` : ""}
       <div class="hcf-sello">
-        ${firmada ? `<img class="hcf-firma" src="${escapeHtml(nota.firma)}" alt="Firma del profesional" />` : ""}
         <span>Sello y firma</span>
-        ${sePuedeEscribir && nota.id
-          ? `<button class="small-btn" type="button" data-firmar-profesional="${nota.id}">${firmada ? "Firmar de nuevo" : "Firmar"}</button>`
-          : ""}
         ${/* Imprimir vive al final de la hoja, no arriba: se imprime cuando ya
               se termino de leerla y de firmarla, no antes. */
           pantalla ? `<button class="ghost hcf-imprimir" type="button" data-imprimir-historia="${patient.id}">Imprimir historia</button>` : ""}
       </div>
-      ${firmada
-        ? `<p class="hcf-firmada">Firmada por ${escapeHtml(nota.firmadaPor || profesional)} el ${formatDate(String(nota.firmadaEl || "").slice(0, 10))}${String(nota.firmadaEl || "").slice(11, 16) ? ` a las ${String(nota.firmadaEl).slice(11, 16)}` : ""}</p>`
-        : pantalla ? `<p class="hcf-sin-firma">Todavía sin firmar.</p>` : ""}
     </div>`;
 
   /* En pantalla el odontograma vive en su propia pestana -con el inicial y el
