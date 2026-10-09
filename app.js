@@ -4367,6 +4367,10 @@ function guardarCampoDeLaHoja(campo) {
       date: todayISO(),
       attendedBy: paciente.doctor || currentUser()?.name || "",
       attended: true,
+      /* Sin cita a proposito: si la nota no dice a que cita va, el servidor
+         marca ATENDIDAS todas las del paciente ese dia, y en CM el estado de
+         una cita lo decide siempre una persona. Con "" no toca ninguna. */
+      appointmentId: "",
       reason: "",
       procedure: "",
       agreedPrice: 0,
@@ -4383,7 +4387,10 @@ function guardarCampoDeLaHoja(campo) {
   const entrada = state.clinicalHistory.find((item) => item.id === registro);
   if (!entrada || String(entrada[nombre] || "") === valor) return;
   entrada[nombre] = valor;
-  saveClinicalHistoryApi(entrada).catch((error) => alert(error.message));
+  /* Corregir la hoja no es atender a nadie: sin appointmentId el servidor
+     volvia a marcar ATENDIDAS las citas del paciente de ese dia. Con "" no
+     toca ninguna; la cita ya la marco el formulario cuando se guardo la nota. */
+  saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => alert(error.message));
   if (!API_ENABLED) saveState();
   renderClinicalHistory();
 }
@@ -5743,7 +5750,7 @@ function bindFirmaDelConsentimiento() {
       // la hora del consultorio, no la de Greenwich: toISOString restaba 5 horas
       const ahora = new Date();
       entrada.firmadaEl = `${todayISO()}T${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
-      saveClinicalHistoryApi(entrada).catch((error) => alert(error.message));
+      saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => alert(error.message));
           addLocalAuditEvent("HISTORIA_CLINICA_FIRMADA", `Firmó la historia clínica de ${patientById(entrada.patientId)?.name || "un paciente"}`, entrada.patientId);
       firmaEnCurso = null;
       $("#signatureDialog")?.close("ok");
@@ -10345,7 +10352,8 @@ function bindEvents() {
     const entrada = state.clinicalHistory.find((item) => item.id === select.dataset.profesional);
     if (!entrada || entrada.professional === select.value) return;
     entrada.professional = select.value;
-    saveClinicalHistoryApi(entrada).catch((error) => alert(error.message));
+    // firmar o elegir quien firma no atiende a nadie: no se tocan las citas
+    saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => alert(error.message));
     if (!API_ENABLED) saveState();
     renderClinicalHistory();
   });
