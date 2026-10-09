@@ -175,7 +175,7 @@
   var SIGLAS_BOX = [
     ["DES", "Desgaste oclusal/incisal", "rojo"], ["DIS", "Diente discrómico"],
     ["E", "Diente ectópico"], ["I", "Impactación"], ["SI", "Semi-impactación"],
-    ["IMP", "Implante"], ["MAC", "Macrodoncia"], ["MIC", "Microdoncia"],
+    ["MAC", "Macrodoncia"], ["MIC", "Microdoncia"],
     ["M1", "Movilidad grado 1", "rojo"], ["M2", "Movilidad grado 2", "rojo"],
     ["M3", "Movilidad grado 3", "rojo"],
     /* Posicion dentaria (5.3.16). Se anotan en el mismo recuadro y pueden ir
@@ -221,6 +221,13 @@
       hint: "Elige por dónde va la fractura: corona, raíz o toda la pieza, y hacia qué lado cae la línea." },
     { cat: "pieza", k: "espigo", n: "Espigo-muñón", c: "azul", malo: true,
       hint: "Línea en la raíz unida a un cuadrado en la corona. En rojo si está en mal estado." },
+    /* 5.3.30. La norma no pide dibujo ninguno: la sigla IMP en el recuadro de
+       la pieza o piezas reemplazadas, en azul si el implante esta en buen
+       estado y en rojo si esta en mal estado. Estaba como sigla suelta del
+       recuadro, y asi solo se podia escribir en azul: un implante fracasado no
+       habia manera de registrarlo. */
+    { cat: "pieza", k: "implante", n: "Implante dental", c: "azul", malo: true, box: "IMP",
+      hint: "IMP en el recuadro de la pieza. En azul si está bien y en rojo si está en mal estado. Lo demás va en Especificaciones." },
     { cat: "pieza", k: "erupcion", n: "En erupción", c: "azul",
       hint: "Flecha azul en zigzag sobre la pieza, hacia el plano oclusal." },
     /* 5.3.2. Siempre en rojo, que es como la norma lo pide: son defectos, no
@@ -318,6 +325,7 @@
     CV: "Corona veneer",
     CJ: "Corona jacket",
     CT: "Corona temporal",
+    IMP: "Implante dental",
     TC: "Tratamiento de conductos",
     PC: "Pulpectomía",
     PP: "Pulpotomía",
@@ -356,6 +364,14 @@
         base.dientes[t].pieza.posicion = letra;
         var yaEsta = base.dientes[t].box.some(function (b) { return b.k === letra; });
         if (!yaEsta) base.dientes[t].box.push({ k: letra, c: "azul" });
+      }
+      /* El implante se escribia a mano como sigla del recuadro. Ahora es un
+         hallazgo propio, asi que lo ya anotado se convierte: si no, la
+         herramienta no lo reconoceria y al marcarla saldria un IMP repetido. */
+      if (base.dientes[t].pieza.implante === undefined) {
+        base.dientes[t].box.forEach(function (b) {
+          if (b.k === "IMP") base.dientes[t].pieza.implante = "";
+        });
       }
     });
     base.spans = Array.isArray(f.spans) ? f.spans.filter(function (s) { return meta(s.k); }) : [];
@@ -802,15 +818,21 @@
         out.push({ txt: m.n + " · " + nombreCara(t, z), c: m.c });
       });
       d.box.forEach(function (x) {
-        var m = meta(x.k);
-        if (m) { out.push({ txt: m.n, c: x.c }); return; }
         /* Las siglas de material, de nivel de caries o de tipo de corona no son
            herramienta propia: se dicen con el nombre de la que las puso, que se
-           lee mucho mejor que un "Recuadro: MB". */
+           lee mucho mejor que un "Recuadro: MB". Puede ser la que la ofrece
+           entre sus opciones o la que la escribe siempre, como CT o IMP. */
         var duena = null;
         for (var i = 0; i < TOOLS.length; i++) {
-          if (TOOLS[i].sig && TOOLS[i].sig.indexOf(x.k) >= 0) { duena = TOOLS[i]; break; }
+          var T = TOOLS[i];
+          if ((T.sig && T.sig.indexOf(x.k) >= 0) || T.box === x.k) { duena = T; break; }
         }
+        /* Si el hallazgo ya esta nombrado mas arriba no se repite su sigla: el
+           implante salia dos veces, como "Implante dental" y otra vez como
+           "IMP", y lo mismo la corona temporal con su CT. */
+        if (duena && duena.cat === "pieza" && d.pieza[duena.k] !== undefined) return;
+        var m = meta(x.k);
+        if (m) { out.push({ txt: m.n, c: x.c }); return; }
         out.push({ txt: duena ? x.k + " · " + duena.n : "Recuadro: " + x.k, c: x.c });
       });
       if (d.num === "clavija") out.push({ txt: "Diente en clavija", c: "azul" });
@@ -1077,6 +1099,30 @@
       }
       box.push({ k: k, c: c });
     }
+
+    /* Con que colores pudo este hallazgo escribir su sigla. Los que la norma
+       admite en buen y mal estado la escriben en azul o en rojo segun como
+       estuviera la casilla al marcarlos, asi que para quitarla hay que buscar
+       los dos. No vale borrar cualquier sigla igual: una D azul es una pieza
+       distalizada y una D roja una decoloracion del esmalte. */
+    function coloresDe(m) { return m.malo ? [m.c, "rojo"] : [colorDe(m)]; }
+
+    function quitarBox(t, k, colores) {
+      if (!k) return;
+      var box = ficha.dientes[t].box;
+      for (var i = 0; i < box.length; i++) {
+        if (box[i].k === k && colores.indexOf(box[i].c) >= 0) { box.splice(i, 1); return; }
+      }
+    }
+
+    /* Escribe la sigla con el color que toca ahora, llevandose antes la que
+       hubiera dejado el mismo hallazgo con el otro color: si no, poner un
+       implante en azul y despues marcarlo en mal estado dejaba los dos IMP. */
+    function escribirBox(t, k, m) {
+      if (!k) return;
+      quitarBox(t, k, coloresDe(m));
+      ficha.dientes[t].box.push({ k: k, c: colorDe(m) });
+    }
     function avisar(claves) { onChange(ficha, claves); }
 
     function aplicarPieza(t) {
@@ -1095,18 +1141,22 @@
           var siglaPuesta = d.pieza[tool.k];
           delete d.pieza[tool.k];
           // al quitar la marca se va tambien su sigla del recuadro
-          if (m.box) ponerBox(t, m.box, colorDe(m));
+          if (m.box) quitarBox(t, m.box, coloresDe(m));
           /* Los que escriben una sigla elegida -corona, tratamiento pulpar,
              posicion, defectos del esmalte- tambien se la llevan al quitarse.
              Antes la dejaban ahi: se borraba la corona y su CM se quedaba
              escrito en el recuadro como si siguiera puesta. */
-          else if (m.sig && siglaPuesta) ponerBox(t, siglaPuesta, colorDe(m));
+          else if (m.sig && siglaPuesta) quitarBox(t, siglaPuesta, coloresDe(m));
         } else {
+          /* Si ya estaba puesto pero con otra sigla -la corona era CM y ahora
+             se elige CF- la vieja se va. Antes quedaban las dos escritas. */
+          var anterior = d.pieza[tool.k];
+          if (m.sig && anterior && anterior !== tool.sig) quitarBox(t, anterior, coloresDe(m));
           d.pieza[tool.k] = m.sig ? tool.sig : "";
           // las siglas de corona y tratamiento pulpar van al recuadro
-          if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar" || tool.k === "posicion" || tool.k === "dde")) ponerBox(t, tool.sig, colorDe(m));
-          // y las que la norma manda escribir siempre, como CT o RR
-          if (m.box) ponerBox(t, m.box, colorDe(m));
+          if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar" || tool.k === "posicion" || tool.k === "dde")) escribirBox(t, tool.sig, m);
+          // y las que la norma manda escribir siempre, como CT, RR o IMP
+          if (m.box) escribirBox(t, m.box, m);
         }
         return [t];
       }
