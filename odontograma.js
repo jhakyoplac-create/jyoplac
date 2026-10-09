@@ -223,6 +223,14 @@
       hint: "Línea en la raíz unida a un cuadrado en la corona. En rojo si está en mal estado." },
     { cat: "pieza", k: "erupcion", n: "En erupción", c: "azul",
       hint: "Flecha azul en zigzag sobre la pieza, hacia el plano oclusal." },
+    /* 5.3.2. Siempre en rojo, que es como la norma lo pide: son defectos, no
+       tratamientos. La fluorosis no entra aqui porque es generalizada; la norma
+       manda detallarla en Especificaciones. */
+    { cat: "pieza", k: "dde", n: "Defectos del esmalte", c: "rojo", sig: ["HP", "HM", "O", "D"],
+      hint: "La sigla va en el recuadro de la pieza, en rojo. La fluorosis se escribe en Especificaciones." },
+    /* 5.3.5. Sin opciones: o las tiene o no las tiene. */
+    { cat: "pieza", k: "ffp", n: "Fosas y fisuras profundas", c: "azul", box: "FFP",
+      hint: "FFP en el recuadro de la pieza, en azul." },
     { cat: "pieza", k: "rr", n: "Remanente radicular", c: "rojo", box: "RR",
       hint: "RR en rojo sobre la raíz y en el recuadro." },
     { cat: "pieza", k: "extruido", n: "Extruido", c: "azul", hint: "Flecha azul hacia el plano oclusal." },
@@ -313,6 +321,13 @@
     TC: "Tratamiento de conductos",
     PC: "Pulpectomía",
     PP: "Pulpotomía",
+    HP: "Hipoplasia del esmalte",
+    HM: "Hipomineralización del esmalte",
+    O: "Opacidades del esmalte",
+    /* La misma letra con dos sentidos: aqui manda el hallazgo. En Posicion
+       dentaria la D es distalizado; en los defectos del esmalte, decoloracion. */
+    "dde:D": "Decoloración del esmalte",
+    FFP: "Fosas y fisuras profundas",
     M: "Mesializado",
     D: "Distalizado",
     V: "Vestibularizado",
@@ -845,11 +860,14 @@
         html += '<div class="odo-sigrow"><em>' +
           (m.k === "giroversion" ? "Sentido" : "Tipo") + "</em>" +
           m.sig.map(function (s) {
-            var que = SIGLAS[s];
+            var que = SIGLAS[m.k + ":" + s] || SIGLAS[s];
             return '<button type="button" class="odo-sig' + (tool.sig === s ? " on" : "") + '" data-sig="' + esc(s) + '"' +
               (que ? ' title="' + esc(que) + '"' : "") + ">" + esc(s) + "</button>";
           }).join("") +
-          (SIGLAS[tool.sig] ? '<small class="odo-sigque">' + esc(SIGLAS[tool.sig]) + "</small>" : "") +
+          (function () {
+            var que = SIGLAS[m.k + ":" + tool.sig] || SIGLAS[tool.sig];
+            return que ? '<small class="odo-sigque">' + esc(que) + "</small>" : "";
+          })() +
           "</div>";
       }
       var hint = m ? m.hint : "";
@@ -1047,11 +1065,15 @@
       hist.push(JSON.stringify(ficha));
       if (hist.length > 40) hist.shift();
     }
+    /* La misma letra puede querer decir dos cosas segun el color: D en azul es
+       una pieza distalizada y D en rojo una decoloracion del esmalte. Por eso
+       se compara la sigla junto con su color, y no solo la sigla: si no, poner
+       una borraba la otra. */
     function ponerBox(t, k, c) {
       if (!k) return;   // sin sigla no hay nada que escribir en el recuadro
       var box = ficha.dientes[t].box;
       for (var i = 0; i < box.length; i++) {
-        if (box[i].k === k) { box.splice(i, 1); return; }
+        if (box[i].k === k && box[i].c === c) { box.splice(i, 1); return; }
       }
       box.push({ k: k, c: c });
     }
@@ -1070,13 +1092,19 @@
           return [t];
         }
         if (d.pieza[tool.k] !== undefined && (!m.sig || d.pieza[tool.k] === tool.sig)) {
+          var siglaPuesta = d.pieza[tool.k];
           delete d.pieza[tool.k];
           // al quitar la marca se va tambien su sigla del recuadro
           if (m.box) ponerBox(t, m.box, colorDe(m));
+          /* Los que escriben una sigla elegida -corona, tratamiento pulpar,
+             posicion, defectos del esmalte- tambien se la llevan al quitarse.
+             Antes la dejaban ahi: se borraba la corona y su CM se quedaba
+             escrito en el recuadro como si siguiera puesta. */
+          else if (m.sig && siglaPuesta) ponerBox(t, siglaPuesta, colorDe(m));
         } else {
           d.pieza[tool.k] = m.sig ? tool.sig : "";
           // las siglas de corona y tratamiento pulpar van al recuadro
-          if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar" || tool.k === "posicion")) ponerBox(t, tool.sig, colorDe(m));
+          if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar" || tool.k === "posicion" || tool.k === "dde")) ponerBox(t, tool.sig, colorDe(m));
           // y las que la norma manda escribir siempre, como CT o RR
           if (m.box) ponerBox(t, m.box, colorDe(m));
         }
