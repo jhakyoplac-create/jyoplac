@@ -370,6 +370,9 @@ function mapApiConsentimiento(row) {
     firmante: row.firmante || "",
     doctor: row.doctor || "",
     registradoPor: row.registrado_por || row.registradoPor || "",
+    firmaDoctor: row.firma_doctor || row.firmaDoctor || "",
+    fechaDoctor: (row.fecha_doctor || row.fechaDoctor || "").slice(0, 10),
+    doctorFirmante: row.doctor_firmante || row.doctorFirmante || "",
     createdAt: row.created_at || row.createdAt || "",
   };
 }
@@ -5619,15 +5622,24 @@ function bloqueDeFirmas(patient, tipo, { pantalla = true } = {}) {
   const firmado = consentimientoFirmado(patient.id, tipo);
   const firma = firmado?.firma
     ? `<img class="ci-firma" src="${escapeHtml(firmado.firma)}" alt="Firma del paciente" />
-      <small>Firmado el ${formatDate(firmado.fecha)}${firmado.firmante ? ` por ${escapeHtml(firmado.firmante)}` : ""}</small>`
+      <small>Firmado el ${formatDate(firmado.fecha)} por</small>`
     : pantalla
       ? `<button class="small-btn" type="button" data-firmar-consentimiento="${tipo}">Firmar aquí</button>`
       : "";
   // el COP se guarda en el usuario de la doctora; si no lo puso, queda la linea
   const cop = usuarioDelDoctor(patient.doctor || (state.config?.doctors || [])[0] || "")?.cop || "";
+  /* El dentista firma aparte, con su propia fecha: no se copia la del
+     paciente. Firma despues de el, sobre el documento que el paciente ya
+     acepto; mientras no firme, su lado queda con la linea en blanco. */
+  const firmaDelDentista = firmado?.firmaDoctor
+    ? `<img class="ci-firma" src="${escapeHtml(firmado.firmaDoctor)}" alt="Firma del cirujano dentista" />
+      <small>Firmado el ${formatDate(firmado.fechaDoctor)}</small>`
+    : pantalla && firmado?.firma
+      ? `<button class="small-btn" type="button" data-firmar-dentista="${firmado.id}">Firmar aquí</button>`
+      : "";
   return `<div class="ci-firmas">
       <div>${firma}Paciente o Representante legal</div>
-      <div>Cirujano Dentista<br>COP N.º ${cop ? escapeHtml(cop) : RAYA}</div>
+      <div>${firmaDelDentista}Cirujano Dentista<br>COP N.º ${cop ? escapeHtml(cop) : RAYA}</div>
     </div>`;
 }
 
@@ -5863,6 +5875,23 @@ function bindFirmaDelConsentimiento() {
     }
     const imagen = firmaComprimida(lienzo);
     if (!imagen) return;
+    if (firmaEnCurso.destino === "consentimiento-dentista") {
+      const consentimiento = (state.consentimientos || []).find((item) => item.id === firmaEnCurso.consentimientoId);
+      if (!consentimiento) return;
+      consentimiento.firmaDoctor = imagen;
+      consentimiento.fechaDoctor = todayISO();
+      consentimiento.doctorFirmante = currentUser()?.name || "";
+      saveConsentimientoApi(consentimiento).catch((error) => alert("No se pudo guardar la firma del dentista: " + (error?.message || "error de conexión")));
+      addLocalAuditEvent(
+        "CONSENTIMIENTO_FIRMADO_DENTISTA",
+        `El cirujano dentista firmó el consentimiento de ${consentimiento.tipo}: ${patientById(consentimiento.patientId)?.name || "Paciente"}`,
+        consentimiento.patientId
+      );
+      firmaEnCurso = null;
+      $("#signatureDialog")?.close("ok");
+      renderClinicalHistory();
+      return;
+    }
     if (firmaEnCurso.destino === "historia") {
       const entrada = state.clinicalHistory.find((item) => item.id === firmaEnCurso.historiaId);
       if (!entrada) return;
@@ -10610,6 +10639,18 @@ function bindEvents() {
     const firmar = event.target.closest("[data-firmar-consentimiento]");
     if (firmar) {
       abrirFirmaDelConsentimiento($("#historyPatientFilter")?.value || "", firmar.dataset.firmarConsentimiento);
+      return;
+    }
+    const firmarDentista = event.target.closest("[data-firmar-dentista]");
+    if (firmarDentista) {
+      if (!canManageClinical()) {
+        alert("Tu usuario no puede firmar consentimientos.");
+        return;
+      }
+      prepararLienzoDeFirma(
+        { destino: "consentimiento-dentista", consentimientoId: firmarDentista.dataset.firmarDentista },
+        `${currentUser()?.name || "El cirujano dentista"} firma con el dedo o con el mouse dentro del recuadro.`
+      );
       return;
     }
     const imprimir = event.target.closest("[data-imprimir-consentimiento]");

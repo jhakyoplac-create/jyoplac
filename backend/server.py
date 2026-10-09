@@ -404,6 +404,10 @@ def migrate_db(conn):
     ensure_column(conn, "clinical_history", "cie10", "TEXT")
     ensure_column(conn, "clinical_history", "hora", "TEXT")
     ensure_column(conn, "clinical_history", "alta_paciente", "TEXT")
+    # La firma del cirujano dentista en el consentimiento, con su propia fecha.
+    ensure_column(conn, "consentimientos", "firma_doctor", "TEXT")
+    ensure_column(conn, "consentimientos", "fecha_doctor", "TEXT")
+    ensure_column(conn, "consentimientos", "doctor_firmante", "TEXT")
     # La foto de la Ficha de datos va aparte: no viaja en el bootstrap, se pide
     # solo al abrir o imprimir la ficha.
     conn.execute(
@@ -3016,6 +3020,17 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("registradoPor", ""),
                     ),
                 )
+                # La firma del dentista llega despues, sobre el mismo documento:
+                # se pone una sola vez y no se reemplaza.
+                if data.get("firmaDoctor"):
+                    conn.execute(
+                        """
+                        UPDATE consentimientos
+                        SET firma_doctor = ?, fecha_doctor = ?, doctor_firmante = ?
+                        WHERE id = ? AND COALESCE(firma_doctor, '') = ''
+                        """,
+                        (data.get("firmaDoctor"), data.get("fechaDoctor", ""), data.get("doctorFirmante", ""), item_id),
+                    )
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/config":
