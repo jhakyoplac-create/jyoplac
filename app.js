@@ -2852,7 +2852,8 @@ const roleViews = {
   DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
   DOCTOR_ATENCION: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "campanas"],
   DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
-  RECEPCION: ["dashboard", "pacientes", "agenda", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
+  // recepcion ve el historial clinico para consultarlo e imprimirlo; no escribe nada clinico
+  RECEPCION: ["dashboard", "pacientes", "agenda", "historial", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -4666,6 +4667,10 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
 
 function renderClinicalHistory() {
   if (!$('#historyForm input[name="date"]').value) $('#historyForm input[name="date"]').value = todayISO();
+  /* Quien no es clinico -recepcion- mira la historia sin el formulario de la
+     nota: igual no podria guardarla, y asi no parece que pudiera. */
+  const formularioDeNota = $("#historyForm");
+  if (formularioDeNota) formularioDeNota.hidden = !canManageClinical();
   const caja = $("#historyTimeline");
   if (!caja) return;
   const patientId = $("#historyPatientFilter").value || state.patients[0]?.id || "";
@@ -5076,7 +5081,7 @@ function hojaDelOdontograma(patientId, { pantalla = true } = {}) {
      cargada, para no volver a empezar-. */
   const imprimir = pantalla && (inicial || ultima)
     ? `<p class="hc-editar-odontograma">
-        <button class="small-btn" type="button" data-editar-odontograma="${patientId}">Editar odontograma</button>
+        ${canManageClinical() ? `<button class="small-btn" type="button" data-editar-odontograma="${patientId}">Editar odontograma</button>` : ""}
         <button class="small-btn" type="button" data-imprimir-odontograma="${patientId}">Imprimir odontograma</button>
       </p>`
     : "";
@@ -6331,7 +6336,7 @@ function hojaDelPlan(patientId) {
             ${dibujo
               ? `<div class="hc-grafico"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${dibujo.html}</div></div></div>`
               : ""}
-            ${patientId ? `<p class="hc-editar-odontograma"><button class="small-btn" type="button" data-editar-odontograma="${patientId}">Editar odontograma</button></p>` : ""}
+            ${patientId && canManageClinical() ? `<p class="hc-editar-odontograma"><button class="small-btn" type="button" data-editar-odontograma="${patientId}">Editar odontograma</button></p>` : ""}
           </div>
         </div>`
         : `<p class="muted">El odontograma de ${escapeHtml(patient.name)} no tiene nada marcado como pendiente. Marca en rojo lo que hay que hacer -caries, piezas por extraer- y el presupuesto se arma solo; lo que no sale de la boca -brackets, limpieza, una prótesis- se agrega desde el botón Precios.</p>`}
