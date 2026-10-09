@@ -4719,10 +4719,15 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   /* Quien firma la historia se elige: en un consultorio con varios doctores no
      siempre atiende el de la ficha, y el nombre del pie tiene que ser el de
      quien de verdad la cierra. */
-  const profesional = nombreCompletoDelDoctor(nota.professional)
-    || nombreCompletoDelDoctor(nota.attendedBy)
-    || nombreCompletoDelDoctor(patient.doctor)
-    || "";
+  /* Se toma el primero que sea un usuario registrado: si la atencion quedo
+     con un nombre mal escrito ("Carla" por "Karla") no se encontraba a nadie
+     y la hoja salia sin COP ni sello. Si ninguno lo es, el primero escrito. */
+  const nombresPosibles = [nota.professional, nota.attendedBy, patient.doctor]
+    .map((nombre) => String(nombre || "").trim())
+    .filter(Boolean);
+  const profesional = nombreCompletoDelDoctor(
+    nombresPosibles.find((nombre) => usuarioDelDoctor(nombre)) || nombresPosibles[0] || ""
+  );
   const usuarioQueFirma = usuarioDelDoctor(profesional);
   const cop = usuarioQueFirma?.cop || "";
   // el sello es de quien firma, no del consultorio: cada doctor tiene el suyo
