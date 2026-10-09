@@ -584,6 +584,8 @@ function mapApiClinicalHistory(row) {
     // solo si se corrigio sobre la hoja de evolucion: si no, sale el procedimiento de siempre
     ...(row.evolucion != null ? { evolucion: row.evolucion } : {}),
     ...(row.cie10 != null ? { cie10: row.cie10 } : {}),
+    // lo escrito en "Alta del paciente"; sin escribir, la hoja pone la fecha del alta
+    ...(row.alta_paciente != null ? { altaPaciente: row.alta_paciente } : {}),
   };
 }
 
@@ -4709,7 +4711,7 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
     ${controles ? `<ul class="hcf-controles">${controles}</ul>` : ""}`;
 
   const altaDelPaciente = `${titulo("Alta del paciente")}
-    ${bloque("", alta ? `Dada de alta el ${formatDate(alta.date)}` : "", 1)}`;
+    ${bloque("", nota.altaPaciente != null ? nota.altaPaciente : alta ? `Dada de alta el ${formatDate(alta.date)}` : "", 2, deNota("altaPaciente"))}`;
 
   /* Quien firma la historia se elige: en un consultorio con varios doctores no
      siempre atiende el de la ficha, y el nombre del pie tiene que ser el de

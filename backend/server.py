@@ -403,6 +403,7 @@ def migrate_db(conn):
     ensure_column(conn, "clinical_history", "evolucion", "TEXT")
     ensure_column(conn, "clinical_history", "cie10", "TEXT")
     ensure_column(conn, "clinical_history", "hora", "TEXT")
+    ensure_column(conn, "clinical_history", "alta_paciente", "TEXT")
     # La foto de la Ficha de datos va aparte: no viaja en el bootstrap, se pide
     # solo al abrir o imprimir la ficha.
     conn.execute(
@@ -2147,7 +2148,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         1 if data.get("discharged") else 0,
                     ),
                 )
-                for clave, columna in (("evolucion", "evolucion"), ("cie10", "cie10"), ("hora", "hora")):
+                for clave, columna in (("evolucion", "evolucion"), ("cie10", "cie10"), ("hora", "hora"), ("altaPaciente", "alta_paciente")):
                     if clave in data and data[clave] is not None:
                         conn.execute(
                             f"UPDATE clinical_history SET {columna} = ? WHERE id = ?",
