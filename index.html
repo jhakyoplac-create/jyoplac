@@ -1110,9 +1110,10 @@
             <div class="sello-caja">
               <span class="sello-rotulo">Sello del profesional <span class="muted">(opcional, solo para doctores)</span></span>
               <img id="userSealPreview" class="sello-muestra" alt="" hidden />
-              <p class="sello-vacio" id="userSealEmpty">Todav&iacute;a no hay sello. Estampa el sello en un papel blanco, t&oacute;male una foto y s&uacute;bela.</p>
+              <p class="sello-vacio" id="userSealEmpty">Todav&iacute;a no hay sello. Estampa el sello en un papel blanco, t&oacute;male una foto y s&uacute;bela: el fondo se quita solo.</p>
               <div class="sello-acciones">
                 <label class="sello-subir">Subir imagen<input id="userSealFile" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+                <button class="ghost" id="quitarFondoSelloBtn" type="button">Quitar fondo</button>
                 <button class="ghost" id="clearUserSealBtn" type="button">Quitar</button>
               </div>
               <input type="hidden" name="sello" />
@@ -1354,6 +1355,6 @@
     <!-- El ojito para ver lo que se escribe en los campos de contrasena. -->
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
     <script src="hojas-extra.js?v=20261009-hojas-extra"></script>
-    <script src="app.js?v=20261009-hojas-extra"></script>
+    <script src="app.js?v=20261009-sello-sin-fondo"></script>
   </body>
 </html>

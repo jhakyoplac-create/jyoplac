@@ -3009,6 +3009,73 @@ window.addEventListener("scroll", medirCabecera, { passive: true });
    guardarlo se encoge: una foto de camara pesa megas y aqui viaja dentro del
    usuario, asi que la llevamos a 480 px de ancho, que es mas de lo que ocupa
    un sello en la hoja. */
+/* El sello llega como foto: el papel sale gris y en la hoja se ve el
+   rectangulo. Se borra el papel y queda solo la tinta. El papel es casi toda
+   la foto, asi que su brillo es el de la mayoria de los puntos; la tinta, el
+   de los mas oscuros. Lo cercano al papel queda transparente, lo cercano a la
+   tinta se queda, y en medio se desvanece para que los bordes no salgan
+   serruchados. Una imagen que ya trae transparencia no se toca. */
+function quitarFondoDelSello(lienzo) {
+  const pincel = lienzo.getContext("2d");
+  const datos = pincel.getImageData(0, 0, lienzo.width, lienzo.height);
+  const puntos = datos.data;
+  const total = puntos.length / 4;
+  const brillo = new Uint8Array(total);
+  const conteo = new Array(256).fill(0);
+  let transparentes = 0;
+  for (let i = 0; i < total; i += 1) {
+    if (puntos[i * 4 + 3] < 250) transparentes += 1;
+    const valor = Math.round(0.299 * puntos[i * 4] + 0.587 * puntos[i * 4 + 1] + 0.114 * puntos[i * 4 + 2]);
+    brillo[i] = valor;
+    conteo[valor] += 1;
+  }
+  if (transparentes > total * 0.1) return false;
+  const nivel = (parte) => {
+    let suma = 0;
+    for (let valor = 0; valor < 256; valor += 1) {
+      suma += conteo[valor];
+      if (suma >= total * parte) return valor;
+    }
+    return 255;
+  };
+  const papel = nivel(0.6);
+  const tinta = nivel(0.03);
+  const rango = Math.max(40, papel - tinta);
+  for (let i = 0; i < total; i += 1) {
+    const lejos = (papel - brillo[i]) / rango;
+    const opaco = lejos <= 0.2 ? 0 : lejos >= 0.6 ? 255 : Math.round(((lejos - 0.2) / 0.4) * 255);
+    puntos[i * 4 + 3] = Math.min(puntos[i * 4 + 3], opaco);
+  }
+  pincel.putImageData(datos, 0, 0);
+  return true;
+}
+
+/* Para un sello ya guardado con su papel gris: se le quita el fondo en el
+   formulario y queda puesto al guardar el usuario. */
+function quitarFondoAlSelloGuardado() {
+  const form = $("#userForm");
+  const actual = form?.sello?.value || "";
+  if (!actual) {
+    alert("Este usuario todavía no tiene sello.");
+    return;
+  }
+  const imagen = new Image();
+  imagen.onload = () => {
+    const lienzo = document.createElement("canvas");
+    lienzo.width = imagen.width;
+    lienzo.height = imagen.height;
+    lienzo.getContext("2d").drawImage(imagen, 0, 0);
+    if (!quitarFondoDelSello(lienzo)) {
+      alert("Este sello ya no tiene fondo.");
+      return;
+    }
+    mostrarSelloDelUsuario(lienzo.toDataURL("image/png"));
+  };
+  imagen.onerror = () => alert("No se pudo abrir el sello guardado.");
+  imagen.src = actual;
+}
+
+
 function ponerSelloDelUsuario(input) {
   if (!puedeConfigurar()) {
     alert("Solo el administrador o el doctor pueden cambiar el sello.");
@@ -3033,6 +3100,7 @@ function ponerSelloDelUsuario(input) {
       const pincel = lienzo.getContext("2d");
       pincel.imageSmoothingQuality = "high";
       pincel.drawImage(imagen, 0, 0, lienzo.width, lienzo.height);
+      quitarFondoDelSello(lienzo);
       const webp = lienzo.toDataURL("image/webp", 0.85);
       const png = lienzo.toDataURL("image/png");
       mostrarSelloDelUsuario(webp.startsWith("data:image/webp") && webp.length < png.length ? webp : png);
@@ -11704,6 +11772,7 @@ function bindEvents() {
   $("#userSealFile")?.addEventListener("change", (event) => {
     ponerSelloDelUsuario(event.currentTarget);
   });
+  $("#quitarFondoSelloBtn")?.addEventListener("click", quitarFondoAlSelloGuardado);
   $("#clearUserSealBtn")?.addEventListener("click", () => {
     mostrarSelloDelUsuario("");
   });
