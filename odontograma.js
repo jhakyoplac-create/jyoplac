@@ -193,8 +193,11 @@
   var TOOLS = [
     { cat: "sup", k: "caries", n: "Caries", c: "rojo", sig: ["MB", "CE", "CD", "CDP"],
       hint: "Elige hasta dónde llegó y haz clic en la cara: se pinta de rojo y la sigla va al recuadro. MB mancha blanca, CE esmalte, CD dentina, CDP con compromiso pulpar." },
-    { cat: "sup", k: "restauracion", n: "Restauración", c: "azul", sig: ["AM", "R", "IV", "IM", "IE", "C"],
-      hint: "Se pinta de azul la cara y la sigla del material va al recuadro." },
+    /* 5.3.8. "Totalmente pintada de color azul si se encuentra en buen estado,
+       de no ser asi se pinta de color rojo", y la sigla del material igual. */
+    { cat: "sup", k: "restauracion", n: "Restauración", c: "azul", malo: true,
+      sig: ["AM", "R", "IV", "IM", "IE", "C"],
+      hint: "Se pinta la cara y la sigla del material va al recuadro. En azul si está bien y en rojo si está en mal estado." },
     { cat: "sup", k: "rest_temp", n: "Restauración temporal", c: "rojo", borde: true,
       hint: "Solo el contorno de la restauración, en rojo." },
     { cat: "sup", k: "sellante", n: "Sellante", c: "azul", malo: true, sig: ["S"],
@@ -206,13 +209,19 @@
        la ausente pero en rojo, que es como distingue la norma lo que falta
        -azul, ya paso- de lo que hay que hacer -rojo, esta pendiente-. */
     { cat: "pieza", k: "por_extraer", n: "Pieza por extraer", c: "rojo", hint: "Aspa roja sobre la figura de la pieza." },
-    { cat: "pieza", k: "corona_def", n: "Corona definitiva", c: "azul",
+    /* 5.3.28. El cuadrado que bordea la corona y la sigla del tipo van los dos
+       en azul si esta en buen estado y en rojo si esta en mal estado. */
+    { cat: "pieza", k: "corona_def", n: "Corona definitiva", c: "azul", malo: true,
       sig: ["CM", "CF", "CMC", "CV", "CJ"],
-      hint: "Circunferencia azul que encierra la corona. El color del metal va en especificaciones." },
+      hint: "Cuadrado que bordea la corona, y la sigla del tipo en el recuadro. En azul si está bien y en rojo si está en mal estado. El color del metal va en Especificaciones." },
     { cat: "pieza", k: "corona_tmp", n: "Corona temporal", c: "rojo", box: "CT",
       hint: "Cuadrado rojo que encierra la corona, y CT en el recuadro." },
-    { cat: "pieza", k: "pulpar", n: "Tratamiento pulpar", c: "azul", sig: ["TC", "PC", "PP"],
-      hint: "Línea vertical azul sobre la raíz + sigla del tratamiento." },
+    /* 5.3.36. Aqui la norma pide algo distinto del resto: la raya de la raiz
+       es "de color azul" siempre, y el buen o mal estado solo se ve en la
+       sigla del recuadro. Por eso lleva dibujoFijo. */
+    { cat: "pieza", k: "pulpar", n: "Tratamiento pulpar", c: "azul", malo: true, dibujoFijo: true,
+      sig: ["TC", "PC", "PP"],
+      hint: "Línea vertical azul sobre la raíz y la sigla en el recuadro, que va en rojo si el tratamiento está en mal estado." },
     /* La norma dibuja la fractura "sobre la figura de la corona y/o la raiz
        segun sea el caso", asi que la linea no puede ser siempre la misma: se
        elige donde va y hacia que lado cae. */
@@ -547,7 +556,8 @@
       var out = "";
       ks.forEach(function (k) {
         var m = meta(k); if (!m) return;
-        var c = col(colorPuesto(m, d.mal[k])), sig = p[k];
+        // el tratamiento pulpar pinta su raya siempre de azul: ver 5.3.36
+        var c = col(m.dibujoFijo ? m.c : colorPuesto(m, d.mal[k])), sig = p[k];
         function L(dd) {
           return '<path d="' + dd + '" stroke="' + c + '" stroke-width="' + gr + '" fill="none" stroke-linecap="round"/>';
         }
