@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261007-precios-en-configuracion" />
+    <link rel="stylesheet" href="styles.css?v=20261009-hojas-extra" />
     <link rel="stylesheet" href="odontograma.css?v=20261009-defectos-del-esmalte" />
   </head>
   <body class="locked">
@@ -321,6 +321,9 @@
                  distintas, por eso van como pestanas y no como paneles. -->
             <div class="hc-pestanas" id="historySheetTabs">
               <button class="hc-pestana" type="button" data-hoja="historial">Historial</button>
+              <button class="hc-pestana" type="button" data-hoja="ficha">Ficha de datos</button>
+              <button class="hc-pestana" type="button" data-hoja="estomatologica">Ficha estomatol&oacute;gica</button>
+              <button class="hc-pestana" type="button" data-hoja="evolucion">Hoja de evoluci&oacute;n</button>
               <button class="hc-pestana" type="button" data-hoja="consentimiento">Consentimiento informado</button>
               <button class="hc-pestana" type="button" data-hoja="historia">Historia cl&iacute;nica</button>
               <button class="hc-pestana" type="button" data-hoja="odontograma">Odontograma</button>
@@ -1063,6 +1066,7 @@
           <div class="settings-grid">
             <label>Nombre<input name="clinicName" /></label>
             <label>Direcci&oacute;n<input name="issuerAddress" placeholder="Jr. Ejemplo 123" /></label>
+            <label>RUC<input name="issuerRuc" inputmode="numeric" maxlength="11" pattern="[0-9]{11}" title="El RUC tiene 11 dígitos" placeholder="Sale en la ficha de datos" /></label>
             <label>Ciudad<input name="issuerDistrict" placeholder="Sale en el consentimiento: &laquo;En Moyobamba&raquo;" /></label>
             <label>Inicio<input name="start" type="time" /></label>
             <label>Fin<input name="end" type="time" /></label>
@@ -1349,6 +1353,7 @@
     <script src="odontograma.js?v=20261009-mal-estado-completo"></script>
     <!-- El ojito para ver lo que se escribe en los campos de contrasena. -->
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
-    <script src="app.js?v=20261009-historia-no-toca-citas"></script>
+    <script src="hojas-extra.js?v=20261009-hojas-extra"></script>
+    <script src="app.js?v=20261009-hojas-extra"></script>
   </body>
 </html>

@@ -5942,3 +5942,698 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ===== Hojas extra (las mismas del dental de EmpresaFacil, sin la constancia de pago) ===== */
+/* Ficha de datos (hojas extra de un consultorio). Un solo color, el del
+   consultorio, para titulos y lineas; el texto en negro. Lo escrito por el
+   sistema va en negrita sobre su raya; lo vacio queda con la raya para
+   llenarlo a mano. */
+.hc-hoja.fd {
+  --fd-color: #0b6e76;
+  display: block;
+  color: #1d2327;
+  font-size: 12.5px;
+  line-height: 1.35;
+  max-width: 820px;
+}
+.fd-cabecera {
+  display: grid;
+  /* el titulo al centro de la hoja: las columnas de los lados miden lo mismo */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--fd-color);
+}
+.fd-membrete {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fd-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+.fd-clinica {
+  display: grid;
+  gap: 1px;
+}
+.fd-clinica strong {
+  font-size: 15px;
+  color: var(--fd-color);
+}
+.fd-clinica span {
+  font-size: 11px;
+  color: #4b555c;
+}
+.fd-titulo {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-align: center;
+  color: #1d2327;
+}
+.fd-identidad {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  /* el numero y la fecha a media altura de la foto, no pegados abajo */
+  align-items: center;
+  gap: 18px;
+  margin: 12px 0 8px;
+}
+.fd-foto-columna {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+.fd-foto {
+  width: 30mm;
+  height: 40mm;
+  border: 1px solid var(--fd-color);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #fff;
+}
+.fd-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fd-foto span {
+  font-size: 11px;
+  color: #8b949b;
+}
+.fd-foto-botones {
+  display: flex;
+  gap: 4px;
+}
+.fd-foto-subir {
+  cursor: pointer;
+}
+.fd-numeros {
+  display: grid;
+  gap: 8px;
+  padding-left: 28px;
+  margin-top: -24px;
+}
+.fd-dato {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: end;
+  gap: 6px;
+  margin: 0;
+  min-height: 20px;
+}
+.fd-dato > span {
+  color: #4b555c;
+  white-space: nowrap;
+}
+.fd-dato > b {
+  font-weight: 700;
+  border-bottom: 1px dotted #8b949b;
+  padding-bottom: 1px;
+  min-height: 16px;
+  overflow-wrap: anywhere;
+}
+.fd-raya {
+  display: block;
+  height: 16px;
+  border-bottom: 1px dotted #8b949b;
+}
+.fd-dato.fd-grande > b {
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  border-bottom: 0;
+}
+.fd-dato.fd-pregunta {
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+.fd-dato.fd-pregunta > span {
+  white-space: normal;
+}
+.fd-bloque {
+  display: grid;
+  gap: 4px;
+}
+.fd-dos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 18px;
+}
+.fd-seccion {
+  margin: 10px 0 5px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--fd-color);
+  border-bottom: 1px solid var(--fd-color);
+  padding-bottom: 2px;
+}
+.fd-seccion.fd-centro {
+  text-align: center;
+  border-bottom: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.fd-subseccion {
+  margin: 8px 0 4px;
+  font-size: 12.5px;
+  font-style: italic;
+  text-decoration: underline;
+  color: #1d2327;
+}
+.fd-sino {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  min-height: 20px;
+}
+.fd-sino > span:first-child {
+  color: #4b555c;
+}
+.fd-sino-opciones {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.fd-casilla {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #1d2327;
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+.fd-pie {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 26px;
+}
+.fd-firma {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 230px;
+}
+.fd-firma i {
+  display: block;
+  width: 100%;
+  border-top: 1px solid #1d2327;
+}
+.fd-firma span {
+  font-size: 11px;
+}
+.fd-acciones {
+  display: flex;
+  justify-content: flex-end;
+  margin: 18px 0 0;
+}
+@media screen and (max-width: 640px) {
+  .fd-dos {
+    grid-template-columns: 1fr;
+  }
+  .fd-cabecera {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Hoja de evolucion (hojas extra de un consultorio): la cabecera y el color de
+   la ficha de datos, y una tabla con filas altas para escribir a mano. */
+.ev-paciente {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 4px 18px;
+  margin: 12px 0 10px;
+}
+.ev-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+.ev-c-fecha { width: 15%; }
+.ev-c-detalle { width: 41%; }
+.ev-c-cie { width: 9%; }
+.ev-c-asist { width: 10%; }
+.ev-c-firma { width: 18%; }
+.ev-c-vb { width: 7%; }
+.ev-tabla th {
+  background: var(--fd-color);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 6px 5px;
+  border: 1px solid var(--fd-color);
+  text-align: center;
+  vertical-align: middle;
+}
+.ev-tabla th small {
+  font-weight: 400;
+  text-transform: none;
+}
+.ev-tabla td {
+  border: 1px solid #9fb0b6;
+  padding: 5px 6px;
+  vertical-align: top;
+  height: 34px;
+  overflow-wrap: anywhere;
+}
+.ev-fecha strong {
+  display: block;
+}
+.ev-fecha span {
+  display: block;
+  color: #4b555c;
+  font-size: 11px;
+}
+.ev-detalle > div,
+.ev-cie > div {
+  white-space: pre-wrap;
+  min-height: 22px;
+}
+/* en pantalla, la celda que se puede escribir se nota al pasar por encima */
+.ev-tabla .hcf-escribible {
+  border-radius: 4px;
+  outline: none;
+  cursor: text;
+}
+.ev-tabla .hcf-escribible:hover {
+  background: #f1f7f8;
+}
+.ev-tabla .hcf-escribible:focus {
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--fd-color);
+}
+.ev-cie {
+  text-align: center;
+  font-weight: 700;
+}
+.ev-cie > div {
+  min-height: 22px;
+}
+.ev-firma {
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.ev-firma img {
+  display: block;
+  max-width: 100%;
+  max-height: 46px;
+  margin: 0 auto 2px;
+  object-fit: contain;
+}
+.ev-firma span {
+  display: block;
+}
+.ev-vacia td {
+  height: 38px;
+}
+@media screen and (max-width: 640px) {
+  .ev-paciente {
+    grid-template-columns: 1fr;
+  }
+}
+.ev-tabla .hcf-caja {
+  border-bottom: 0;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* Presupuesto impreso (hojas extra de un consultorio): el numero al centro,
+   los datos en dos columnas, el odontograma y la tabla de montos con las
+   cifras a la derecha y dos decimales. */
+.pr-numero {
+  font-size: 19px;
+  padding: 5px 14px;
+  border: 1.5px solid var(--fd-color);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.pr-datos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 18px;
+  margin: 9px 0 5px;
+}
+/* el odontograma ocupaba un tercio de la hoja el solo. Mas chico, sin bajar
+   tanto que no se distingan las siglas. */
+.pr-odontograma {
+  margin: 0 auto 5px;
+  max-width: 70%;
+}
+.pr-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+.pr-tabla th {
+  background: var(--fd-color);
+  color: #fff;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 4px 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+.pr-tabla th:nth-child(1),
+.pr-tabla th:nth-child(2) {
+  text-align: center;
+}
+.pr-tabla th.pr-izq {
+  text-align: left;
+}
+/* El tamano va en la celda y no en la tabla porque la hoja de estilos trae un
+   "th, td { font-size: 13px }" suelto, y a una celda le gana cualquier regla
+   suya antes que lo heredado de la tabla: el 11.5px que decia .pr-tabla nunca
+   llego a aplicarse y la tabla salia impresa en casi 10 puntos. */
+.pr-tabla td {
+  font-size: 11.5px;
+  padding: 3px 6px;
+  border-bottom: 1px solid #d5dee1;
+  vertical-align: top;
+  /* el interlineado del resto de la hoja es 1.35; aqui cada decima se
+     multiplica por el numero de tratamientos */
+  line-height: 1.25;
+}
+.pr-centro {
+  text-align: center;
+  white-space: nowrap;
+}
+.pr-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pr-cantidad {
+  color: #4b555c;
+  font-size: 10.5px;
+}
+.pr-tabla tfoot td {
+  border-bottom: 0;
+}
+.pr-subtotal td {
+  border-top: 2px solid var(--fd-color);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.pr-subtotal td:first-child {
+  text-align: right;
+}
+.pr-total td {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-align: right;
+  padding-top: 6px;
+}
+.pr-total td:last-child {
+  color: var(--fd-color);
+}
+.pr-nota-descuento {
+  margin: 4px 0 0;
+  text-align: right;
+  font-size: 11px;
+  color: #4b555c;
+}
+.pr-firmas {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 40px;
+  margin-top: 26px;
+}
+.pr-firmas .fd-firma small {
+  font-size: 10px;
+  color: #4b555c;
+}
+.pr-sello {
+  max-height: 60px;
+  max-width: 150px;
+  object-fit: contain;
+}
+.pr-notas {
+  margin-top: 11px;
+  font-size: 10.5px;
+  color: #4b555c;
+}
+.pr-notas p,
+.pr-notas ul {
+  margin: 0 0 3px;
+}
+.pr-notas ul {
+  padding-left: 18px;
+}
+.pr-telefono {
+  margin-top: 10px !important;
+  text-align: center;
+  font-size: 12px;
+  color: #1d2327;
+}
+
+/* Ficha estomatologica (hojas extra de un consultorio): el examen de ingreso
+   en una sola hoja, en cuatro columnas cortas, el odontograma con sus notas al
+   lado y las casillas de examenes y diagnosticos. */
+.es-titulo {
+  display: grid;
+  font-size: 17px;
+  line-height: 1.15;
+}
+.es-titulo small {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: #4b555c;
+}
+.es-cabeza {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 4px 18px;
+  margin: 10px 0 2px;
+}
+.es-columnas {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0 14px;
+}
+.es-columnas .fd-seccion {
+  font-size: 11px;
+}
+.es-dato {
+  font-size: 11.5px;
+}
+.es-dato > b {
+  font-weight: 700;
+  min-height: 15px;
+  border-bottom: 1px dotted #8b949b;
+}
+/* el odontograma en algo mas de la mitad, y el resto para escribir las
+   especificaciones y observaciones con renglones de sobra */
+.es-odontograma {
+  display: grid;
+  /* en blanco lleva tambien las piezas de leche: a media hoja, para que la
+     ficha entera siga entrando en una A4 */
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  /* las notas toman el alto del odontograma, mitad y mitad */
+  align-items: stretch;
+}
+/* el odontograma, ya achicado a su tope de alto, centrado en su mitad */
+.es-grafico {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.es-sin-odontograma {
+  margin: 6px 0;
+}
+.es-notas {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 10px;
+}
+.es-notas .fd-dato {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.es-notas .fd-dato > b {
+  flex: 1;
+  min-height: 84px;
+  border-bottom: 0;
+  font-weight: 400;
+  line-height: 21px;
+  white-space: pre-wrap;
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 20px, #aab6ba 20px, #aab6ba 21px);
+}
+.es-auxiliares {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px 10px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.es-auxiliar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+  color: #1d2327;
+}
+.es-auxiliar .fd-casilla {
+  margin-right: 0;
+}
+.es-clic {
+  cursor: pointer;
+}
+.es-clic:hover {
+  background: #eef6f7;
+}
+.es-diagnosticos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 22px;
+}
+.es-cie {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 1px 0;
+  font-size: 11px;
+  border-bottom: 1px solid #edf1f2;
+}
+.es-cie-codigo {
+  font-weight: 700;
+  color: var(--fd-color);
+  font-variant-numeric: tabular-nums;
+}
+.es-cie .fd-casilla {
+  margin-right: 0;
+}
+.es-pie {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: end;
+  margin-top: 18px;
+}
+.es-paciente {
+  display: grid;
+  gap: 4px;
+}
+.fd-seccion small {
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+@media screen and (max-width: 760px) {
+  .es-columnas,
+  .es-cabeza,
+  .es-odontograma,
+  .es-diagnosticos,
+  .es-pie {
+    grid-template-columns: 1fr;
+  }
+  .es-auxiliares {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Hoja de evolucion en pantalla: la fila donde se escribe la atencion de hoy
+   se distingue con un fondo suave; el selector del doctor y la x de borrar no
+   salen en el papel porque alli la hoja no es editable. */
+/* en pantalla la hoja de evolucion usa todo el ancho: la columna del
+   procedimiento crece y se escribe con holgura. Al imprimir vuelve a la A4. */
+.hc-hoja.fd.ev {
+  max-width: none;
+}
+.ev-nueva input[type="date"] {
+  width: 100%;
+  padding: 3px 4px;
+  font-size: 11.5px;
+}
+.ev-nueva [data-ev-nueva="texto"]:empty::before {
+  content: attr(data-pista);
+  color: #8b949b;
+  font-style: italic;
+}
+.ev-doctor {
+  width: 100%;
+  padding: 2px 3px;
+  font-size: 10.5px;
+}
+.ev-borrar {
+  border: 0;
+  background: transparent;
+  color: #b42318;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* en pantalla las demas columnas quedan fijas y lo que sobra va al
+   procedimiento; al imprimir manda el reparto en porcentajes de la A4 */
+@media screen {
+  .hc-hoja.fd.ev .ev-c-fecha { width: 130px; }
+  .hc-hoja.fd.ev .ev-c-detalle { width: auto; }
+  .hc-hoja.fd.ev .ev-c-cie { width: 80px; }
+  .hc-hoja.fd.ev .ev-c-asist { width: 90px; }
+  .hc-hoja.fd.ev .ev-c-firma { width: 180px; }
+  .hc-hoja.fd.ev .ev-c-vb { width: 50px; }
+}
+
+/* Ficha estomatologica: la casilla del formato a la izquierda del titulo, y
+   el odontograma esquematico del Colegio en linea, en el color del
+   consultorio, como el de las hojas impresas. */
+.es-titulo-odontograma {
+  position: relative;
+}
+.es-formato {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #4b555c;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.es-esquema {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.esq-odontograma {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  /* la imagen es casi cuadrada: con este tope la ficha sigue en una A4 */
+  max-height: 380px;
+}
+/* el esquematico es mas bajo: se le da algo mas de ancho para escribir encima */
+.es-odontograma.es-con-esquema {
+  grid-template-columns: 3fr 2fr;
+}
+.es-con-esquema .esq-odontograma {
+  max-height: 380px;
+}

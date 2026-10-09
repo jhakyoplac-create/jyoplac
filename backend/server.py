@@ -394,6 +394,26 @@ def migrate_db(conn):
     # confirmar no es lo mismo que haber venido, y una cita confirmada sigue
     # RESERVADA hasta que se atiende.
     ensure_column(conn, "appointments", "confirmada", "INTEGER NOT NULL DEFAULT 0")
+    # Las hojas extra del paciente (las pidio Smart Medic en EmpresaFacil y se
+    # pasaron a CM): la Hoja de evolucion escrita a mano y los datos de la
+    # Ficha estomatologica van juntos en JSON en el paciente. La nota guarda su
+    # hora y lo que se corrigio sobre la hoja de evolucion, sin tocar el motivo
+    # ni el procedimiento originales.
+    ensure_column(conn, "patients", "hojas", "TEXT")
+    ensure_column(conn, "clinical_history", "evolucion", "TEXT")
+    ensure_column(conn, "clinical_history", "cie10", "TEXT")
+    ensure_column(conn, "clinical_history", "hora", "TEXT")
+    # La foto de la Ficha de datos va aparte: no viaja en el bootstrap, se pide
+    # solo al abrir o imprimir la ficha.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS patient_photos (
+          patient_id TEXT PRIMARY KEY,
+          foto TEXT NOT NULL,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS electronic_receipts (
@@ -1425,6 +1445,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"error": "El RUC debe tener 11 dígitos."}, 400)
             payload, status = consultar_documento("ruc", number)
             return send_json(self, payload, status)
+        if parsed.path == "/api/patient-photo":
+            patient_id = (params.get("id") or [""])[0]
+            with db() as conn:
+                row = conn.execute("SELECT foto FROM patient_photos WHERE patient_id = ?", (patient_id,)).fetchone()
+            return send_json(self, {"foto": row["foto"] if row else ""})
         if parsed.path == "/api/bootstrap":
             return send_json(self, {
                 "user": user,
@@ -1821,6 +1846,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         str(data.get("guardianAddress", "") or "").strip(),
                     ),
                 )
+                if isinstance(data.get("hojas"), dict):
+                    conn.execute(
+                        "UPDATE patients SET hojas = ? WHERE id = ?",
+                        (json.dumps(data["hojas"], ensure_ascii=False), item_id),
+                    )
                 action = "PATIENT_CREATED" if not existing_patient else "PATIENT_UPDATED"
                 label = "Ingreso paciente" if not existing_patient else "Edito paciente"
                 add_audit_event(conn, user, action, f"{label}: {patient_values['name']} ({patient_values['dni']})", item_id)
@@ -1983,6 +2013,27 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     add_audit_event(conn, user, action, detail, data["patientId"])
             return send_json(self, {"ok": True, "id": item_id})
 
+        if parsed.path == "/api/patient-photo":
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+                return
+            data = read_json(self)
+            patient_id = str(data.get("id") or "").strip()
+            if not patient_id:
+                return send_json(self, {"error": "Falta el paciente."}, 400)
+            with db() as conn:
+                if data.get("delete"):
+                    conn.execute("DELETE FROM patient_photos WHERE patient_id = ?", (patient_id,))
+                else:
+                    foto = str(data.get("foto") or "")
+                    if not foto.startswith("data:image/") or len(foto) > 200000:
+                        return send_json(self, {"error": "La foto no es valida o pesa demasiado."}, 400)
+                    conn.execute("DELETE FROM patient_photos WHERE patient_id = ?", (patient_id,))
+                    conn.execute(
+                        "INSERT INTO patient_photos (patient_id, foto, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+                        (patient_id, foto),
+                    )
+            return send_json(self, {"ok": True})
+
         if parsed.path == "/api/clinical-history":
             if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
                 return
@@ -2096,6 +2147,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         1 if data.get("discharged") else 0,
                     ),
                 )
+                for clave, columna in (("evolucion", "evolucion"), ("cie10", "cie10"), ("hora", "hora")):
+                    if clave in data and data[clave] is not None:
+                        conn.execute(
+                            f"UPDATE clinical_history SET {columna} = ? WHERE id = ?",
+                            (str(data[clave] or ""), item_id),
+                        )
                 if data.get("attended", True):
                     conn.execute(
                         """
@@ -2977,7 +3034,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 values["clinicName"] = data["clinicName"]
             # La direccion y la ciudad del consultorio: salen en el membrete de
             # las hojas que se entregan y en el cierre del consentimiento.
-            for key in ["issuerAddress", "issuerDistrict", "start", "end", "interval", "inactiveDays", "enableAgendaPayments", "whatsapp", "doctors", "units"]:
+            for key in ["issuerRuc", "fichaOdontogramaColegio", "issuerAddress", "issuerDistrict", "start", "end", "interval", "inactiveDays", "enableAgendaPayments", "whatsapp", "doctors", "units"]:
                 if key in data:
                     values[key] = data[key]
             if "services" in data:

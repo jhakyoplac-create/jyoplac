@@ -419,8 +419,27 @@ function parseListaDePrecios(value, fallback) {
 }
 
 
+/* Lo que las hojas extra guardan en el paciente: la Hoja de evolucion escrita
+   a mano y los datos de la Ficha estomatologica. En el servidor van juntos, en
+   JSON, en la columna hojas. */
+const CAMPOS_DE_LAS_HOJAS = [
+  "evolucion", "estTalla", "estPeso", "estImpresion", "estCabeza", "estCuello", "estMejillas",
+  "estLengua", "estPisoDeBoca", "estPaladar", "estEncias", "estVestibulo",
+  "estEspecificaciones", "estObservaciones", "estInforme", "estAuxiliares", "estCie"
+];
+
+function hojasDelPaciente(valor) {
+  let hojas = valor;
+  if (typeof valor === "string") {
+    try { hojas = JSON.parse(valor); } catch { hojas = null; }
+  }
+  if (!hojas || typeof hojas !== "object") return {};
+  return Object.fromEntries(CAMPOS_DE_LAS_HOJAS.filter((campo) => hojas[campo] !== undefined).map((campo) => [campo, hojas[campo]]));
+}
+
 function mapApiPatient(row) {
   return {
+    ...hojasDelPaciente(row.hojas),
     id: row.id,
     dni: row.dni,
     name: row.name,
@@ -561,6 +580,10 @@ function mapApiClinicalHistory(row) {
     firmadaPor: row.firmada_por || row.firmadaPor || "",
     firmadaEl: row.firmada_el || row.firmadaEl || "",
     discharged: Boolean(row.discharged),
+    hora: row.hora || "",
+    // solo si se corrigio sobre la hoja de evolucion: si no, sale el procedimiento de siempre
+    ...(row.evolucion != null ? { evolucion: row.evolucion } : {}),
+    ...(row.cie10 != null ? { cie10: row.cie10 } : {}),
   };
 }
 
@@ -823,6 +846,9 @@ function applyApiBootstrap(payload) {
       state.config.enableAgendaPayments = String(payload.config.enableAgendaPayments).toLowerCase() !== "false";
     }
     state.config.whatsapp = payload.config.whatsapp || state.config.whatsapp;
+    if (payload.config.fichaOdontogramaColegio !== undefined) {
+      state.config.fichaOdontogramaColegio = String(payload.config.fichaOdontogramaColegio).toLowerCase() === "true";
+    }
     ["issuerRuc", "issuerLegalName", "issuerTradeName", "issuerAddress", "issuerDistrict", "issuerProvince", "issuerDepartment", "receiptSeriesBoleta", "receiptSeriesFactura", "receiptStartBoleta", "receiptStartFactura"].forEach((key) => {
       if (payload.config[key] !== undefined) state.config[key] = payload.config[key];
     });
@@ -1175,6 +1201,7 @@ async function savePatientApi(patient) {
     guardianRelation: patient.guardianRelation || "",
     guardianPhone: patient.guardianPhone || "",
     guardianAddress: patient.guardianAddress || "",
+    hojas: Object.fromEntries(CAMPOS_DE_LAS_HOJAS.filter((campo) => patient[campo] !== undefined).map((campo) => [campo, patient[campo]])),
   };
   const result = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify(payload) });
   if (result.id) patient.id = result.id;
@@ -4203,15 +4230,34 @@ let lienzoDeLaHoja = null;
 /* El dibujo de una ficha cualquiera, no solo la del paciente: el presupuesto
    lo necesita para poner la boca al lado de los precios. Devuelve el html del
    arco, los hallazgos y las especificaciones, igual que la hoja. */
-function dibujoDelOdontograma(ficha) {
+function dibujoDelOdontograma(ficha, { completo = false, enBlanco = false } = {}) {
   if (typeof Odontograma === "undefined" || !ficha) return null;
   const compacta = fichaCompacta(ficha);
-  if (!Object.keys(compacta.dientes).length && !compacta.spans.length && !compacta.esp && !compacta.nino) return null;
+  // enBlanco: se dibuja aunque no haya nada marcado (la hoja para llenar a mano)
+  if (!enBlanco && !Object.keys(compacta.dientes).length && !compacta.spans.length && !compacta.esp && !compacta.nino) return null;
   prepararVistaDeLaHoja();
   vistaDeLaHoja.cargar(ficha);
   const arco = lienzoDeLaHoja.querySelector(".odo-arco");
+  /* completo: las permanentes arriba y abajo y las de leche en medio, como el
+     formato del Colegio. Se dibuja una vez con cada denticion y se juntan. */
+  let html = arco ? arco.innerHTML : "";
+  if (completo && arco) {
+    vistaDeLaHoja.cargar({ ...ficha, nino: false });
+    const permanente = arco.querySelector(".odo-permanente")?.cloneNode(true);
+    vistaDeLaHoja.cargar({ ...ficha, nino: true });
+    const leche = arco.querySelector(".odo-leche")?.cloneNode(true);
+    if (permanente && leche) {
+      permanente.hidden = false;
+      leche.hidden = false;
+      const abajo = permanente.querySelector("#odo-down-wrap");
+      if (abajo) permanente.insertBefore(leche, abajo);
+      else permanente.appendChild(leche);
+      html = permanente.outerHTML;
+    }
+    vistaDeLaHoja.cargar(ficha);
+  }
   return {
-    html: arco ? arco.innerHTML : "",
+    html,
     hallazgos: (Odontograma.PIEZAS || [])
       .map((pieza) => ({ pieza, texto: vistaDeLaHoja.resumenPieza(pieza) }))
       .filter((item) => item.texto),
@@ -4280,7 +4326,12 @@ function ajustarGraficos(raiz) {
     if (!lienzo || !caja.clientWidth) return;
     lienzo.style.zoom = "1";
     const ancho = lienzo.scrollWidth;
-    if (ancho) lienzo.style.zoom = String(Math.min(1, caja.clientWidth / ancho));
+    // data-alto-max: ademas del ancho, el dibujo no pasa de ese alto (la ficha estomatologica)
+    const altoMax = Number(caja.dataset.altoMax || 0);
+    const alto = lienzo.scrollHeight;
+    let zoom = ancho ? Math.min(1, caja.clientWidth / ancho) : 1;
+    if (altoMax && alto) zoom = Math.min(zoom, altoMax / alto);
+    if (ancho) lienzo.style.zoom = String(zoom);
   });
 }
 
@@ -4376,6 +4427,7 @@ function guardarCampoDeLaHoja(campo) {
       agreedPrice: 0,
       creditPending: false,
       creditAmount: 0,
+      hora: new Date().toTimeString().slice(0, 5),
       [nombre]: valor
     };
     state.clinicalHistory.push(nueva);
@@ -4690,8 +4742,11 @@ function renderClinicalHistory() {
   const copias = document.querySelector(".odontogram-copies-panel");
   if (copias) copias.hidden = hoja !== "odontograma";
   caja.innerHTML = contenidoDeLaPestana(patientId);
+  if (hoja === "ficha") window.HojasExtra.traerFotoDeLaFicha(patientId, renderClinicalHistory);
   if (hoja === "plan") alinearBotonDePrecios(caja);
   ajustarGraficos(caja);
+  // otra pasada cuando el navegador ya repartio las columnas (la ficha estomatologica)
+  requestAnimationFrame(() => ajustarGraficos(caja));
 }
 
 
@@ -4701,6 +4756,9 @@ function contenidoDeLaPestana(patientId) {
   if (hoja === "historial") return historialDePagos(patientId);
   if (hoja === "odontograma") return hojaDelOdontograma(patientId);
   if (hoja === "consentimiento") return hojaDelConsentimiento(patientId);
+  if (hoja === "ficha") return window.HojasExtra.fichaDeDatos(patientId);
+  if (hoja === "evolucion") return window.HojasExtra.hojaDeEvolucion(patientId);
+  if (hoja === "estomatologica") return window.HojasExtra.fichaEstomatologica(patientId);
   return hojaDeLaHistoria(patientId, { pantalla: true });
 }
 
@@ -6367,6 +6425,7 @@ function hojaDelPlan(patientId) {
                 ? `<span class="status">Aceptada el ${formatDate(item.aceptadaEl)}</span>`
                 : puedeEditar ? `<button class="small-btn proforma-aceptar" type="button" data-aceptar-proforma="${item.id}">Aceptar</button>` : ""}
               <button class="small-btn" type="button" data-imprimir-proforma="${item.id}">Imprimir</button>
+              <button class="small-btn" type="button" data-imprimir-presupuesto="${item.id}">Imprimir presupuesto</button>
               ${puedeEditar && !item.aceptadaEl ? `<button class="small-btn" type="button" data-borrar-proforma="${item.id}">Borrar</button>` : ""}
             </div>
             <details class="proforma-ver"><summary>Ver la hoja</summary>${hojaDeLaProforma(item)}</details>
@@ -8268,6 +8327,7 @@ function renderConfig() {
     /* La direccion y la ciudad salen en el membrete de la historia, del
        consentimiento y de la proforma, y en el "En Moyobamba" del cierre. */
     if (form.issuerAddress) form.issuerAddress.value = state.config.issuerAddress || "";
+    if (form.issuerRuc) form.issuerRuc.value = state.config.issuerRuc || "";
     if (form.issuerDistrict) form.issuerDistrict.value = state.config.issuerDistrict || "";
     form.start.value = state.config.start;
     form.end.value = state.config.end;
@@ -9091,7 +9151,106 @@ function download(filename, content, type) {
   URL.revokeObjectURL(url);
 }
 
+/* Las hojas extra (hojas-extra.js): Ficha de datos con foto, Hoja de
+   evolucion, Ficha estomatologica y el presupuesto impreso. */
+function bindHojasExtra() {
+  const H = window.HojasExtra;
+  const linea = $("#historyTimeline");
+  if (!linea || !H) return;
+  linea.addEventListener("click", async (event) => {
+    const imprimir = event.target.closest("[data-imprimir-ficha]");
+    if (imprimir) {
+      H.imprimirFichaDeDatos(imprimir.dataset.imprimirFicha);
+      return;
+    }
+    const borrarFila = event.target.closest("[data-ev-borrar]");
+    if (borrarFila) {
+      if (H.borrarFilaDeEvolucion(borrarFila.dataset.paciente, borrarFila.dataset.evBorrar)) renderClinicalHistory();
+      return;
+    }
+    const imprimirEstomatologica = event.target.closest("[data-imprimir-estomatologica]");
+    if (imprimirEstomatologica) {
+      H.imprimirFichaEstomatologica(imprimirEstomatologica.dataset.imprimirEstomatologica);
+      return;
+    }
+    // las casillas de la ficha estomatologica: un clic marca, otro desmarca
+    const marca = event.target.closest("[data-est-marca]");
+    if (marca) {
+      const paciente = H.alternarMarcaEstomatologica(marca.dataset.paciente, marca.dataset.estMarca, marca.dataset.estValor);
+      if (paciente) {
+        savePatientApi(paciente).catch((error) => alert(error.message));
+        if (!API_ENABLED) saveState();
+        renderClinicalHistory();
+      }
+      return;
+    }
+    const imprimirEvolucion = event.target.closest("[data-imprimir-evolucion]");
+    if (imprimirEvolucion) {
+      H.imprimirHojaDeEvolucion(imprimirEvolucion.dataset.imprimirEvolucion);
+      return;
+    }
+    const quitar = event.target.closest("[data-quitar-foto]");
+    if (!quitar) return;
+    try {
+      await H.quitarFoto(quitar.dataset.quitarFoto);
+    } catch (error) {
+      alert(error.message);
+    }
+    renderClinicalHistory();
+  });
+  /* Hoja de evolucion: lo escrito se guarda al salir de la celda. La fila nueva
+     espera a que se salga de toda la fila, para poder pasar del procedimiento
+     al CIE-10 o al doctor sin que se guarde a medias. */
+  linea.addEventListener("focusout", (event) => {
+    const nueva = event.target.closest("tr.ev-nueva");
+    if (nueva) {
+      if (event.relatedTarget && nueva.contains(event.relatedTarget)) return;
+      const texto = nueva.querySelector('[data-ev-nueva="texto"]');
+      if (texto && H.guardarCeldaDeEvolucion(texto)) renderClinicalHistory();
+      return;
+    }
+    const celda = event.target.closest("[data-ev-fila][contenteditable]");
+    if (celda && H.guardarCeldaDeEvolucion(celda)) renderClinicalHistory();
+  });
+  linea.addEventListener("keydown", (event) => {
+    const celda = event.target.closest("[data-ev-nueva][contenteditable], [data-ev-fila][contenteditable]");
+    if (!celda || event.key !== "Enter" || celda.classList.contains("hcf-caja")) return;
+    event.preventDefault();
+    celda.blur();
+  });
+  linea.addEventListener("change", async (event) => {
+    // ficha estomatologica: el odontograma de la casa o el del Colegio
+    const casilla = event.target.closest("[data-odontograma-colegio]");
+    if (casilla) {
+      if (H.cambiarFormatoDelOdontograma(casilla.checked)) {
+        if (puedeConfigurar()) saveConfigApi({ fichaOdontogramaColegio: state.config.fichaOdontogramaColegio }).catch((error) => alert(error.message));
+        renderClinicalHistory();
+      }
+      return;
+    }
+    const lista = event.target.closest("select.ev-doctor");
+    if (lista) {
+      if (H.cambiarDoctorDeEvolucion(lista)) renderClinicalHistory();
+      return;
+    }
+    const campo = event.target.closest("[data-poner-foto]");
+    if (!campo || !campo.files?.[0]) return;
+    try {
+      await H.ponerFoto(campo.dataset.ponerFoto, campo.files[0]);
+    } catch (error) {
+      alert(error.message);
+    }
+    renderClinicalHistory();
+  });
+  // el presupuesto impreso sale de cualquier lista de proformas
+  document.addEventListener("click", (event) => {
+    const boton = event.target.closest("[data-imprimir-presupuesto]");
+    if (boton) H.imprimirPresupuesto(boton.dataset.imprimirPresupuesto);
+  });
+}
+
 function bindEvents() {
+  bindHojasExtra();
   const on = (selector, eventName, handler) => {
     const element = $(selector);
     if (element) element.addEventListener(eventName, handler);
@@ -10260,6 +10419,7 @@ function bindEvents() {
       discharged: Boolean(anterior?.discharged),
       firma: anterior?.firma || "",
       firmadaPor: anterior?.firmadaPor || "",
+      hora: anterior?.hora || new Date().toTimeString().slice(0, 5),
       firmadaEl: anterior?.firmadaEl || "",
       professional: anterior?.professional || "",
       plan: anterior?.plan || "",
@@ -11151,6 +11311,8 @@ function bindEvents() {
       ...state.config,
       clinicName: data.clinicName,
       issuerAddress: String(data.issuerAddress || "").trim(),
+      // sale en la Ficha de datos; vacio o mal escrito, se queda el de antes
+      issuerRuc: /^\d{11}$/.test(String(data.issuerRuc || "").trim()) ? String(data.issuerRuc).trim() : state.config.issuerRuc,
       issuerDistrict: String(data.issuerDistrict || "").trim(),
       start: data.start,
       end: data.end,
@@ -11166,6 +11328,7 @@ function bindEvents() {
       await saveConfigApi({
         clinicName: state.config.clinicName,
         issuerAddress: state.config.issuerAddress,
+        issuerRuc: state.config.issuerRuc,
         issuerDistrict: state.config.issuerDistrict,
         start: state.config.start,
         end: state.config.end,
