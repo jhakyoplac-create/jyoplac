@@ -301,7 +301,7 @@
   /* ==================== FICHA ==================== */
   function fichaVacia() {
     var d = {};
-    PIEZAS.forEach(function (t) { d[t] = { sup: {}, pieza: {}, box: [], num: null, nota: "" }; });
+    PIEZAS.forEach(function (t) { d[t] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" }; });
     return { dientes: d, spans: [], arcada: { up: null, down: null }, nino: false, esp: "", obs: "" };
   }
   /* Lo que significa cada sigla, con el texto de la norma. Los botones solo
@@ -352,6 +352,11 @@
       base.dientes[t] = {
         sup: o.sup || {}, pieza: o.pieza || {},
         box: Array.isArray(o.box) ? o.box : [],
+        /* Que hallazgos de esta pieza y que caras estan en mal estado. Lo
+           anotado antes de guardar esto no trae el dato y se queda como
+           esta -en buen estado- hasta que el odontologo lo actualice: el
+           rojo nunca llego a guardarse y no hay de donde sacarlo. */
+        mal: o.mal || {}, malCara: o.malCara || {},
         num: o.num || null, nota: o.nota || ""
       };
       /* Lo marcado como "Migración" antes de seguir la norma no se pierde: pasa
@@ -375,7 +380,12 @@
       }
     });
     base.spans = Array.isArray(f.spans) ? f.spans.filter(function (s) { return meta(s.k); }) : [];
-    base.arcada = { up: (f.arcada || {}).up || null, down: (f.arcada || {}).down || null };
+    base.arcada = {
+      up: (f.arcada || {}).up || null, down: (f.arcada || {}).down || null,
+      // el maxilar tambien puede estar en mal estado, y va aqui mismo para que
+      // la copia que guarda la historia se lo lleve sin tener que saber de el
+      upMal: Boolean((f.arcada || {}).upMal), downMal: Boolean((f.arcada || {}).downMal)
+    };
     base.nino = Boolean(f.nino);
     base.esp = f.esp || "";
     base.obs = f.obs || "";
@@ -513,7 +523,14 @@
     var hoja = "inicial";
 
     function src(tp) { return ruta + IMGS[tp].archivo; }
-    function colorDe(m) { return (m.malo && malEstado) ? "rojo" : m.c; }
+    /* El color con el que se ANOTA ahora: lo dice la casilla de la barra. */
+    function colorDe(m) { return colorPuesto(m, malEstado); }
+    /* El color de algo YA anotado. La norma distingue buen estado (azul) de
+       mal estado (rojo) en siete hallazgos, y eso es un dato del paciente, no
+       de la pantalla. Antes salia de la casilla: se marcaba una protesis en
+       rojo, se volvia a entrar y aparecia azul, y mover la casilla repintaba
+       de golpe todo el odontograma del paciente. */
+    function colorPuesto(m, mal) { return (m.malo && mal) ? "rojo" : m.c; }
     function esc(s) {
       return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
         .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -530,7 +547,7 @@
       var out = "";
       ks.forEach(function (k) {
         var m = meta(k); if (!m) return;
-        var c = col(colorDe(m)), sig = p[k];
+        var c = col(colorPuesto(m, d.mal[k])), sig = p[k];
         function L(dd) {
           return '<path d="' + dd + '" stroke="' + c + '" stroke-width="' + gr + '" fill="none" stroke-linecap="round"/>';
         }
@@ -593,12 +610,13 @@
       var rell = zs.map(function (z) {
         var h = d.sup[z.s]; if (!h) return "";
         var m = meta(h); if (!m) return "";
+        var cc = col(colorPuesto(m, d.malCara[z.s]));
         /* La temporal se marca con un circulo rojo y no pintando la cara: asi se
            distingue de un vistazo de la definitiva, que va rellena. */
         return m.borde
           ? '<circle cx="' + z.c[0] + '" cy="' + z.c[1] + '" r="' + z.c[2] +
-            '" fill="none" stroke="' + col(m.c) + '" stroke-width="' + (im.w * 0.04) + '"/>'
-          : '<path d="' + z.d + '" fill="' + col(m.c) + '" opacity=".8"/>';
+            '" fill="none" stroke="' + cc + '" stroke-width="' + (im.w * 0.04) + '"/>'
+          : '<path d="' + z.d + '" fill="' + cc + '" opacity=".8"/>';
       }).join("");
       var clic = zs.map(function (z) {
         return '<path class="odo-zona" d="' + z.d + '" data-s="' + z.s + '"></path>';
@@ -624,15 +642,16 @@
       var circulos = "";
       var zs = caras(t).map(function (z) {
         var h = d.sup[z.s], relleno = "", m = h ? meta(h) : null;
+        var cc = m ? col(colorPuesto(m, d.malCara[z.s])) : "";
         // va en style y no como atributo: en SVG los atributos de presentacion
         // pierden frente a la regla CSS de la clase
         if (m) {
           if (m.borde) {
             // el circulo se dibuja aparte, encima, para que no lo tape la cara
             circulos += '<circle cx="' + z.c[0] + '" cy="' + z.c[1] + '" r="' + z.c[2] +
-              '" fill="none" stroke="' + col(m.c) + '" stroke-width="5" pointer-events="none"/>';
+              '" fill="none" stroke="' + cc + '" stroke-width="5" pointer-events="none"/>';
           } else {
-            relleno = ' style="fill:' + col(m.c) + ';fill-opacity:.85"';
+            relleno = ' style="fill:' + cc + ';fill-opacity:.85"';
           }
         }
         return '<path class="odo-cara" d="' + z.d + '" data-s="' + z.s + '"' + relleno +
@@ -694,7 +713,7 @@
 
       var a = ficha.arcada[arco];   // el maxilar edentulo es cosa de las permanentes
       if (a && meta(a)) {
-        var ca = colorDe(meta(a)), ya = coronaY - fuera * 4;
+        var ca = colorPuesto(meta(a), ficha.arcada[arco + "Mal"]), ya = coronaY - fuera * 4;
         out += '<path d="M6,' + ya + " L" + (W - 6) + "," + ya + '" ' + st(ca, 2.4) + "/>";
         if (a === "protesis_total") {
           out += '<path d="M6,' + (ya - fuera * 5) + " L" + (W - 6) + "," + (ya - fuera * 5) + '" ' + st(ca, 2.4) + "/>";
@@ -704,7 +723,7 @@
       ficha.spans.filter(function (s) { return s.arco === arco; }).forEach(function (s) {
         if (filaDe(s.a) !== arco) return;
         var m = meta(s.k); if (!m) return;
-        var c = colorDe(m);
+        var c = colorPuesto(m, s.mal);
         var xa = Math.min(centroDe(s.a), centroDe(s.b)), xb = Math.max(centroDe(s.a), centroDe(s.b));
         var y = apiceY + fuera * 9;
 
@@ -810,12 +829,12 @@
       var d = ficha.dientes[t], out = [];
       Object.keys(d.pieza).forEach(function (k) {
         var m = meta(k); if (!m) return;
-        out.push({ txt: m.n + (d.pieza[k] ? " (" + d.pieza[k] + ")" : ""), c: colorDe(m) });
+        out.push({ txt: m.n + (d.pieza[k] ? " (" + d.pieza[k] + ")" : ""), c: colorPuesto(m, d.mal[k]) });
       });
       ORDEN.forEach(function (z) {
         if (!d.sup[z]) return;
         var m = meta(d.sup[z]); if (!m) return;
-        out.push({ txt: m.n + " · " + nombreCara(t, z), c: m.c });
+        out.push({ txt: m.n + " · " + nombreCara(t, z), c: colorPuesto(m, d.malCara[z]) });
       });
       d.box.forEach(function (x) {
         /* Las siglas de material, de nivel de caries o de tipo de corona no son
@@ -847,11 +866,11 @@
       });
       ficha.spans.forEach(function (s) {
         var m = meta(s.k); if (!m) return;
-        filas.push({ t: s.a + "-" + s.b, txt: m.n, c: colorDe(m) });
+        filas.push({ t: s.a + "-" + s.b, txt: m.n, c: colorPuesto(m, s.mal) });
       });
       ["up", "down"].forEach(function (k) {
         var a = ficha.arcada[k]; if (!a || !meta(a)) return;
-        filas.push({ t: k === "up" ? "Sup." : "Inf.", txt: meta(a).n, c: colorDe(meta(a)) });
+        filas.push({ t: k === "up" ? "Sup." : "Inf.", txt: meta(a).n, c: colorPuesto(meta(a), ficha.arcada[k + "Mal"]) });
       });
       return filas;
     }
@@ -873,7 +892,7 @@
           '<span class="odo-sw" style="' + sw + '"></span>' + esc(x.n) + "</button>";
       }).join("");
       if (lista.some(function (x) { return x.malo; })) {
-        html += '<label class="odo-estado"><input type="checkbox" data-malo' + (malEstado ? " checked" : "") + "> Mal estado (rojo)</label>";
+        html += '<label class="odo-estado"><input type="checkbox" data-malo' + (malEstado ? " checked" : "") + "> Mal estado (rojo) · para lo que marques ahora</label>";
       }
       html += "</div>";
 
@@ -1130,7 +1149,7 @@
 
       if (tool.cat === "pieza") {
         if (tool.k === "limpiar") {
-          ficha.dientes[t] = { sup: {}, pieza: {}, box: [], num: null, nota: "" };
+          ficha.dientes[t] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" };
           return [t];
         }
         if (tool.k === "clavija" || tool.k === "gemina") {
@@ -1140,6 +1159,7 @@
         if (d.pieza[tool.k] !== undefined && (!m.sig || d.pieza[tool.k] === tool.sig)) {
           var siglaPuesta = d.pieza[tool.k];
           delete d.pieza[tool.k];
+          delete d.mal[tool.k];
           // al quitar la marca se va tambien su sigla del recuadro
           if (m.box) quitarBox(t, m.box, coloresDe(m));
           /* Los que escriben una sigla elegida -corona, tratamiento pulpar,
@@ -1153,6 +1173,8 @@
           var anterior = d.pieza[tool.k];
           if (m.sig && anterior && anterior !== tool.sig) quitarBox(t, anterior, coloresDe(m));
           d.pieza[tool.k] = m.sig ? tool.sig : "";
+          // el buen o mal estado se guarda aqui, no en la casilla de la barra
+          if (m.malo && malEstado) d.mal[tool.k] = true; else delete d.mal[tool.k];
           // las siglas de corona y tratamiento pulpar van al recuadro
           if (m.sig && (tool.k === "corona_def" || tool.k === "pulpar" || tool.k === "posicion" || tool.k === "dde")) escribirBox(t, tool.sig, m);
           // y las que la norma manda escribir siempre, como CT, RR o IMP
@@ -1170,6 +1192,7 @@
       if (tool.cat === "arco") {
         var a = arcoDe(t);
         ficha.arcada[a] = tool.k === "borrar_arco" ? null : (ficha.arcada[a] === tool.k ? null : tool.k);
+        ficha.arcada[a + "Mal"] = Boolean(ficha.arcada[a] && meta(ficha.arcada[a]).malo && malEstado);
         return [CLAVE_FICHA];
       }
 
@@ -1189,7 +1212,7 @@
           alert("Este hallazgo se registra entre dos piezas correlativas.");
           pendiente = t; return [];
         }
-        ficha.spans.push({ k: tool.k, a: pendiente, b: t, arco: arcoDe(t) });
+        ficha.spans.push({ k: tool.k, a: pendiente, b: t, arco: arcoDe(t), mal: Boolean(m.malo && malEstado) });
         pendiente = null;
         return [CLAVE_FICHA];
       }
@@ -1235,7 +1258,7 @@
       if (ev.target.closest(".odo-clear")) {
         if (!sel || soloLectura) return;
         guardar();
-        ficha.dientes[sel] = { sup: {}, pieza: {}, box: [], num: null, nota: "" };
+        ficha.dientes[sel] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" };
         ficha.spans = ficha.spans.filter(function (s) { return s.a !== sel && s.b !== sel; });
         render(); avisar([sel, CLAVE_FICHA]);
         return;
@@ -1282,12 +1305,15 @@
       var claves;
       if (tool.cat === "sup") {
         var d = ficha.dientes[t], cara = z.dataset.s;
-        if (tool.k === "borrar_sup") delete d.sup[cara];
-        else if (d.sup[cara] === tool.k) delete d.sup[cara];
+        if (tool.k === "borrar_sup") { delete d.sup[cara]; delete d.malCara[cara]; }
+        else if (d.sup[cara] === tool.k) { delete d.sup[cara]; delete d.malCara[cara]; }
         else {
           d.sup[cara] = tool.k;
           var ms = meta(tool.k);
-          if (ms.sig) ponerBox(t, tool.sig, ms.c);
+          if (ms.malo && malEstado) d.malCara[cara] = true; else delete d.malCara[cara];
+          // la sigla del recuadro tambien va en rojo si la cara esta en mal
+          // estado: el sellante la escribia siempre en azul
+          if (ms.sig) ponerBox(t, tool.sig, colorDe(ms));
         }
         claves = [t];
       } else {
@@ -1466,7 +1492,7 @@
      al modelo de la norma. Lo que no tiene equivalente grafico se conserva
      como nota para no perder informacion. */
   function migrarRegistro(condicion, nota) {
-    var d = { sup: {}, pieza: {}, box: [], num: null, nota: "" };
+    var d = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" };
     var c = String(condicion || "").trim();
     if (c === "Ausente" || c === "Extraido") d.pieza.ausente = "";
     else if (c === "Por extraer") d.pieza.por_extraer = "";
