@@ -6637,3 +6637,16 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
 .es-con-esquema .esq-odontograma {
   max-height: 380px;
 }
+
+/* El sello en la historia: mas abajo y a la derecha, encima de "Sello y firma",
+   como se estampa en el papel. El papel gris de la foto se aclara hasta el
+   blanco y se funde con la hoja (multiply), asi que sale solo la tinta tambien
+   en los sellos que se subieron antes de que el fondo se quitara al subirlos.
+   No ataja clics: lo de abajo se puede seguir tocando. */
+.hcf-cierre .hcf-sello-imagen {
+  position: relative;
+  margin: 8px 0 -20px 110px;
+  filter: brightness(1.3) contrast(1.6);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
