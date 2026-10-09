@@ -4355,6 +4355,30 @@ function guardarCampoDeLaHoja(campo) {
     renderClinicalHistory();
     return;
   }
+  /* El paciente aun no tenia atencion: este primer dato clinico abre la de
+     hoy, sin cobro, a nombre de su doctor (o de quien escribe). */
+  if (destino === "notanueva") {
+    const paciente = patientById(registro);
+    if (!paciente || !valor) return;
+    const nueva = {
+      id: uid("h"),
+      patientId: paciente.id,
+      date: todayISO(),
+      attendedBy: paciente.doctor || currentUser()?.name || "",
+      attended: true,
+      reason: "",
+      procedure: "",
+      agreedPrice: 0,
+      creditPending: false,
+      creditAmount: 0,
+      [nombre]: valor
+    };
+    state.clinicalHistory.push(nueva);
+    saveClinicalHistoryApi(nueva).catch((error) => alert(error.message));
+    if (!API_ENABLED) saveState();
+    renderClinicalHistory();
+    return;
+  }
   const entrada = state.clinicalHistory.find((item) => item.id === registro);
   if (!entrada || String(entrada[nombre] || "") === valor) return;
   entrada[nombre] = valor;
@@ -4405,7 +4429,10 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   /* Un campo se escribe en la hoja cuando se esta viendo en pantalla y hay
      donde guardarlo. En el papel es solo la raya. */
   const sePuedeEscribir = pantalla && canManageClinical();
-  const deNota = (campo) => (nota.id ? `nota|${campo}|${nota.id}` : "");
+  /* Sin atencion guardada, lo clinico igual se escribe: el primer dato crea
+     la atencion de hoy (sin cobro) y desde ahi la hoja sigue sobre ella. Igual
+     que en el dental de EmpresaFacil. */
+  const deNota = (campo) => (nota.id ? `nota|${campo}|${nota.id}` : `notanueva|${campo}|${patient.id}`);
   const dePaciente = (campo) => `paciente|${campo}|${patient.id}`;
   const escribible = (destino, pista = "") => {
     if (!sePuedeEscribir || !destino) return "";
@@ -4466,7 +4493,7 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   /* Sin una atencion guardada no hay donde escribir lo clinico: la historia se
      cuelga de la atencion, no del aire. */
   const aviso = sePuedeEscribir && !nota.id
-    ? `<p class="hcf-aviso">Escribe aquí mismo sobre cada línea. Lo clínico se guarda en la atención del paciente, así que primero registra su nota clínica arriba; la filiación ya se puede llenar.</p>`
+    ? `<p class="hcf-aviso">Escribe aquí mismo sobre cada línea: se guarda solo al salir del campo. Este paciente aún no tiene atención registrada: el primer dato clínico que escribas abre la atención de hoy, sin cobro.</p>`
     : sePuedeEscribir
       ? `<p class="hcf-aviso">Escribe aquí mismo sobre cada línea: se guarda solo al salir del campo.</p>`
       : "";
