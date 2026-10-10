@@ -548,7 +548,22 @@ function imprimirHojaDeEvolucion(patientId) {
       .ev-tabla tr { break-inside: avoid; }
     </style></head><body>
     ${hojaDeEvolucion(patientId, { pantalla: false })}
-    <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });<\/script>
+    <script>
+      /* Que entre en una sola hoja: se quitan filas en blanco del final hasta
+         que la hoja quepa en el alto del papel. Lo escrito nunca se quita; si
+         no cabe, sigue en la hoja siguiente con su cabecera. */
+      function caberEnUnaHoja() {
+        var medida = document.createElement("div");
+        medida.style.cssText = "position:absolute;visibility:hidden;height:${horizontal ? "210mm" : "297mm"};width:1px";
+        document.body.appendChild(medida);
+        var alto = medida.getBoundingClientRect().height - 4;
+        medida.remove();
+        var hoja = document.querySelector(".hc-hoja");
+        var vacias = document.querySelectorAll(".ev-vacia");
+        for (var i = vacias.length - 1; i >= 0 && hoja.getBoundingClientRect().height > alto; i--) vacias[i].remove();
+      }
+      window.addEventListener("load", function () { caberEnUnaHoja(); setTimeout(function () { window.print(); }, 350); });
+    <\/script>
     </body></html>`);
   ventana.document.close();
 }
