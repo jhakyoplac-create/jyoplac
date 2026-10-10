@@ -3276,13 +3276,23 @@ function renderFullApp() {
   renderConfig();
 }
 
+/* Los estados que se eligen a mano en la cita. Confirmada tiene su boton,
+   reprogramada su propia ventana, y atendida y en atencion salen solas del
+   cobro: en la lista solo confundian. Si la cita ya esta en uno de esos, se
+   muestra igual, para que al guardar no se pierda. */
+const ESTADOS_DE_CITA_A_MANO = ["RESERVADA", "NO_ASISTIO", "CANCELADA"];
+
+function estadosDeCitaAMano(actual = "") {
+  return state.config.statuses.filter((estado) => ESTADOS_DE_CITA_A_MANO.includes(estado) || estado === actual);
+}
+
 function hydrateForms() {
   const serviceNames = state.services.filter((service) => service.active).map((service) => service.name);
   $$('select[name="doctor"]').forEach((select) => fillSelect(select, state.config.doctors, select.value));
   $$('select[name="unit"]').forEach((select) => fillSelect(select, state.config.units, select.value));
   $$('select[name="service"], select[name="mainTreatment"]').forEach((select) => fillSelect(select, serviceNames, select.value));
   $$('select[name="status"]').forEach((select) => {
-    const options = select.closest("#treatmentForm") ? state.config.treatmentStatuses : state.config.statuses;
+    const options = select.closest("#treatmentForm") ? state.config.treatmentStatuses : estadosDeCitaAMano(select.value);
     fillSelect(select, options, select.value);
   });
   $$('select[name="method"]').forEach((select) => {
@@ -9048,7 +9058,7 @@ function openAppointment(appointment = {}) {
   form.patientId.value = appointment.patientId || "";
   form.doctor.value = appointment.doctor || patientById(form.patientId.value)?.doctor || "";
   form.service.value = appointment.service || state.services[0]?.name || "";
-  form.status.value = appointment.status || "RESERVADA";
+  fillSelect(form.status, estadosDeCitaAMano(appointment.status), appointment.status || "RESERVADA");
   form.notes.value = appointment.notes || "";
   $("#openRescheduleBtn").style.display = appointment.id ? "inline-flex" : "none";
   $("#appointmentDialog").showModal();
