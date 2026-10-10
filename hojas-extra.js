@@ -516,6 +516,8 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
 function imprimirHojaDeEvolucion(patientId) {
   const patient = patientById(patientId);
   if (!patient) return;
+  // en horizontal, con mas lugar para lo que se hizo (Smart Medic lo pidio el 2026-10-10 y paso a todos)
+  const horizontal = true;
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
     alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
@@ -529,11 +531,18 @@ function imprimirHojaDeEvolucion(patientId) {
     <title>Hoja de evolución ${escapeHtml(patient.name)}</title>
     ${hojasDeEstilo}
     <style>
-      @page { size: A4; margin: 0; }
+      @page { size: A4${horizontal ? " landscape" : ""}; margin: 0; }
       html, body { background: #fff !important; }
       body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 8mm 12mm !important; max-width: 210mm; margin: 0 auto; }
-      .hc-hoja.fd.ev { max-width: 210mm; }
+      .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 8mm 12mm !important; max-width: ${horizontal ? "297mm" : "210mm"}; margin: 0 auto; }
+      .hc-hoja.fd.ev { max-width: ${horizontal ? "297mm" : "210mm"}; }
+      ${horizontal ? `/* en horizontal el ancho que se gana va al procedimiento: fecha y firma mas angostas */
+      .ev-c-fecha { width: 10% !important; }
+      .ev-c-detalle { width: 57% !important; }
+      .ev-c-cie { width: 8% !important; }
+      .ev-c-asist { width: 8% !important; }
+      .ev-c-firma { width: 12% !important; }
+      .ev-c-vb { width: 5% !important; }` : ""}
       /* si son muchas atenciones la tabla sigue en otra hoja, con su cabecera */
       .ev-tabla thead { display: table-header-group; }
       .ev-tabla tr { break-inside: avoid; }
