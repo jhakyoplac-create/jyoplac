@@ -6132,10 +6132,13 @@ function imprimirProforma(proformaId) {
 /* Lo que el odontograma dice que falta por hacer. La norma ya lo deja marcado:
    lo rojo esta pendiente y lo azul ya se hizo, asi que no hay que inventar
    nada, solo leer la ficha. Una caries en una cara es una curacion simple; en
-   dos o mas, compuesta, que es como se cobra. */
+   dos, compuesta; en tres o mas, compleja, que es como se cobra (2026-10-10).
+   Si el consultorio no tiene "Curaciones Complejas" en su lista de servicios,
+   la compleja toma el precio de la compuesta. */
 const TRABAJO_DEL_ODONTOGRAMA = {
   curacion_simple: { detalle: "Curación simple", servicio: "Curaciones Simples" },
   curacion_compuesta: { detalle: "Curación compuesta", servicio: "Curaciones Compuestas" },
+  curacion_compleja: { detalle: "Curación compleja", servicio: "Curaciones Complejas", respaldo: "Curaciones Compuestas" },
   restauracion_definitiva: { detalle: "Cambiar restauración temporal", servicio: "Restauraciones Estéticas" },
   extraccion: { detalle: "Extracción", servicio: "Extracción Simple" },
   extraccion_molar: { detalle: "Extracción de tercer molar", servicio: "Extracción Tercer Molar" },
@@ -6173,7 +6176,7 @@ function presupuestoDelOdontograma(patientId) {
       pieza,
       detalle: trabajo.detalle + (nota ? ` · ${nota}` : ""),
       servicio: trabajo.servicio,
-      precioLista: precioDelServicio(trabajo.servicio)
+      precioLista: precioDelServicio(trabajo.servicio) ?? precioDelServicio(trabajo.respaldo)
     });
   };
   (Odontograma.PIEZAS || []).forEach((pieza) => {
@@ -6182,7 +6185,8 @@ function presupuestoDelOdontograma(patientId) {
     const caras = Object.keys(diente.sup || {});
     const conCaries = caras.filter((cara) => diente.sup[cara] === "caries");
     if (conCaries.length === 1) agregar(pieza, "curacion_simple", "1 cara");
-    if (conCaries.length > 1) agregar(pieza, "curacion_compuesta", `${conCaries.length} caras`);
+    if (conCaries.length === 2) agregar(pieza, "curacion_compuesta", "2 caras");
+    if (conCaries.length > 2) agregar(pieza, "curacion_compleja", `${conCaries.length} caras`);
     if (caras.some((cara) => diente.sup[cara] === "rest_temp")) agregar(pieza, "restauracion_definitiva");
     const de = diente.pieza || {};
     if ("por_extraer" in de) {
