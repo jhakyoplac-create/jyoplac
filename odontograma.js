@@ -173,8 +173,7 @@
      tratar o daña la pieza -desgaste, movilidad, remanente radicular- y en
      azul lo que ya esta hecho o es una caracteristica. */
   var SIGLAS_BOX = [
-    ["DES", "Desgaste oclusal/incisal", "rojo"], ["DIS", "Diente discrómico"],
-    ["E", "Diente ectópico"], ["I", "Impactación"], ["SI", "Semi-impactación"],
+    ["E", "Diente ectópico"], ["I", "Impactación"],
     ["MAC", "Macrodoncia"], ["MIC", "Microdoncia"],
     ["M1", "Movilidad grado 1", "rojo"], ["M2", "Movilidad grado 2", "rojo"],
     ["M3", "Movilidad grado 3", "rojo"],
@@ -185,10 +184,22 @@
     /* Defectos de desarrollo del esmalte (5.3.2), en rojo. La fluorosis no
        tiene sigla: la norma la manda a Especificaciones con su clasificacion. */
     ["HP", "Hipoplasia", "rojo"], ["HM", "Hipomineralización", "rojo"],
-    ["O", "Opacidades del esmalte", "rojo"], ["DE", "Decoloración del esmalte", "rojo"],
+    ["O", "Opacidades del esmalte", "rojo"],
     /* Fosas y fisuras profundas (5.3.5) */
     ["FFP", "Fosas y fisuras profundas"]
   ];
+
+  /* Siglas que escribia la norma de 2005 y la NTS 150-2019 ya no tiene, asi
+     que no se pueden anotar mas. Lo que quedo escrito en una historia vieja se
+     sigue leyendo con su nombre y no como un "Recuadro: DIS" a secas: es una
+     historia clinica y no se le borra nada a nadie.
+       DIS  la de 2019 no clasifica el diente discromico; lo que se le parece
+            es la D de Defectos del esmalte (5.3.2), que es decoloracion.
+       SI   5.3.23 solo tiene "I": la semi-impactacion no esta.
+       DE   la sigla de la decoloracion es "D", no "DE" (5.3.2). */
+  var SIGLAS_RETIRADAS = {
+    DIS: "Diente discrómico", SI: "Semi-impactación", DE: "Decoloración del esmalte"
+  };
 
   var TOOLS = [
     { cat: "sup", k: "caries", n: "Caries", c: "rojo", sig: ["MB", "CE", "CD", "CDP"],
@@ -202,6 +213,13 @@
       hint: "Solo el contorno de la restauración, en rojo." },
     { cat: "sup", k: "sellante", n: "Sellante", c: "azul", malo: true, sig: ["S"],
       hint: "Clic en la cara sellada: queda marcada y la S va al recuadro. En azul si está bien y en rojo si está en mal estado." },
+    /* 5.3.24. La norma no se conforma con la sigla: "se registra la sigla DES
+       en mayusculas y en color rojo, asi mismo en el recuadro correspondiente
+       a la pieza dentaria se dibuja de color rojo acorde a la forma en la que
+       se evidencia". Es decir, se pinta la cara gastada igual que una caries y
+       ademas va el DES. Estaba solo como sigla suelta del recuadro. */
+    { cat: "sup", k: "desgaste", n: "Superficie desgastada", c: "rojo", box: "DES",
+      hint: "Clic en la cara desgastada: se pinta de rojo y DES va al recuadro. El tipo —abrasión, atrición, erosión o abfracción— se escribe en Especificaciones." },
     { cat: "sup", k: "borrar_sup", n: "Borrar cara", c: "", hint: "Quita el hallazgo de esa cara." },
 
     { cat: "pieza", k: "ausente", n: "Ausente", c: "azul", hint: "Aspa azul sobre la figura de la pieza." },
@@ -334,6 +352,7 @@
     CV: "Corona veneer",
     CJ: "Corona jacket",
     CT: "Corona temporal",
+    DES: "Superficie desgastada",
     IMP: "Implante dental",
     TC: "Tratamiento de conductos",
     PC: "Pulpectomía",
@@ -860,9 +879,16 @@
            implante salia dos veces, como "Implante dental" y otra vez como
            "IMP", y lo mismo la corona temporal con su CT. */
         if (duena && duena.cat === "pieza" && d.pieza[duena.k] !== undefined) return;
+        /* Lo mismo con las caras, pero solo si la sigla es la fija del
+           hallazgo: la del material o la del nivel de caries si se dicen,
+           porque ahi "Restauracion - Oclusal" no cuenta si fue AM o resina. */
+        if (duena && duena.cat === "sup" && duena.box === x.k
+          && Object.keys(d.sup).some(function (z) { return d.sup[z] === duena.k; })) return;
         var m = meta(x.k);
         if (m) { out.push({ txt: m.n, c: x.c }); return; }
-        out.push({ txt: duena ? x.k + " · " + duena.n : "Recuadro: " + x.k, c: x.c });
+        if (duena) { out.push({ txt: x.k + " · " + duena.n, c: x.c }); return; }
+        var retirada = SIGLAS_RETIRADAS[x.k];
+        out.push({ txt: retirada ? x.k + " · " + retirada : "Recuadro: " + x.k, c: x.c });
       });
       if (d.num === "clavija") out.push({ txt: "Diente en clavija", c: "azul" });
       if (d.num === "gemina") out.push({ txt: "Geminación", c: "azul" });
@@ -1315,15 +1341,25 @@
       var claves;
       if (tool.cat === "sup") {
         var d = ficha.dientes[t], cara = z.dataset.s;
+        var ms = meta(tool.k);
+        // que hallazgo queda tocado: el que se borra o el que se pone
+        var afectado = tool.k === "borrar_sup" ? d.sup[cara] : tool.k;
         if (tool.k === "borrar_sup") { delete d.sup[cara]; delete d.malCara[cara]; }
         else if (d.sup[cara] === tool.k) { delete d.sup[cara]; delete d.malCara[cara]; }
         else {
           d.sup[cara] = tool.k;
-          var ms = meta(tool.k);
           if (ms.malo && malEstado) d.malCara[cara] = true; else delete d.malCara[cara];
           // la sigla del recuadro tambien va en rojo si la cara esta en mal
           // estado: el sellante la escribia siempre en azul
           if (ms.sig) ponerBox(t, tool.sig, colorDe(ms));
+        }
+        /* Los hallazgos de cara que llevan una sigla fija -el DES del
+           desgaste- la escriben una sola vez por pieza aunque se marquen
+           varias caras, y se la llevan cuando ya no queda ninguna. */
+        var ma = afectado ? meta(afectado) : null;
+        if (ma && ma.box) {
+          var queda = Object.keys(d.sup).some(function (z) { return d.sup[z] === afectado; });
+          if (queda) escribirBox(t, ma.box, ma); else quitarBox(t, ma.box, coloresDe(ma));
         }
         claves = [t];
       } else {
