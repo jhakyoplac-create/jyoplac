@@ -7406,6 +7406,12 @@ function printElectronicReceipt(id) {
 
 function openPaymentReceiptPrompt(context) {
   pendingPaymentContext = context;
+  // de quien es y cuanto: se confirma lo que se va a guardar antes de elegir
+  const resumen = $("#receiptPromptResumen");
+  const pago = context?.payment;
+  if (resumen) resumen.textContent = pago
+    ? [patientById(pago.patientId)?.name, money(pago.amount), String(paymentMethodLabel(pago) || "").toLowerCase().replace(/^./, (letra) => letra.toUpperCase())].filter(Boolean).join(" · ")
+    : "";
   $("#receiptPromptDialog")?.showModal();
 }
 
@@ -11212,6 +11218,11 @@ function bindEvents() {
       pendingPaymentContext.restorePaymentButton();
       pendingPaymentContext = null;
     }
+  });
+  // con la tecla Esc se vuelve al cobro sin guardar nada
+  $("#receiptPromptDialog")?.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    $("#receiptPromptDialog")?.close("cancel");
   });
   $("#receiptPromptDialog")?.addEventListener("close", () => {
     if (pendingPaymentContext && $("#receiptPromptDialog")?.returnValue === "cancel") {
