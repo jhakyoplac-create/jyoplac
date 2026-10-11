@@ -1577,10 +1577,23 @@ body.ficha-en-dos-columnas .content-grid.form-and-list > section.panel {
   min-height: 0;
 }
 
+/* El alto lo pone la ficha, no la lista: con muchos pacientes la tabla
+   estiraba la fila y la lista seguia de largo bajo "Guardar paciente". El
+   height 0 la saca de la cuenta del alto y el min-height 100% la estira hasta
+   donde llega la ficha; lo que no entra se recorre con su propia barra.
+   Solo lado a lado: en el celular la lista va debajo y con alto 0 desapareceria. */
+@media (min-width: 901px) {
+  body.ficha-en-dos-columnas .content-grid.form-and-list > section.panel {
+    height: 0;
+    min-height: 100%;
+  }
+}
+
 body.ficha-en-dos-columnas .patients-scroll {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
+  overflow-y: auto;
 }
 
 /* ---- La cabecera: el logo y el nombre, al lado del titulo ----
@@ -6157,10 +6170,11 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   font-weight: 700;
   margin-right: 8px;
 }
+/* la firma con espacio encima para firmar a mano */
 .fd-pie {
   display: flex;
   justify-content: flex-end;
-  margin-top: 26px;
+  margin-top: 64px;
 }
 .fd-firma {
   display: grid;

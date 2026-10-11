@@ -428,7 +428,11 @@ function parseListaDePrecios(value, fallback) {
 const CAMPOS_DE_LAS_HOJAS = [
   "evolucion", "estTalla", "estPeso", "estImpresion", "estCabeza", "estCuello", "estMejillas",
   "estLengua", "estPisoDeBoca", "estPaladar", "estEncias", "estVestibulo",
-  "estEspecificaciones", "estObservaciones", "estInforme", "estAuxiliares", "estCie"
+  "estEspecificaciones", "estObservaciones", "estInforme", "estAuxiliares", "estCie",
+  // lo que se escribe sobre la Ficha de datos y no tiene columna propia
+  "district", "email", "fdComoNosConocio", "fdDentistaAnterior", "fdMedicoConfianza", "fdAmbulancia",
+  "fdNombreMedico", "fdFrecuencia", "fdTraumatica", "fdExtracciones", "fdAnestesia", "fdSangrado",
+  "fdProfilaxis", "fdUltimaAtencion", "fdChasquidos", "fdSiNo"
 ];
 
 function hojasDelPaciente(valor) {
@@ -7457,6 +7461,9 @@ async function lookupReceiptDocument() {
   }
 }
 
+// la foto que trajo la ultima consulta del DNI, hasta que se guarde el paciente
+let fotoDelDniConsultado = null;
+
 async function lookupPatientDni() {
   const form = $("#patientForm");
   const hint = $("#patientDniLookupHint");
@@ -7498,12 +7505,22 @@ async function lookupPatientDni() {
     const payload = await lookupExternalDni(dni);
     if (payload?.name) {
       nameField.value = payload.name;
-      // solo se llena lo vacio: lo que ya escribio recepcion manda
-      for (const [campo, valor] of [["address", payload.address], ["origin", payload.origin]]) {
+      /* Solo se llena lo vacio: lo que ya escribio recepcion manda. DevEx trae
+         domicilio y procedencia; CODART ademas nacimiento, sexo, estado civil,
+         instruccion y la foto del DNI. */
+      for (const campo of ["address", "origin", "birthPlace", "birthDate", "maritalStatus", "education"]) {
         const field = form.elements.namedItem(campo);
-        if (field && valor && !String(field.value || "").trim()) field.value = valor;
+        if (field && payload[campo] && !String(field.value || "").trim()) field.value = payload[campo];
       }
-      if (hint) hint.textContent = "Nombre encontrado por DNI. Completa celular y fecha.";
+      const radios = [...form.querySelectorAll('input[name="sexo"]')];
+      if (payload.sexo && !radios.some((radio) => radio.checked)) {
+        radios.forEach((radio) => { radio.checked = radio.value === payload.sexo; });
+      }
+      // la fecha puesta a mano no avisa: sin esto un menor no abria su representante
+      if (payload.birthDate) birthDateField?.dispatchEvent(new Event("change", { bubbles: true }));
+      // la foto espera al guardado, junto a su DNI para no pegarsela a otro
+      fotoDelDniConsultado = payload.foto ? { dni, foto: payload.foto } : null;
+      if (hint) hint.textContent = "Datos encontrados por DNI. Revísalos y completa el celular.";
     } else if (hint) {
       hint.textContent = "No se encontró el DNI. Completa los datos manualmente.";
     }
@@ -9356,6 +9373,17 @@ function bindHojasExtra() {
       return;
     }
     // las casillas de la ficha estomatologica: un clic marca, otro desmarca
+    // las casillas SI/NO de la ficha de datos, igual que las de la estomatologica
+    const siNo = event.target.closest("[data-fd-sino]");
+    if (siNo) {
+      const paciente = H.marcarSiNoDeLaFicha(siNo.dataset.paciente, siNo.dataset.fdSino, siNo.dataset.fdRespuesta);
+      if (paciente) {
+        savePatientApi(paciente).catch((error) => alert(error.message));
+        if (!API_ENABLED) saveState();
+        renderClinicalHistory();
+      }
+      return;
+    }
     const marca = event.target.closest("[data-est-marca]");
     if (marca) {
       const paciente = H.alternarMarcaEstomatologica(marca.dataset.paciente, marca.dataset.estMarca, marca.dataset.estValor);
@@ -10153,6 +10181,10 @@ function bindEvents() {
     const existingPatient = editingId ? patientById(editingId) : null;
     const user = currentUser();
     const patient = {
+      /* Lo que no esta en este formulario -lo escrito sobre la ficha de datos,
+         las marcas de la ficha estomatologica, la hoja de evolucion- se
+         conserva: antes editar al paciente lo borraba sin aviso. */
+      ...(existingPatient || {}),
       id: editingId || uid("p"),
       dni: validation.values.dni,
       name: validation.values.name.toUpperCase(),
@@ -10237,6 +10269,15 @@ function bindEvents() {
       return;
     }
     addLocalAuditEvent(existingPatient ? "PATIENT_UPDATED" : "PATIENT_CREATED", `${existingPatient ? "Edito paciente" : "Ingreso paciente"}: ${patient.name} (${patient.dni})`, patient.id);
+    /* La foto del DNI va al paciente nuevo y al que se edito sin tener una;
+       la que ya estaba (tomada en el consultorio) no se pisa. */
+    if (fotoDelDniConsultado?.dni === patient.dni && window.HojasExtra?.ponerFotoDelDni) {
+      const foto = fotoDelDniConsultado.foto;
+      (existingPatient ? window.HojasExtra.cargarFoto(patient.id) : Promise.resolve(""))
+        .then((yaTenia) => (yaTenia ? null : window.HojasExtra.ponerFotoDelDni(patient.id, foto)))
+        .catch((error) => console.warn("No se pudo guardar la foto del DNI.", error));
+    }
+    fotoDelDniConsultado = null;
     if (!API_ENABLED) saveState();
     render();
     if (saveMessage) {
@@ -11583,8 +11624,14 @@ function bindEvents() {
     render();
   });
 
+  /* Primero a quien hay que llamar: sin cita, control vencido e inactivos;
+     al final los nuevos y los que ya tienen su cita. */
+  const ORDEN_DEL_CSV = ["SIN CITA", "CONTROL VENCIDO", "INACTIVO", "NUEVO", "ACTIVO"];
+  const lugarEnElCsv = (estado) => (ORDEN_DEL_CSV.includes(estado) ? ORDEN_DEL_CSV.indexOf(estado) : ORDEN_DEL_CSV.length);
   $("#exportPatientsBtn").addEventListener("click", () => {
-    exportCsv(`pacientes-${todayISO()}.csv`, state.patients.map((patient) => {
+    const enOrden = [...state.patients].sort((a, b) =>
+      lugarEnElCsv(patientStatus(a)) - lugarEnElCsv(patientStatus(b)) || String(a.name || "").localeCompare(String(b.name || "")));
+    exportCsv(`pacientes-${todayISO()}.csv`, enOrden.map((patient) => {
       const estado = patientStatus(patient);
       const dias = patient.lastAttended ? daysSince(patient.lastAttended) : null;
       return {

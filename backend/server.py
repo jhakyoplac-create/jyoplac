@@ -757,12 +757,20 @@ def require_role(handler, roles):
 
 
 def first_value(data, keys):
+    """El primer texto que haya bajo esas claves.
+
+    Un bloque (CODART trae "domicilio" y "nacimiento" como objetos) no es un
+    dato; y "Data in credit" o "*" son lo que CODART pone a lo que no se pago.
+    """
     if not isinstance(data, dict):
         return ""
     for key in keys:
         value = data.get(key)
-        if value not in (None, ""):
-            return str(value).strip()
+        if value in (None, "") or isinstance(value, (dict, list)):
+            continue
+        texto = str(value).strip()
+        if texto and texto != "*" and texto.lower() != "data in credit":
+            return texto
     return ""
 
 
@@ -820,6 +828,34 @@ def documento_raices(payload):
     return roots
 
 
+def documento_bloque(data_roots, clave):
+    """El objeto que viva bajo esa clave en alguna de las raices, o None."""
+    for data in data_roots:
+        valor = data.get(clave) if isinstance(data, dict) else None
+        if isinstance(valor, dict):
+            return valor
+    return None
+
+
+def documento_lugar(data):
+    """ "MOYOBAMBA, SAN MARTIN": distrito, provincia y departamento sin repetir."""
+    partes = [part.upper() for part in (
+        first_value(data, ["district", "distrito"]),
+        first_value(data, ["province", "provincia"]),
+        first_value(data, ["department", "departamento"]),
+    ) if part]
+    return ", ".join(dict.fromkeys(partes))
+
+
+def documento_fecha(valor):
+    """La fecha como la entiende el formulario (AAAA-MM-DD), o nada."""
+    texto = str(valor or "").strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", texto):
+        return texto
+    partes = re.match(r"^(\d{2})[/-](\d{2})[/-](\d{4})$", texto)
+    return f"{partes.group(3)}-{partes.group(2)}-{partes.group(1)}" if partes else ""
+
+
 def normalizar_respuesta_documento(kind, number, payload):
     data_roots = documento_raices(payload)
     if kind == "dni":
@@ -844,32 +880,65 @@ def normalizar_respuesta_documento(kind, number, payload):
             for data in data_roots:
                 names = " ".join(filter(None, [
                     first_value(data, ["nombres", "names", "first_name"]),
-                    first_value(data, ["apellido_paterno", "apellidoPaterno", "last_name_paternal", "apePaterno", "paterno"]),
+                    first_value(data, ["apellido_paterno", "apellidoPaterno", "last_name_paternal", "apePaterno", "paterno", "apellidos"]),
                     first_value(data, ["apellido_materno", "apellidoMaterno", "last_name_maternal", "apeMaterno", "materno"]),
                 ]))
                 if names.strip():
                     full_name = names.strip()
                     break
         # DevEx manda la calle en "address" y aparte distrito, provincia y
-        # departamento: la calle va al domicilio y el resto a la procedencia
+        # departamento: la calle va al domicilio y el resto a la procedencia.
+        # CODART ("DNI Full") trae dos lugares con las mismas claves -donde
+        # nacio y donde vive-, asi que cada uno se lee dentro de su bloque.
+        domicilio = documento_bloque(data_roots, "domicilio")
+        nacimiento = documento_bloque(data_roots, "nacimiento")
+        general = documento_bloque(data_roots, "informacion_general")
+        lugares = [domicilio] if domicilio else data_roots
         address = ""
-        origin_parts = []
-        for data in data_roots:
+        origin = ""
+        for data in lugares:
             address = address or first_value(data, ["direccion_completa", "full_address", "direccion", "domicilio", "address"])
-            if not origin_parts:
-                origin_parts = [part for part in (
-                    first_value(data, ["district", "distrito"]),
-                    first_value(data, ["province", "provincia"]),
-                    first_value(data, ["department", "departamento"]),
-                ) if part]
-        origin = ", ".join(dict.fromkeys(part.upper() for part in origin_parts))
+            origin = origin or documento_lugar(data)
+        birth_date = documento_fecha(first_value(nacimiento, ["fecha"])) if nacimiento else ""
+        for data in data_roots:
+            birth_date = birth_date or documento_fecha(first_value(data, ["fecha_nacimiento", "fechaNacimiento", "birth_date"]))
+        sexo = ""
+        for data in data_roots:
+            letra = first_value(data, ["genero", "gender", "sexo"]).upper()[:1]
+            if letra in ("M", "F"):
+                sexo = letra
+                break
+        estado_civil = first_value(general or {}, ["estado_civil"]).upper()
+        civiles = {"SOLTER": "Soltero(a)", "CASAD": "Casado(a)", "CONVIVIENTE": "Conviviente", "DIVORCIAD": "Divorciado(a)", "VIUD": "Viudo(a)"}
+        marital = next((valor for clave, valor in civiles.items() if estado_civil.startswith(clave)), "")
+        # la foto del DNI: CODART la manda como la primera de "images"
+        foto = ""
+        sin_imagenes = payload
+        for data in data_roots:
+            imagenes = data.get("images") if isinstance(data, dict) else None
+            if isinstance(imagenes, list) and imagenes:
+                primera = imagenes[0].get("data_uri") if isinstance(imagenes[0], dict) else ""
+                if isinstance(primera, str) and re.match(r"^data:image/[a-z]+;base64,.", primera, re.I):
+                    foto = primera
+                break
+        if foto and isinstance(payload, dict):
+            # la foto ya va aparte: no se manda dos veces
+            sin_imagenes = json.loads(json.dumps(payload))
+            for data in documento_raices(sin_imagenes):
+                data.pop("images", None)
         return {
             "success": bool(full_name),
             "dni": str(number),
             "name": full_name.upper(),
             "address": address.upper(),
             "origin": origin,
-            "raw": payload,
+            "birthPlace": documento_lugar(nacimiento) if nacimiento else "",
+            "birthDate": birth_date,
+            "sexo": sexo,
+            "maritalStatus": marital,
+            "education": first_value(general or {}, ["nivel_educativo"]),
+            "foto": foto,
+            "raw": sin_imagenes,
         }
 
     legal_name = ""

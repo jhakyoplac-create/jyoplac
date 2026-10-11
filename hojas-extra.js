@@ -46,25 +46,29 @@ function achicarFoto(archivo) {
   return new Promise((resolve, reject) => {
     const lector = new FileReader();
     lector.onerror = () => reject(new Error("No se pudo leer la foto."));
-    lector.onload = () => {
-      const imagen = new Image();
-      imagen.onerror = () => reject(new Error("El archivo no es una foto que se pueda abrir."));
-      imagen.onload = () => {
-        const escala = Math.max(FOTO_ANCHO / imagen.width, FOTO_ALTO / imagen.height);
-        const ancho = imagen.width * escala;
-        const alto = imagen.height * escala;
-        const lienzo = document.createElement("canvas");
-        lienzo.width = FOTO_ANCHO;
-        lienzo.height = FOTO_ALTO;
-        const pincel = lienzo.getContext("2d");
-        pincel.fillStyle = "#fff";
-        pincel.fillRect(0, 0, FOTO_ANCHO, FOTO_ALTO);
-        pincel.drawImage(imagen, (FOTO_ANCHO - ancho) / 2, (FOTO_ALTO - alto) / 2, ancho, alto);
-        resolve(lienzo.toDataURL("image/jpeg", 0.72));
-      };
-      imagen.src = lector.result;
-    };
+    lector.onload = () => achicarImagen(lector.result).then(resolve, reject);
     lector.readAsDataURL(archivo);
+  });
+}
+
+function achicarImagen(origen) {
+  return new Promise((resolve, reject) => {
+    const imagen = new Image();
+    imagen.onerror = () => reject(new Error("El archivo no es una foto que se pueda abrir."));
+    imagen.onload = () => {
+      const escala = Math.max(FOTO_ANCHO / imagen.width, FOTO_ALTO / imagen.height);
+      const ancho = imagen.width * escala;
+      const alto = imagen.height * escala;
+      const lienzo = document.createElement("canvas");
+      lienzo.width = FOTO_ANCHO;
+      lienzo.height = FOTO_ALTO;
+      const pincel = lienzo.getContext("2d");
+      pincel.fillStyle = "#fff";
+      pincel.fillRect(0, 0, FOTO_ANCHO, FOTO_ALTO);
+      pincel.drawImage(imagen, (FOTO_ANCHO - ancho) / 2, (FOTO_ALTO - alto) / 2, ancho, alto);
+      resolve(lienzo.toDataURL("image/jpeg", 0.72));
+    };
+    imagen.src = origen;
   });
 }
 
@@ -91,6 +95,13 @@ async function ponerFoto(patientId, archivo) {
   await guardarFoto(patientId, foto);
 }
 
+/* La foto que trajo la consulta del DNI (CODART la manda en "DNI Full"). Pasa
+   por el mismo achicado que una foto de camara. */
+async function ponerFotoDelDni(patientId, dataUri) {
+  if (!patientId || !/^data:image\//.test(String(dataUri || ""))) return;
+  await guardarFoto(patientId, await achicarImagen(dataUri));
+}
+
 async function quitarFoto(patientId) {
   if (!canManageClinical()) return;
   if (!confirm("¿Quitar la foto de este paciente?")) return;
@@ -115,7 +126,22 @@ const dato = (etiqueta, valor, clase = "") => `<p class="fd-dato ${clase}"><span
 
 const casilla = (marcada) => `<span class="fd-casilla">${marcada ? "X" : ""}</span>`;
 
-const siNo = (pregunta) => `<p class="fd-sino"><span>${pregunta}</span><span class="fd-sino-opciones">SI ${casilla(false)} NO ${casilla(false)}</span></p>`;
+/* Las respuestas SI/NO de la ficha viven en el paciente como
+   "hepatitis=SI|diabetes=NO": son pocas y no merecen un campo cada una. */
+function respuestasSiNo(patient) {
+  return new Map(String(patient?.fdSiNo || "").split("|").filter(Boolean).map((par) => par.split("=")));
+}
+
+// un clic marca, otro sobre la misma la desmarca, y marcar la otra la cambia
+function marcarSiNoDeLaFicha(patientId, pregunta, respuesta) {
+  const patient = patientById(patientId);
+  if (!patient || !canManageClinical() || !["SI", "NO"].includes(respuesta)) return null;
+  const respuestas = respuestasSiNo(patient);
+  if (respuestas.get(pregunta) === respuesta) respuestas.delete(pregunta);
+  else respuestas.set(pregunta, respuesta);
+  patient.fdSiNo = [...respuestas].map(([clave, valor]) => `${clave}=${valor}`).join("|");
+  return patient;
+}
 
 function membrete(config) {
   const contacto = [config.issuerAddress, config.issuerDistrict].filter(Boolean).join(" · ");
@@ -165,6 +191,25 @@ function fichaDeDatos(patientId, { pantalla = true, foto = null } = {}) {
         </div>`
       : ""}`;
 
+  /* Lo que el sistema no sabe se escribe sobre la misma raya, en pantalla, con
+     la misma letra que lo demas; se guarda en el paciente al salir del campo y
+     ya sale impreso. Los datos que vienen del registro (DNI, fechas, sexo...)
+     se corrigen en el registro, donde se validan. */
+  const escribe = (etiqueta, campo, clase = "", valor = patient[campo]) => {
+    if (!puedeEditar) return dato(etiqueta, valor, clase);
+    const dosPuntos = etiqueta.endsWith("?") ? "" : ":";
+    return `<p class="fd-dato ${clase}"><span>${etiqueta}${dosPuntos}</span><b class="hcf-escribible fd-escribible" contenteditable="plaintext-only" role="textbox" tabindex="0" data-destino="paciente" data-campo="${campo}" data-registro="${escapeHtml(patient.id)}">${escapeHtml(String(valor || "").trim())}</b></p>`;
+  };
+  const respuestas = respuestasSiNo(patient);
+  const opcion = (clave, respuesta) => {
+    const marcada = respuestas.get(clave) === respuesta;
+    if (!puedeEditar) return casilla(marcada);
+    return `<span class="fd-casilla es-clic" role="checkbox" tabindex="0" aria-checked="${marcada}" data-fd-sino="${clave}" data-fd-respuesta="${respuesta}" data-paciente="${escapeHtml(patient.id)}">${marcada ? "X" : ""}</span>`;
+  };
+  const siNo = (clave, pregunta) => `<p class="fd-sino"><span>${pregunta}</span><span class="fd-sino-opciones">SI ${opcion(clave, "SI")} NO ${opcion(clave, "NO")}</span></p>`;
+  // el distrito es la primera parte de la procedencia ("MOYOBAMBA, SAN MARTIN"), si no se escribio otro
+  const distrito = patient.district || String(patient.origin || "").split(",")[0].trim();
+
   // el color del consultorio va en la hoja misma: la ventana de impresion no lo hereda
   const color = /^#[0-9a-f]{6}$/i.test(config.primaryColor || "") ? config.primaryColor : "#00a6d6";
   return `<article class="hc-hoja fd" style="--fd-color: ${color}">
@@ -194,67 +239,67 @@ function fichaDeDatos(patientId, { pantalla = true, foto = null } = {}) {
       </div>
       <div class="fd-dos">
         ${dato("Estado civil", patient.maritalStatus)}
-        ${dato("Ocupación", patient.occupation)}
+        ${escribe("Ocupación", "occupation")}
       </div>
       <div class="fd-dos">
         ${dato("Titular / apoderado", titular)}
-        ${dato("Parentesco", patient.guardianRelation)}
+        ${escribe("Parentesco", "guardianRelation")}
       </div>
-      ${dato("Lugar de procedencia", patient.origin || patient.birthPlace, "fd-ancho")}
-      ${dato("Dirección", patient.address, "fd-ancho")}
+      ${escribe("Lugar de procedencia", "origin", "fd-ancho", patient.origin || patient.birthPlace)}
+      ${escribe("Dirección", "address", "fd-ancho")}
       <div class="fd-dos">
-        ${dato("Distrito", "")}
+        ${escribe("Distrito", "district", "", distrito)}
         ${dato("Celular", patient.phone)}
       </div>
       <div class="fd-dos">
-        ${dato("Correo", "")}
-        ${dato("¿Cómo nos conoció?", "")}
+        ${escribe("Correo", "email")}
+        ${escribe("¿Cómo nos conoció?", "fdComoNosConocio")}
       </div>
-      ${dato("Observación", patient.notes, "fd-ancho")}
+      ${escribe("Observación", "notes", "fd-ancho")}
       ${dato("Médico tratante", nombreCompletoDelDoctor(patient.doctor), "fd-ancho")}
-      ${dato("Dentista que lo atendió antes y tratamientos realizados", "", "fd-pregunta")}
+      ${escribe("Dentista que lo atendió antes y tratamientos realizados", "fdDentistaAnterior", "fd-pregunta")}
     </section>
 
     <h4 class="fd-seccion">Para casos de emergencia</h4>
     <section class="fd-bloque">
       <div class="fd-dos">
-        ${dato("Médico de confianza", "")}
-        ${dato("Servicio de ambulancia", "")}
+        ${escribe("Médico de confianza", "fdMedicoConfianza")}
+        ${escribe("Servicio de ambulancia", "fdAmbulancia")}
       </div>
-      ${dato("En caso de emergencia comunicarse con", patient.emergencyContact, "fd-ancho")}
+      ${escribe("En caso de emergencia comunicarse con", "emergencyContact", "fd-ancho")}
     </section>
 
     <h4 class="fd-seccion fd-centro">Anamnesis</h4>
     <h5 class="fd-subseccion">Antecedentes médicos</h5>
     <section class="fd-bloque">
-      ${dato("Alérgico a", patient.allergies, "fd-ancho")}
-      ${dato("Está tomando algún medicamento", patient.medications, "fd-ancho")}
-      ${dato("Nombre de su médico", "", "fd-ancho")}
-      ${siNo("¿Ha padecido hepatitis?")}
-      ${siNo("¿Sufre de diabetes?")}
-      ${siNo("¿Sufre de presión alta o del corazón?")}
-      ${dato("¿Sufre de alguna enfermedad que ponga en riesgo su vida o que debamos conocer?", patient.personalHistory, "fd-pregunta")}
+      ${escribe("Alérgico a", "allergies", "fd-ancho")}
+      ${escribe("Está tomando algún medicamento", "medications", "fd-ancho")}
+      ${escribe("Nombre de su médico", "fdNombreMedico", "fd-ancho")}
+      ${siNo("hepatitis", "¿Ha padecido hepatitis?")}
+      ${siNo("diabetes", "¿Sufre de diabetes?")}
+      ${siNo("presion", "¿Sufre de presión alta o del corazón?")}
+      ${escribe("¿Sufre de alguna enfermedad que ponga en riesgo su vida o que debamos conocer?", "personalHistory", "fd-pregunta")}
     </section>
 
     <h5 class="fd-subseccion">Antecedentes odontológicos</h5>
     <section class="fd-bloque">
       <div class="fd-dos">
-        ${dato("Frecuencia con que visita al dentista", "")}
-        ${dato("Experiencia dental traumática", "")}
+        ${escribe("Frecuencia con que visita al dentista", "fdFrecuencia")}
+        ${escribe("Experiencia dental traumática", "fdTraumatica")}
       </div>
       <div class="fd-dos">
-        ${dato("¿Le han extraído muelas?", "")}
-        ${dato("¿Complicación con la anestesia?", "")}
+        ${escribe("¿Le han extraído muelas?", "fdExtracciones")}
+        ${escribe("¿Complicación con la anestesia?", "fdAnestesia")}
       </div>
       <div class="fd-dos">
-        ${dato("¿Le sangran las encías?", "")}
-        ${dato("Fecha de la última profilaxis", "")}
+        ${escribe("¿Le sangran las encías?", "fdSangrado")}
+        ${escribe("Fecha de la última profilaxis", "fdProfilaxis")}
       </div>
       <div class="fd-dos">
-        ${dato("Fecha de la última atención", "")}
-        ${dato("¿Siente chasquidos al masticar o abrir la boca?", "")}
+        ${escribe("Fecha de la última atención", "fdUltimaAtencion")}
+        ${escribe("¿Siente chasquidos al masticar o abrir la boca?", "fdChasquidos")}
       </div>
-      ${siNo("¿Está satisfecho con su estética dental?")}
+      ${siNo("estetica", "¿Está satisfecho con su estética dental?")}
     </section>
 
     <footer class="fd-pie">
@@ -1017,5 +1062,5 @@ function cambiarFormatoDelOdontograma(marcado) {
   return true;
 }
 
-window.HojasExtra = { fichaDeDatos, traerFotoDeLaFicha, imprimirFichaDeDatos, ponerFoto, quitarFoto, hojaDeEvolucion, imprimirHojaDeEvolucion, guardarCeldaDeEvolucion, cambiarDoctorDeEvolucion, borrarFilaDeEvolucion, presupuestoImpreso, imprimirPresupuesto, fichaEstomatologica, imprimirFichaEstomatologica, alternarMarcaEstomatologica, cambiarFormatoDelOdontograma };
+window.HojasExtra = { fichaDeDatos, marcarSiNoDeLaFicha, cargarFoto, ponerFotoDelDni, traerFotoDeLaFicha, imprimirFichaDeDatos, ponerFoto, quitarFoto, hojaDeEvolucion, imprimirHojaDeEvolucion, guardarCeldaDeEvolucion, cambiarDoctorDeEvolucion, borrarFilaDeEvolucion, presupuestoImpreso, imprimirPresupuesto, fichaEstomatologica, imprimirFichaEstomatologica, alternarMarcaEstomatologica, cambiarFormatoDelOdontograma };
 })();
