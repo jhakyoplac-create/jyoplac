@@ -850,10 +850,25 @@ def normalizar_respuesta_documento(kind, number, payload):
                 if names.strip():
                     full_name = names.strip()
                     break
+        # DevEx manda la calle en "address" y aparte distrito, provincia y
+        # departamento: la calle va al domicilio y el resto a la procedencia
+        address = ""
+        origin_parts = []
+        for data in data_roots:
+            address = address or first_value(data, ["direccion_completa", "full_address", "direccion", "domicilio", "address"])
+            if not origin_parts:
+                origin_parts = [part for part in (
+                    first_value(data, ["district", "distrito"]),
+                    first_value(data, ["province", "provincia"]),
+                    first_value(data, ["department", "departamento"]),
+                ) if part]
+        origin = ", ".join(dict.fromkeys(part.upper() for part in origin_parts))
         return {
             "success": bool(full_name),
             "dni": str(number),
             "name": full_name.upper(),
+            "address": address.upper(),
+            "origin": origin,
             "raw": payload,
         }
 

@@ -7498,6 +7498,11 @@ async function lookupPatientDni() {
     const payload = await lookupExternalDni(dni);
     if (payload?.name) {
       nameField.value = payload.name;
+      // solo se llena lo vacio: lo que ya escribio recepcion manda
+      for (const [campo, valor] of [["address", payload.address], ["origin", payload.origin]]) {
+        const field = form.elements.namedItem(campo);
+        if (field && valor && !String(field.value || "").trim()) field.value = valor;
+      }
       if (hint) hint.textContent = "Nombre encontrado por DNI. Completa celular y fecha.";
     } else if (hint) {
       hint.textContent = "No se encontró el DNI. Completa los datos manualmente.";
