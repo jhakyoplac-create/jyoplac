@@ -7003,3 +7003,110 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* ---- Quien atendio, junto a Notas (2026-10-11) ----
+   El nombre con su flechita, como siempre; al tocarlo se abre una lista propia,
+   chica y blanca, con un check junto al elegido, en vez de la lista azul del
+   navegador. El select de siempre sigue guardando el dato, escondido. */
+.doctor-picker {
+  position: relative;
+  max-width: 60%;
+}
+
+#paymentForm #paymentAttendedBy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.doctor-picker-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 0;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--brand-primary, #00a6d6);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.doctor-picker-boton span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doctor-picker-boton svg {
+  width: 11px;
+  height: 8px;
+  flex: 0 0 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.doctor-picker-boton:focus,
+.doctor-picker-boton:focus-visible {
+  outline: none;
+}
+
+.doctor-picker-lista {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 170px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.doctor-picker-lista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.doctor-picker-lista li:hover,
+.doctor-picker-lista li[aria-selected="true"] {
+  background: #f2f4f5;
+}
+
+.doctor-picker-lista li svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: var(--brand-primary, #00a6d6);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  visibility: hidden;
+}
+
+.doctor-picker-lista li[aria-selected="true"] svg {
+  visibility: visible;
+}

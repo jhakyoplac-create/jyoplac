@@ -11371,7 +11371,55 @@ function bindEvents() {
       const form = $("#paymentForm");
       if (form) form.dataset.basePaymentAmount = "";
       aplicarCuadroDeDescuento();
+      dibujarSelectorDeDoctor();
     }, 0);
+  });
+  /* Quien atendio, junto a Notas: el nombre con su flechita, y al tocarlo una
+     lista propia con un check en el elegido. El dato sigue en el select
+     escondido, que es lo que llena sugerirDoctorDelPago y lo que se guarda. */
+  const selectorDoctor = $("#paymentAttendedBy");
+  const botonDoctor = $("#doctorPickerBtn");
+  const listaDoctor = $("#doctorPickerLista");
+  const cerrarListaDeDoctor = () => {
+    if (!listaDoctor || listaDoctor.hidden) return;
+    listaDoctor.hidden = true;
+    botonDoctor?.setAttribute("aria-expanded", "false");
+  };
+  function dibujarSelectorDeDoctor() {
+    if (!selectorDoctor || !botonDoctor || !listaDoctor) return;
+    const elegido = selectorDoctor.value;
+    $("#doctorPickerNombre").textContent = elegido || "Doctor";
+    listaDoctor.innerHTML = [...selectorDoctor.options].map((opcion) => `<li role="option" data-doctor="${escapeHtml(opcion.value)}" aria-selected="${opcion.value === elegido}">
+        <span>${escapeHtml(opcion.textContent)}</span>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>
+      </li>`).join("");
+  }
+  if (selectorDoctor) {
+    // fillSelect cambia las opciones sin avisar: se vuelve a dibujar al notarlo
+    new MutationObserver(dibujarSelectorDeDoctor).observe(selectorDoctor, { childList: true });
+    selectorDoctor.addEventListener("change", dibujarSelectorDeDoctor);
+    dibujarSelectorDeDoctor();
+  }
+  botonDoctor?.addEventListener("click", () => {
+    if (!listaDoctor) return;
+    const abrir = listaDoctor.hidden;
+    dibujarSelectorDeDoctor();
+    listaDoctor.hidden = !abrir;
+    botonDoctor.setAttribute("aria-expanded", String(abrir));
+  });
+  listaDoctor?.addEventListener("click", (event) => {
+    const opcion = event.target.closest("[data-doctor]");
+    if (!opcion) return;
+    selectorDoctor.value = opcion.dataset.doctor;
+    selectorDoctor.dispatchEvent(new Event("change", { bubbles: true }));
+    cerrarListaDeDoctor();
+    botonDoctor?.focus();
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".doctor-picker")) cerrarListaDeDoctor();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") cerrarListaDeDoctor();
   });
 
   $("#inventoryProductForm")?.addEventListener("submit", async (event) => {
