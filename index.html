@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261011-saldo-como-antes" />
+    <link rel="stylesheet" href="styles.css?v=20261011-saldo-recuadro-blanco" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -387,7 +387,7 @@
             <p class="treatment-discount-info" id="treatmentDiscountInfo" hidden></p>
             <button type="button" class="ghost danger-btn admin-only-action" id="clearHistoryDebtBtn" hidden>Quitar deuda</button>
             <p class="pago-seccion">Cobro</p>
-            <label>Saldo aprox. a pagar<input name="amountDue" type="number" readonly /></label>
+            <label class="pago-saldo"><span>Saldo aprox. a pagar</span><input name="amountDue" type="number" readonly /></label>
             <!-- el pago va a la fecha de la caja abierta (o la de la cita): este campo no decidia nada y solo confundia -->
             <input name="date" type="hidden" />
             <div class="pago-pareja">
