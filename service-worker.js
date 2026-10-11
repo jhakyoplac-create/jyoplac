@@ -1,13 +1,13 @@
-const CACHE_NAME = "cm-dental-shell-v173";
+const CACHE_NAME = "cm-dental-shell-v174";
 const SHELL_FILES = [
   "/",
   "/index.html",
   "/styles.css?v=20261009-texto-no-se-sale",
-  "/odontograma.css?v=20261009-defectos-del-esmalte",
-  "/app.js?v=20261010-curacion-compleja",
+  "/odontograma.css?v=20261010-color-al-lado-del-tipo",
+  "/app.js?v=20261010-color-al-lado-del-tipo",
   "/hojas-extra.js?v=20261010-evolucion-una-hoja",
   "/ver-contrasena.js?v=20261005-ojo-contrasena",
-  "/odontograma.js?v=20261009-desgaste-y-siglas-de-la-norma",
+  "/odontograma.js?v=20261010-color-al-lado-del-tipo",
   "/assets/dientes/incisivo.png",
   "/assets/dientes/canino.png",
   "/assets/dientes/premolar.png",

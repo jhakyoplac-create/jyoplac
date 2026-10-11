@@ -4974,6 +4974,11 @@ function odontogramFichaFor(patientId, sheet) {
         sup: saved.sup || {},
         pieza: saved.pieza || {},
         box: Array.isArray(saved.box) ? saved.box : [],
+        /* El buen o mal estado se guardaba bien pero aqui se tiraba al volver
+           a armar la ficha, asi que una protesis marcada en rojo reaparecia
+           azul en cuanto se recargaba la pantalla. */
+        mal: saved.mal || {},
+        malCara: saved.malCara || {},
         num: saved.num || null,
         nota: saved.nota || ""
       }

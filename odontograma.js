@@ -927,9 +927,6 @@
         return '<button type="button" class="odo-t' + (tool.k === x.k ? " on" : "") + '" data-tool="' + x.k + '">' +
           '<span class="odo-sw" style="' + sw + '"></span>' + esc(x.n) + "</button>";
       }).join("");
-      if (lista.some(function (x) { return x.malo; })) {
-        html += '<label class="odo-estado"><input type="checkbox" data-malo' + (malEstado ? " checked" : "") + "> Mal estado (rojo) · para lo que marques ahora</label>";
-      }
       html += "</div>";
 
       var m = meta(tool.k);
@@ -946,6 +943,21 @@
             return que ? '<small class="odo-sigque">' + esc(que) + "</small>" : "";
           })() +
           "</div>";
+      }
+      /* El color va aqui, pegado al tipo, porque es la otra mitad de la misma
+         decision: que se marca y en que estado esta. Vivia en una casilla
+         suelta al otro extremo de la barra y nadie la relacionaba con el
+         hallazgo que tenia elegido. Solo sale en los once hallazgos que la
+         norma admite en buen y mal estado; en los demas el color lo fija ella
+         y no hay nada que elegir. */
+      if (m && m.malo) {
+        html += '<div class="odo-sigrow"><em>Estado</em>' +
+          [["bueno", "Buen estado", m.c], ["malo", "Mal estado", "rojo"]].map(function (op) {
+            var elegido = (op[0] === "malo") === malEstado;
+            return '<button type="button" class="odo-sig odo-estado-op' + (elegido ? " on" : "") +
+              '" data-estado="' + op[0] + '">' +
+              '<span class="odo-sw" style="background:' + col(op[2]) + '"></span>' + op[1] + "</button>";
+          }).join("") + "</div>";
       }
       var hint = m ? m.hint : "";
       if (pendiente) hint = "<b>Pieza " + pendiente + " seleccionada.</b> Ahora haz clic en la segunda pieza del mismo maxilar.";
@@ -1271,6 +1283,8 @@
       }
       var s = ev.target.closest("[data-sig]");
       if (s) { tool.sig = s.dataset.sig; renderBarra(); return; }
+      var e = ev.target.closest("[data-estado]");
+      if (e) { malEstado = e.dataset.estado === "malo"; renderBarra(); renderChart(); return; }
     }
     function onCambioNino(ev) {
       if (!ev.target.classList || !ev.target.classList.contains("odo-nino-check")) return;
@@ -1279,12 +1293,6 @@
       render();
       avisar([CLAVE_FICHA]);
     }
-    function onCambioBarra(ev) {
-      if (!ev.target.hasAttribute || !ev.target.hasAttribute("data-malo")) return;
-      malEstado = ev.target.checked;
-      render();
-    }
-
     function onClickLienzo(ev) {
       if (ev.target.closest(".odo-undo")) {
         var u = hist.pop();
@@ -1494,7 +1502,6 @@
     esqueleto();
     if (barra) {
       barra.addEventListener("click", onClickBarra);
-      barra.addEventListener("change", onCambioBarra);
     }
     lienzo.addEventListener("click", onClickLienzo);
     lienzo.addEventListener("input", onInputLienzo);
