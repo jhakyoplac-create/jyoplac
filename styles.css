@@ -6700,3 +6700,83 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   min-width: 0;
   max-width: 100%;
 }
+
+/* "+ Servicio": en la linea del titulo "Atencion pendiente", a la derecha.
+   Si aparece el cuadro de descontar del tratamiento, ese se corre a su lado. */
+.servicio-extra-btn {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  min-height: 0;
+  height: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #006b88;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.servicio-extra-btn:hover {
+  background: #dff7ff;
+}
+
+.payment-attention-row .treatment-discount {
+  right: 92px;
+}
+
+/* cada servicio en un renglon: nombre ancho, precio angosto y la x */
+.servicios-extra {
+  display: grid;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.servicio-extra-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 28px;
+  gap: 6px;
+  align-items: center;
+}
+
+#paymentForm .servicio-extra-fila input {
+  min-height: 34px;
+  height: 34px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.servicio-extra-fila input[type="number"] {
+  text-align: right;
+}
+
+.servicio-extra-quitar {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: #8a959b;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.servicio-extra-quitar:hover {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+/* en el tema dorado de Aurea, los botones "+ Producto" y "+ Servicio" van en su color */
+:root[data-tema="dorado"] .servicio-extra-btn {
+  color: #8a6a26;
+}
+
+:root[data-tema="dorado"] .servicio-extra-btn:hover {
+  background: #fdf8ec;
+}

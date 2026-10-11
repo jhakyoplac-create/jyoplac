@@ -151,6 +151,8 @@ let expandedPatientInfoId = "";
 const patientAppointmentHistoryLoaded = new Set();
 let selectedCashViewDate = "";
 let selectedProductSaleItems = [];
+// servicios escritos a mano en el cobro que se esta armando: { texto, monto }
+let serviciosExtra = [];
 let selectedCashReportRange = null;
 /* Lo que el servidor sabe de la facturacion electronica. Vive aparte del estado
    guardado porque depende del servidor, no de este navegador. */
@@ -633,6 +635,18 @@ function mapApiOdontogramSnapshot(row) {
   };
 }
 
+// el servidor los guarda como texto JSON; la copia local ya los trae como lista
+function serviciosExtraDeLaFila(row) {
+  const valor = row.servicios_extra ?? row.serviciosExtra;
+  if (Array.isArray(valor)) return valor;
+  try {
+    const lista = JSON.parse(valor || "[]");
+    return Array.isArray(lista) ? lista : [];
+  } catch {
+    return [];
+  }
+}
+
 function mapApiPayment(row) {
   return {
     id: row.id,
@@ -642,6 +656,8 @@ function mapApiPayment(row) {
     date: row.date,
     amount: Number(row.amount || 0),
     productAmount: Number(row.product_total ?? row.productAmount ?? 0),
+    serviciosExtra: serviciosExtraDeLaFila(row),
+    extrasAmount: Number(row.extras_total ?? row.extrasAmount ?? 0),
     cashReceived: Number(row.cash_received ?? row.cashReceived ?? 0),
     change: Number(row.change_amount ?? row.change ?? 0),
     method: row.method,
@@ -1765,7 +1781,7 @@ function historyPaid(historyId) {
   return state.payments
     .filter((payment) => payment.historyId === historyId)
     // lo descontado del tratamiento tambien cubre la atencion, aunque no sea dinero
-    .reduce((sum, payment) => sum + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0)) + Number(payment.descontado || 0), 0);
+    .reduce((sum, payment) => sum + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0) - Number(payment.extrasAmount || 0)) + Number(payment.descontado || 0), 0);
 }
 
 function historyBalance(historyId) {
@@ -1807,7 +1823,7 @@ function avanceDelTratamiento(tratamiento) {
   const movimientos = state.payments.filter((payment) => payment.treatmentId && payment.treatmentId === tratamiento.id);
   const pagado = movimientos
     .filter((payment) => !esDescuentoDeTratamiento(payment))
-    .reduce((suma, payment) => suma + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0)), 0);
+    .reduce((suma, payment) => suma + Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0) - Number(payment.extrasAmount || 0)), 0);
   const usado = movimientos
     .filter(esDescuentoDeTratamiento)
     .reduce((suma, payment) => suma + Number(payment.descontado || 0), 0);
@@ -3365,12 +3381,17 @@ function renderTreatmentPaymentOptions() {
     }
     const form = $("#paymentForm");
     if (form?.amount) form.amount.readOnly = false;
-    if (form?.amountDue) form.amountDue.value = amount || 0;
+    if (form?.amountDue) ponerSaldoBase(form, amount || 0);
     if (form?.date) form.date.value = appointment.date || operatingDate();
-    if (form?.amount && (!Number(form.amount.value || 0) || form.dataset.paymentMode !== "agenda")) form.amount.value = amount || "";
+    const precioNuevo = form?.amount && (!Number(form.amount.value || 0) || form.dataset.paymentMode !== "agenda");
+    if (precioNuevo) form.amount.value = amount || "";
     if (form) {
       form.dataset.paymentMode = "agenda";
-      form.dataset.basePaymentAmount = Number(form.amount?.value || 0);
+      /* Si el monto ya estaba puesto, trae sumados los productos y servicios:
+         la base es lo que queda sin ellos, o se volverian a sumar. */
+      form.dataset.basePaymentAmount = precioNuevo
+        ? Number(form.amount?.value || 0)
+        : Math.max(0, Number(form.amount?.value || 0) - paymentProductTotal() - serviciosExtraTotal());
       applyProductTotalToPaymentForm();
     }
     const clearDebtBtn = $("#clearHistoryDebtBtn");
@@ -3434,7 +3455,7 @@ function recalcularSaldoDelPago() {
        boleta, como cualquier cobro. */
     const tratamiento = tratamientoPorId(valor.slice(5));
     const porPagar = tratamiento ? tratamiento.porPagar : 0;
-    form.amountDue.value = porPagar;
+    ponerSaldoBase(form, porPagar);
     form.amount.value = porPagar || "";
     form.amount.readOnly = false;
     form.dataset.paymentMode = "tratamiento";
@@ -3452,14 +3473,14 @@ function recalcularSaldoDelPago() {
       return;
     }
     form.amount.readOnly = false;
-    form.dataset.basePaymentAmount = Number(form.amount.value || 0);
+    form.dataset.basePaymentAmount = Math.max(0, Number(form.amount.value || 0) - paymentProductTotal() - serviciosExtraTotal());
     applyProductTotalToPaymentForm();
     updatePaymentChange();
     aplicarCuadroDeDescuento();
     return;
   }
   const due = historyBalance(form.historyId.value);
-  form.amountDue.value = due || 0;
+  ponerSaldoBase(form, due || 0);
   form.amount.value = due || "";
   form.dataset.paymentMode = "debt";
   form.dataset.basePaymentAmount = Number(form.amount.value || 0);
@@ -3532,6 +3553,9 @@ async function guardarDescuentoDeTratamiento({ form, data, restorePaymentButton 
   if (!tratamiento) return fallar("Este paciente ya no tiene saldo disponible en su tratamiento.");
   if ((selectedProductSaleItems || []).some((item) => Number(item.quantity || 0) > 0)) {
     return fallar("Los productos se cobran aparte: quítalos o desmarca el descuento.");
+  }
+  if (serviciosExtraTotal() > 0) {
+    return fallar("Los servicios agregados se cobran aparte: quítalos o desmarca el descuento.");
   }
   if (monto <= 0 || monto > tratamiento.disponible) {
     return fallar(`El monto debe ser mayor a cero y no pasar de lo disponible (${money(tratamiento.disponible)}).`);
@@ -3640,10 +3664,43 @@ function applyProductTotalToPaymentForm() {
   if (!form) return;
   const base = Number(form.dataset.basePaymentAmount || form.amount?.value || 0);
   const productTotal = paymentProductTotal();
-  const total = base + productTotal;
+  const extras = serviciosExtraTotal();
+  const total = base + productTotal + extras;
   if (form.amount) form.amount.value = total ? cents(total) / 100 : "";
+  /* Los servicios agregados se suman al saldo: el saldo de la atencion queda
+     guardado aparte para no sumarlos dos veces al redibujar. */
+  if (form.amountDue) {
+    const saldoBase = Number(form.amountDue.dataset.base ?? form.amountDue.value ?? 0);
+    form.amountDue.dataset.base = saldoBase;
+    form.amountDue.value = cents(saldoBase + extras) / 100;
+  }
   renderPaymentProductSummary();
   updatePaymentChange();
+}
+
+/* Servicios escritos a mano en el cobro -una consulta, una radiografia-, con
+   su precio. Se suman al saldo y al monto que paga, entran a caja, y no abonan
+   a la deuda ni al tratamiento que se cobra. */
+function serviciosExtraTotal() {
+  return serviciosExtra.reduce((suma, item) => suma + Math.max(0, Number(item.monto || 0)), 0);
+}
+
+// el saldo de la atencion, sin los servicios: esos se suman encima
+function ponerSaldoBase(form, saldo) {
+  form.amountDue.dataset.base = Number(saldo || 0);
+  form.amountDue.value = Number(saldo || 0) + serviciosExtraTotal();
+}
+
+// solo se dibuja al agregar o quitar; al escribir no, para no perder el cursor
+function renderServiciosExtra() {
+  const caja = $("#serviciosExtra");
+  if (!caja) return;
+  caja.hidden = !serviciosExtra.length;
+  caja.innerHTML = serviciosExtra.map((item, index) => `<div class="servicio-extra-fila">
+      <input data-servicio-texto="${index}" value="${escapeHtml(item.texto || "")}" placeholder="Servicio, ej. Radiografia" aria-label="Servicio" maxlength="80" />
+      <input data-servicio-monto="${index}" value="${item.monto === "" || item.monto === undefined ? "" : escapeHtml(String(item.monto))}" type="number" min="0" step="0.01" placeholder="S/ 0.00" aria-label="Precio" />
+      <button type="button" class="servicio-extra-quitar" data-servicio-quitar="${index}" title="Quitar" aria-label="Quitar servicio">×</button>
+    </div>`).join("");
 }
 
 function renderPaymentProductSummary() {
@@ -7608,7 +7665,9 @@ async function completePendingPayment(receiptValues = null) {
     if (forcedPaymentHistoryId === payment.historyId) forcedPaymentHistoryId = "";
     form.reset();
     selectedProductSaleItems = [];
+    serviciosExtra = [];
     renderPaymentProductSummary();
+    renderServiciosExtra();
     form.date.value = operatingDate();
     pendingPaymentContext = null;
     $("#receiptPromptDialog")?.close("ok");
@@ -11051,9 +11110,38 @@ function bindEvents() {
        productos. Sin esto, agregar un producto despues de escribir un abono de
        30 devolvia el total de la deuda y se cobraba de mas. */
     const form = $("#paymentForm");
-    if (form) form.dataset.basePaymentAmount = Math.max(0, Number(form.amount.value || 0) - paymentProductTotal());
+    if (form) form.dataset.basePaymentAmount = Math.max(0, Number(form.amount.value || 0) - paymentProductTotal() - serviciosExtraTotal());
     updatePaymentChange();
     aplicarCuadroDeDescuento();
+  });
+  /* Servicios escritos a mano en el cobro. Si ya hay un renglon en blanco, el
+     boton usa ese: no se apilan vacios. */
+  $("#agregarServicioExtraBtn")?.addEventListener("click", () => {
+    let vacio = serviciosExtra.findIndex((item) => !String(item.texto || "").trim() && !Number(item.monto || 0));
+    if (vacio < 0) {
+      serviciosExtra = [...serviciosExtra, { texto: "", monto: "" }];
+      vacio = serviciosExtra.length - 1;
+      renderServiciosExtra();
+    }
+    $(`#serviciosExtra [data-servicio-texto="${vacio}"]`)?.focus();
+  });
+  $("#serviciosExtra")?.addEventListener("input", (event) => {
+    const campo = event.target;
+    const item = serviciosExtra[Number(campo.dataset.servicioTexto ?? campo.dataset.servicioMonto)];
+    if (!item) return;
+    if (campo.dataset.servicioTexto !== undefined) {
+      item.texto = campo.value;
+      return;
+    }
+    item.monto = campo.value === "" ? "" : Math.max(0, Number(campo.value || 0));
+    applyProductTotalToPaymentForm();
+  });
+  $("#serviciosExtra")?.addEventListener("click", (event) => {
+    const boton = event.target.closest("[data-servicio-quitar]");
+    if (!boton) return;
+    serviciosExtra = serviciosExtra.filter((_, index) => index !== Number(boton.dataset.servicioQuitar));
+    renderServiciosExtra();
+    applyProductTotalToPaymentForm();
   });
   $('#paymentForm input[name="descontarTratamiento"]')?.addEventListener("change", aplicarCuadroDeDescuento);
   $('#paymentForm input[name="cashReceived"]').addEventListener("input", updatePaymentChange);
@@ -11172,7 +11260,21 @@ function bindEvents() {
     const amount = Number(data.amount || 0);
     const productsTotal = paymentProductTotal();
     const hasProducts = productsTotal > 0 && selectedProductSaleItems.length > 0;
-    const careAmount = Math.max(0, amount - productsTotal);
+    const extrasDelPago = serviciosExtra
+      .map((item) => ({ texto: String(item.texto || "").replace(/\s+/g, " ").trim(), monto: cents(Number(item.monto || 0)) / 100 }))
+      .filter((item) => item.texto || item.monto > 0);
+    if (extrasDelPago.some((item) => !item.texto || item.monto <= 0)) {
+      alert("A cada servicio agregado ponle su nombre y su precio, o quitalo.");
+      restorePaymentButton();
+      return;
+    }
+    const extrasTotal = extrasDelPago.reduce((suma, item) => suma + item.monto, 0);
+    if (amount < productsTotal + extrasTotal) {
+      alert(`El monto que paga no cubre los servicios y productos agregados (${money(productsTotal + extrasTotal)}).`);
+      restorePaymentButton();
+      return;
+    }
+    const careAmount = Math.max(0, amount - productsTotal - extrasTotal);
     if (!appointment && !data.historyId && !hasProducts) {
       alert("Selecciona una atencion pendiente, una cita del dia o agrega un producto.");
       restorePaymentButton();
@@ -11219,6 +11321,8 @@ function bindEvents() {
       date: cashDate,
       amount,
       productAmount: productsTotal,
+      serviciosExtra: extrasDelPago,
+      extrasAmount: extrasTotal,
       cashReceived,
       change: Math.max(0, cashReceived - cashPortion),
       method: String(data.method || "").toUpperCase(),
@@ -11229,9 +11333,13 @@ function bindEvents() {
         quantity: Number(item.quantity || 0),
         price: Number(item.price || 0)
       })),
-      receipt: tratamientoCobrado && !String(data.receipt || "").trim()
-        ? `Tratamiento: ${tratamientoCobrado.entry.plan}`
-        : buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
+      // los servicios agregados quedan escritos en la nota, como los productos
+      receipt: [
+        tratamientoCobrado && !String(data.receipt || "").trim()
+          ? `Tratamiento: ${tratamientoCobrado.entry.plan}`
+          : buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
+        extrasDelPago.length ? `Servicios: ${extrasDelPago.map((item) => `${item.texto} ${money(item.monto)}`).join(", ")}` : ""
+      ].filter((parte) => String(parte || "").trim()).join(" | "),
       /* Quien atendio ese dia, que no siempre es el doctor asignado: si Carlos
          se demora, lo atiende otra y la comision le toca a ella. Se guarda en el
          pago porque es ahi donde se sabe y donde se cuenta el dinero. */
@@ -11245,6 +11353,8 @@ function bindEvents() {
   });
   $("#paymentForm")?.addEventListener("reset", () => {
     selectedProductSaleItems = [];
+    serviciosExtra = [];
+    renderServiciosExtra();
     setTimeout(() => {
       renderPaymentProductSummary();
       const form = $("#paymentForm");

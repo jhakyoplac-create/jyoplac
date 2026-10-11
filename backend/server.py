@@ -381,6 +381,11 @@ def migrate_db(conn):
     ensure_column(conn, "payments", "treatment_id", "TEXT")
     ensure_column(conn, "payments", "tipo", "TEXT")
     ensure_column(conn, "payments", "descontado", "REAL NOT NULL DEFAULT 0")
+    # Servicios que el doctor escribe a mano al cobrar (una consulta, una
+    # radiografia), con su precio. Entran a caja con el pago, pero no abonan a la
+    # deuda ni al tratamiento que se cobra: por eso su total va aparte.
+    ensure_column(conn, "payments", "servicios_extra", "TEXT")
+    ensure_column(conn, "payments", "extras_total", "REAL NOT NULL DEFAULT 0")
     # Numero de historia clinica: se asigna la primera vez que se imprime.
     ensure_column(conn, "patients", "historia_numero", "INTEGER")
     ensure_column(conn, "patients", "historia_desde", "TEXT")
@@ -2581,6 +2586,20 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     method = "TRATAMIENTO"
                     product_items = []
                 products_total = sum(float(item.get("quantity") or 0) * float(item.get("price") or item.get("unitPrice") or 0) for item in product_items)
+                servicios_extra = []
+                for item in (data.get("serviciosExtra") if isinstance(data.get("serviciosExtra"), list) else []):
+                    texto = " ".join(str((item or {}).get("texto") or "").split())[:80]
+                    monto = round(float((item or {}).get("monto") or 0), 2)
+                    if not texto and monto <= 0:
+                        continue
+                    if not texto or monto <= 0:
+                        return send_json(self, {"error": "A cada servicio agregado ponle su nombre y su precio, o quitalo."}, 400)
+                    servicios_extra.append({"texto": texto, "monto": monto})
+                if es_descuento:
+                    servicios_extra = []
+                extras_total = round(sum(item["monto"] for item in servicios_extra), 2)
+                if not es_descuento and round(amount, 2) < round(products_total + extras_total, 2):
+                    return send_json(self, {"error": "El monto que paga no cubre los servicios y productos agregados."}, 400)
                 split = {
                     "cash_amount": float(data.get("cashAmount") or 0),
                     "yape_amount": float(data.get("yapeAmount") or 0),
@@ -2636,7 +2655,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         if not tratamiento or float(tratamiento["plan_budget"] or 0) <= 0 or tratamiento["patient_id"] != data.get("patientId"):
                             return send_json(self, {"error": "El tratamiento no existe o no es de este paciente."}, 400)
                         pagado = float(conn.execute(
-                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0)), 0) AS total FROM payments "
+                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0) - COALESCE(extras_total, 0)), 0) AS total FROM payments "
                             "WHERE treatment_id = ? AND COALESCE(tipo, '') <> 'DESCUENTO_TRATAMIENTO' AND id <> ?",
                             (treatment_id, item_id),
                         ).fetchone()["total"] or 0)
@@ -2651,7 +2670,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                                 return send_json(self, {"error": f"El descuento debe ser mayor a cero y no pasar de lo disponible (S/ {disponible:.2f})."}, 400)
                         else:
                             por_pagar = round(float(tratamiento["plan_budget"] or 0) - pagado, 2)
-                            cobro = round(amount - products_total, 2)
+                            cobro = round(amount - products_total - extras_total, 2)
                             if cobro <= 0 or cobro > por_pagar:
                                 return send_json(self, {"error": f"El cobro del tratamiento debe ser mayor a cero y no pasar de lo que falta pagar (S/ {por_pagar:.2f})."}, 400)
                     elif es_descuento:
@@ -2662,11 +2681,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             return send_json(self, {"error": "Selecciona una atencion pendiente valida."}, 400)
                         # lo descontado del tratamiento tambien cubre la atencion
                         paid = conn.execute(
-                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0) + COALESCE(descontado, 0)), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
+                            "SELECT COALESCE(SUM(amount - COALESCE(product_total, 0) - COALESCE(extras_total, 0) + COALESCE(descontado, 0)), 0) AS total FROM payments WHERE history_id = ? AND id <> ?",
                             (history_id, item_id),
                         ).fetchone()["total"]
                         due = max(0, float(history["agreed_price"] or 0) - float(paid or 0))
-                        care_amount = descontado if es_descuento else amount - products_total
+                        care_amount = descontado if es_descuento else amount - products_total - extras_total
                         if (amount <= 0 and not es_descuento) or care_amount <= 0 or care_amount > due:
                             return send_json(self, {"error": "El monto debe ser mayor a cero y no puede superar el saldo pendiente."}, 400)
                     elif data.get("appointmentId"):
@@ -2705,15 +2724,19 @@ class DentalHandler(SimpleHTTPRequestHandler):
                                 product_labels.append(f"{float(item.get('quantity') or 0):g} {product['name']}")
                         if product_labels:
                             receipt_value = (str(receipt_value or "").strip() + " | " if str(receipt_value or "").strip() else "") + "Productos: " + ", ".join(product_labels)
+                    if servicios_extra and "Servicios:" not in str(receipt_value or ""):
+                        lista = ", ".join(f"{item['texto']} S/ {item['monto']:,.2f}" for item in servicios_extra)
+                        receipt_value = (str(receipt_value or "").strip() + " | " if str(receipt_value or "").strip() else "") + "Servicios: " + lista
                     conn.execute(
                         """
                         INSERT INTO payments (
                           id, patient_id, history_id, appointment_id, date, amount, product_total, cash_received,
                           change_amount, cash_amount, yape_amount, plin_amount,
                           card_amount, transfer_amount, method, receipt, comprobante,
-                          registered_by, attended_by, closed, treatment_id, tipo, descontado
+                          registered_by, attended_by, closed, treatment_id, tipo, descontado,
+                          servicios_extra, extras_total
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                           patient_id=excluded.patient_id, history_id=excluded.history_id,
                           appointment_id=excluded.appointment_id,
@@ -2738,7 +2761,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                           closed=excluded.closed,
                           treatment_id=excluded.treatment_id,
                           tipo=excluded.tipo,
-                          descontado=excluded.descontado
+                          descontado=excluded.descontado,
+                          servicios_extra=excluded.servicios_extra,
+                          extras_total=excluded.extras_total
                         """,
                         (
                             item_id,
@@ -2764,6 +2789,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             treatment_id or None,
                             "DESCUENTO_TRATAMIENTO" if es_descuento else None,
                             descontado,
+                            json.dumps(servicios_extra, ensure_ascii=False) if servicios_extra else None,
+                            extras_total,
                         ),
                     )
                     # un descuento que no cubre toda la cita la deja abierta para

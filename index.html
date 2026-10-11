@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261011-ficha-escribible" />
+    <link rel="stylesheet" href="styles.css?v=20261011-servicios-en-el-cobro" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -374,17 +374,20 @@
             <input type="hidden" name="id" />
             <div class="payment-patient-row">
               <label>Paciente<select name="patientId" required></select></label>
-              <button class="icon product-picker-button" id="openProductSaleBtn" type="button" title="Agregar producto">+</button>
+              <button class="servicio-extra-btn" id="openProductSaleBtn" type="button" title="Agregar un producto del inventario">+ Producto</button>
             </div>
             <div id="paymentProductSummary" class="product-sale-summary" hidden></div>
             <div class="payment-attention-row">
               <label>Atencion pendiente<select name="historyId"></select></label>
               <label class="treatment-discount" id="treatmentDiscountBox" hidden title="Descuenta del dinero que el paciente ya pagó por su tratamiento. No entra a caja ni genera boleta."><input type="checkbox" name="descontarTratamiento" />Descontar del tratamiento</label>
+              <button type="button" class="servicio-extra-btn" id="agregarServicioExtraBtn" title="Agregar un servicio con su precio: se suma al saldo">+ Servicio</button>
             </div>
+            <div class="servicios-extra" id="serviciosExtra" hidden></div>
             <p class="treatment-discount-info" id="treatmentDiscountInfo" hidden></p>
             <button type="button" class="ghost danger-btn admin-only-action" id="clearHistoryDebtBtn" hidden>Quitar deuda</button>
             <label>Saldo a pagar<input name="amountDue" type="number" readonly /></label>
-            <label>Fecha<input name="date" type="date" required /></label>
+            <!-- el pago va a la fecha de la caja abierta (o la de la cita): este campo no decidia nada y solo confundia -->
+            <input name="date" type="hidden" />
             <label>Monto que paga S/<input name="amount" type="number" min="0" step="0.01" readonly required /></label>
             <label>Monto recibido S/<input name="cashReceived" type="number" min="0" step="0.01" /></label>
             <label>Vuelto S/<input name="change" type="number" readonly /></label>
@@ -1355,6 +1358,6 @@
     <!-- El ojito para ver lo que se escribe en los campos de contrasena. -->
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
     <script src="hojas-extra.js?v=20261011-ficha-escribible"></script>
-    <script src="app.js?v=20261011-ficha-escribible"></script>
+    <script src="app.js?v=20261011-servicios-en-el-cobro"></script>
   </body>
 </html>
