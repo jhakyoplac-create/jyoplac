@@ -6144,15 +6144,37 @@ const TRABAJO_DEL_ODONTOGRAMA = {
   curacion_simple: { detalle: "Curación simple", servicio: "Curaciones Simples" },
   curacion_compuesta: { detalle: "Curación compuesta", servicio: "Curaciones Compuestas" },
   curacion_compleja: { detalle: "Curación compleja", servicio: "Curaciones Complejas", respaldo: "Curaciones Compuestas" },
-  restauracion_definitiva: { detalle: "Cambiar restauración temporal", servicio: "Restauraciones Estéticas" },
+  /* Sin servicio: el odontograma ve que hay que cambiar la temporal, pero no
+     por que -resina, amalgama, una incrustacion- y cada material cuesta
+     distinto. El precio lo pone el doctor. */
+  restauracion_definitiva: { detalle: "Restauración definitiva", servicio: "" },
   extraccion: { detalle: "Extracción", servicio: "Extracción Simple" },
   extraccion_molar: { detalle: "Extracción de tercer molar", servicio: "Extracción Tercer Molar" },
   resto_radicular: { detalle: "Extracción de resto radicular", servicio: "Extracción Simple" },
-  corona_definitiva: { detalle: "Cambiar corona temporal por definitiva", servicio: "Corona Porcelana" },
-  fractura: { detalle: "Fractura, el tratamiento lo decide el doctor", servicio: "" }
+  /* Lo mismo con la corona: puede ser de porcelana, de zirconio o
+     metal-ceramica, y el odontograma no tiene como saberlo. */
+  corona_definitiva: { detalle: "Corona definitiva", servicio: "" },
+  fractura: { detalle: "Fractura", servicio: "" },
+  /* Solo cuando estan en rojo. En azul la norma dice que el tratamiento esta
+     hecho y en buen estado, asi que no hay nada que cobrar. */
+  endodoncia: { detalle: "Endodoncia", servicio: "Endodoncia" },
+  corona_rehacer: { detalle: "Corona definitiva", servicio: "" }
 };
 
 const TERCEROS_MOLARES = ["18", "28", "38", "48"];
+
+/* Hasta donde llego la caries de esta pieza. La sigla se guarda en el recuadro
+   y el presupuesto nunca la miraba: contaba caras y nada mas, asi que una
+   mancha blanca y una caries que toca el nervio salian las dos como la misma
+   curacion. De mas superficial a mas honda. */
+const NIVELES_DE_CARIES = ["MB", "CE", "CD", "CDP"];
+function nivelDeCaries(diente) {
+  let nivel = "";
+  (diente.box || []).forEach((marca) => {
+    if (NIVELES_DE_CARIES.indexOf(marca.k) > NIVELES_DE_CARIES.indexOf(nivel)) nivel = marca.k;
+  });
+  return nivel;
+}
 
 function sinTildes(texto) {
   return String(texto || "").trim().toLocaleLowerCase("es").normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -6173,15 +6195,21 @@ function presupuestoDelOdontograma(patientId) {
   if (!Odontograma || !patientId) return [];
   const ficha = odontogramFichaFor(patientId, "inicial");
   const lineas = [];
-  const agregar = (pieza, clave, nota = "") => {
+  const agregar = (pieza, clave, nota = "", nivel = "") => {
     const trabajo = TRABAJO_DEL_ODONTOGRAMA[clave];
     if (!trabajo) return;
+    /* La mancha blanca no tiene cavidad que rellenar: se controla y se
+       remineraliza. Baja igual al presupuesto, pero sin precio, para que el
+       doctor decida si cobra algo o quita la linea. */
+    const deLista = precioDelServicio(trabajo.servicio) ?? precioDelServicio(trabajo.respaldo);
     lineas.push({
       clave: `${pieza}:${clave}`,
       pieza,
-      detalle: trabajo.detalle + (nota ? ` · ${nota}` : ""),
+      /* Que la caries toque el nervio no decide el tratamiento -eso lo evalua
+         el doctor-, pero tiene que verlo en la linea para elegir. */
+      detalle: trabajo.detalle + (nota ? ` · ${nota}` : "") + (nivel === "CDP" ? " · compromiso pulpar" : ""),
       servicio: trabajo.servicio,
-      precioLista: precioDelServicio(trabajo.servicio) ?? precioDelServicio(trabajo.respaldo)
+      precioLista: nivel === "MB" ? "" : deLista
     });
   };
   (Odontograma.PIEZAS || []).forEach((pieza) => {
@@ -6189,9 +6217,10 @@ function presupuestoDelOdontograma(patientId) {
     if (!diente) return;
     const caras = Object.keys(diente.sup || {});
     const conCaries = caras.filter((cara) => diente.sup[cara] === "caries");
-    if (conCaries.length === 1) agregar(pieza, "curacion_simple", "1 cara");
-    if (conCaries.length === 2) agregar(pieza, "curacion_compuesta", "2 caras");
-    if (conCaries.length > 2) agregar(pieza, "curacion_compleja", `${conCaries.length} caras`);
+    const nivel = conCaries.length ? nivelDeCaries(diente) : "";
+    if (conCaries.length === 1) agregar(pieza, "curacion_simple", "1 cara", nivel);
+    if (conCaries.length === 2) agregar(pieza, "curacion_compuesta", "2 caras", nivel);
+    if (conCaries.length > 2) agregar(pieza, "curacion_compleja", `${conCaries.length} caras`, nivel);
     if (caras.some((cara) => diente.sup[cara] === "rest_temp")) agregar(pieza, "restauracion_definitiva");
     const de = diente.pieza || {};
     if ("por_extraer" in de) {
@@ -6200,6 +6229,9 @@ function presupuestoDelOdontograma(patientId) {
     if ("rr" in de) agregar(pieza, "resto_radicular");
     if ("corona_tmp" in de) agregar(pieza, "corona_definitiva");
     if ("fractura" in de) agregar(pieza, "fractura");
+    const mal = diente.mal || {};
+    if ("pulpar" in de && mal.pulpar) agregar(pieza, "endodoncia");
+    if ("corona_def" in de && mal.corona_def) agregar(pieza, "corona_rehacer");
   });
   return lineas;
 }
@@ -6236,7 +6268,10 @@ function lineasDelPresupuesto(patientId) {
       ...linea,
       cantidad: 1,
       aMano: false,
-      precio: Number(propio === undefined || propio === "" ? (linea.precioLista || 0) : propio),
+      /* Vacio cuando no hay de donde sacarlo: ni el doctor lo escribio ni el
+         consultorio lo tiene en su catalogo. Antes caia en cero, y una linea
+         sin tarifar se veia igual que una de cortesia. */
+      precio: propio === undefined || propio === "" ? (linea.precioLista ?? "") : Number(propio),
       quitada: guardado.quitadas.includes(linea.clave)
     };
   });
@@ -6251,7 +6286,7 @@ function lineasDelPresupuesto(patientId) {
       cantidad: Math.max(1, Number(suelto.cantidad || 1)),
       aMano: true,
       // el precio de la lista puede haber cambiado: manda el que se escribio
-      precio: Number(propio === undefined || propio === "" ? (suelto.precio ?? deLista ?? 0) : propio),
+      precio: propio === undefined || propio === "" ? (suelto.precio ?? deLista ?? "") : Number(propio),
       quitada: guardado.quitadas.includes(suelto.clave)
     };
   });
@@ -6262,6 +6297,20 @@ function lineasDelPresupuesto(patientId) {
 /* Lo que suma una linea: en el papel del consultorio la cantidad va en su
    columna y el total es la multiplicacion, igual que en su talonario. */
 const totalDeLaLinea = (linea) => Number(linea.precio || 0) * Math.max(1, Number(linea.cantidad || 1));
+
+/* Una linea a la que todavia no le pusieron precio. No suma nada y en su
+   total se ve una raya, para que se note cual falta antes de imprimir. */
+const sinPrecio = (linea) => linea.precio === "" || linea.precio === null || linea.precio === undefined;
+
+/* Las piezas que entrarian en la proforma sin precio puesto. El papel que se
+   le entrega al paciente no puede decir S/0.00 en un tratamiento que si se
+   cobra, asi que se avisa antes de darla. */
+function piezasSinPrecio(patientId) {
+  const { lineas } = lineasDelPresupuesto(patientId);
+  return lineas
+    .filter((linea) => !linea.quitada && sinPrecio(linea))
+    .map((linea) => linea.pieza || linea.detalle);
+}
 
 
 /* El plan de tratamiento del paciente: lo que la doctora escribio en su
@@ -6448,6 +6497,7 @@ function hojaDelPlan(patientId) {
      quita, y el descuento se aplica al total. */
   const { guardado, lineas } = lineasDelPresupuesto(patientId);
   const vivas = lineas.filter((linea) => !linea.quitada);
+  const fuera = lineas.filter((linea) => linea.quitada);
   const subtotal = vivas.reduce((suma, linea) => suma + totalDeLaLinea(linea), 0);
   const descuento = Math.min(100, Math.max(0, guardado.descuento));
   const rebaja = Math.round(subtotal * descuento) / 100;
@@ -6476,7 +6526,7 @@ function hojaDelPlan(patientId) {
       </label>
       <div class="table-wrap"><table class="hc-tabla presupuesto-tabla">
         <thead><tr><th>Pieza</th><th>Tratamiento</th><th class="num">Cant.</th><th class="num">P. unitario S/</th><th class="num">Total S/</th>${puedeEditar ? "<th></th>" : ""}</tr></thead>
-        <tbody>${lineas.map((linea) => `<tr class="${linea.quitada ? "presupuesto-fuera" : ""}">
+        <tbody>${vivas.map((linea) => `<tr>
           <td><strong>${escapeHtml(linea.pieza || "—")}</strong></td>
           <td>${escapeHtml(linea.detalle)}${linea.servicio && linea.servicio !== linea.detalle ? `<br><span class="muted">${escapeHtml(linea.servicio)}</span>` : ""}</td>
           <td class="num">${linea.quitada
@@ -6485,14 +6535,24 @@ function hojaDelPlan(patientId) {
           <td class="num">${linea.quitada
             ? `<span class="muted">—</span>`
             : puedeEditar
-              ? `<input class="presupuesto-precio" type="number" min="0" step="1" value="${Number(linea.precio || 0)}" data-precio="${escapeHtml(linea.clave)}" data-paciente="${patientId}" />`
-              : money(linea.precio || 0)}</td>
-          <td class="num">${linea.quitada ? `<span class="muted">—</span>` : `<strong>${money(totalDeLaLinea(linea))}</strong>`}</td>
+              ? `<input class="presupuesto-precio" type="number" min="0" step="1" placeholder="Precio" value="${linea.precio === "" || linea.precio === null ? "" : Number(linea.precio)}" data-precio="${escapeHtml(linea.clave)}" data-paciente="${patientId}" />`
+              : sinPrecio(linea) ? `<span class="muted">—</span>` : money(linea.precio || 0)}</td>
+          <td class="num">${linea.quitada || sinPrecio(linea)
+            ? `<span class="muted">—</span>`
+            : `<strong>${money(totalDeLaLinea(linea))}</strong>`}</td>
           ${puedeEditar
             ? `<td class="num"><button class="plan-quitar${linea.quitada ? " plan-volver" : ""}" type="button" title="${linea.quitada ? "Volver a ponerlo" : "Quitar del presupuesto"}" data-quitar-linea="${escapeHtml(linea.clave)}" data-paciente="${patientId}"${linea.aMano ? ` data-suelto="1"` : ""}>${linea.quitada ? "+" : "×"}</button></td>`
             : ""}
         </tr>`).join("")}</tbody>
       </table></div>
+      ${/* Lo quitado desaparece de la tabla -no se imprime ni suma, y verlo
+            tachado estorba cuando ya se reemplazo-, pero se nombra aqui abajo
+            por si el clic fue sin querer: el odontograma sigue marcado. */
+        fuera.length
+        ? `<p class="plan-fuera">Quitados: ${fuera.map((linea) =>
+            `<button type="button" class="plan-volver-linea" data-quitar-linea="${escapeHtml(linea.clave)}" data-paciente="${patientId}"${linea.aMano ? ` data-suelto="1"` : ""} title="Volver a ponerlo en el presupuesto">${escapeHtml(linea.detalle)}${linea.pieza ? ` · ${escapeHtml(linea.pieza)}` : ""} +</button>`
+          ).join(" ")}</p>`
+        : ""}
       ${rebaja > 0
         ? `<p class="plan-caja-linea"><span>Suma de los trabajos</span><strong>${money(subtotal)}</strong></p>
            <p class="plan-caja-linea"><span>Se le baja</span><strong>− ${money(rebaja)}</strong></p>`
@@ -10733,7 +10793,8 @@ function bindEvents() {
       const paciente = patientById(control.dataset.paciente);
       if (!paciente || !canManageClinical()) return;
       const presupuesto = presupuestoDeLaFicha(paciente);
-      if (precio) presupuesto.precios = { ...presupuesto.precios, [precio.dataset.precio]: Number(precio.value || 0) };
+      // borrar el campo deja la linea sin precio; escribir 0 es cobrar 0
+      if (precio) presupuesto.precios = { ...presupuesto.precios, [precio.dataset.precio]: precio.value === "" ? "" : Number(precio.value || 0) };
       else presupuesto.descuento = Math.min(100, Math.max(0, Number(rebaja.value || 0)));
       paciente.presupuesto = presupuesto;
       await guardarPresupuesto(paciente);
@@ -10860,6 +10921,11 @@ function bindEvents() {
     const guardarProf = event.target.closest("[data-guardar-proforma]");
     if (guardarProf) {
       if (!canManageClinical()) return;
+      const faltan = piezasSinPrecio(guardarProf.dataset.guardarProforma);
+      if (faltan.length) {
+        alert(`Falta ponerle precio a ${faltan.length === 1 ? "la pieza" : "las piezas"} ${faltan.join(", ")}. Escríbelo o quita esa línea antes de entregar la proforma.`);
+        return;
+      }
       const proforma = proformaDelPresupuesto(guardarProf.dataset.guardarProforma);
       if (!proforma) {
         alert("No hay nada en el presupuesto para entregar.");

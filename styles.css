@@ -4101,6 +4101,30 @@ menu {
   font-weight: 700;
 }
 
+/* Lo que el doctor saco del presupuesto: ni suma ni se imprime, asi que no
+   ocupa una fila. Queda nombrado en chico debajo de la tabla, y su nombre es
+   el boton para devolverlo. */
+.plan-fuera {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.plan-volver-linea {
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 1px 7px;
+  margin: 2px 3px 0 0;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.plan-volver-linea:hover {
+  color: var(--ink);
+  border-style: solid;
+}
+
 .presupuesto-fuera td {
   color: var(--muted);
   text-decoration: line-through;
