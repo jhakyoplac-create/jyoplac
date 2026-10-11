@@ -234,10 +234,13 @@
       hint: "Cuadrado que bordea la corona, y la sigla del tipo en el recuadro. En azul si está bien y en rojo si está en mal estado. El color del metal va en Especificaciones." },
     { cat: "pieza", k: "corona_tmp", n: "Corona temporal", c: "rojo", box: "CT",
       hint: "Cuadrado rojo que encierra la corona, y CT en el recuadro." },
-    /* 5.3.36. Aqui la norma pide algo distinto del resto: la raya de la raiz
-       es "de color azul" siempre, y el buen o mal estado solo se ve en la
-       sigla del recuadro. Por eso lleva dibujoFijo. */
-    { cat: "pieza", k: "pulpar", n: "Tratamiento pulpar", c: "azul", malo: true, dibujoFijo: true,
+    /* 5.3.36 describe la raya "de color azul" y solo habla de los dos colores
+       para la sigla del recuadro, asi que al principio se dejo la raya
+       siempre azul. Manda el 4.15, que es la regla general de la norma: el
+       azul es un tratamiento en buen estado y el rojo uno en mal estado. Una
+       endodoncia que esta fallando dibujada en azul diria lo contrario de lo
+       que pasa. La raya sigue al estado, como todo lo demas. */
+    { cat: "pieza", k: "pulpar", n: "Tratamiento pulpar", c: "azul", malo: true,
       sig: ["TC", "PC", "PP"],
       hint: "Línea vertical azul sobre la raíz y la sigla en el recuadro, que va en rojo si el tratamiento está en mal estado." },
     /* La norma dibuja la fractura "sobre la figura de la corona y/o la raiz
@@ -575,8 +578,7 @@
       var out = "";
       ks.forEach(function (k) {
         var m = meta(k); if (!m) return;
-        // el tratamiento pulpar pinta su raya siempre de azul: ver 5.3.36
-        var c = col(m.dibujoFijo ? m.c : colorPuesto(m, d.mal[k])), sig = p[k];
+        var c = col(colorPuesto(m, d.mal[k])), sig = p[k];
         function L(dd) {
           return '<path d="' + dd + '" stroke="' + c + '" stroke-width="' + gr + '" fill="none" stroke-linecap="round"/>';
         }
