@@ -5941,10 +5941,11 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   font-weight: 600;
 }
 
+/* al quedar elegido no se enmarca en un cuadro: se queda como texto */
+#paymentForm #paymentAttendedBy:focus,
 #paymentForm #paymentAttendedBy:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
-  border-radius: 6px;
+  outline: none;
+  box-shadow: none;
 }
 
 /* ---- Los precios de los tratamientos, en Configuracion ----
