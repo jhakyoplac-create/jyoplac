@@ -7448,12 +7448,45 @@ function applyReceiptTypeUI() {
     docField.value = "";
     nameField.value = "";
     addressField.value = "";
+    ponerRucDelPaciente();
   } else {
     const patient = patientById(pendingPaymentContext?.payment?.patientId);
     docField.value = patient?.dni || "";
     nameField.value = patient?.name || "";
     addressField.value = "";
   }
+}
+
+/* Al pasar a factura el campo quedaba vacio: habia que escribir los once
+   digitos del RUC de memoria, con el paciente esperando. El proveedor ya nos
+   dice el RUC de persona natural del titular del DNI, asi que se pide y se
+   pone solo; de ahi la razon social la completa la consulta de siempre. Si no
+   lo trae, el campo se queda vacio y se escribe a mano, como antes. */
+let ultimoDniParaRuc = "";
+async function ponerRucDelPaciente() {
+  const form = $("#receiptIssueForm");
+  const paciente = patientById(pendingPaymentContext?.payment?.patientId);
+  const dni = onlyDigits(paciente?.dni || "");
+  if (!form || !/^\d{8}$/.test(dni) || !API_ENABLED || !apiToken) return;
+  if (ultimoDniParaRuc === dni) return;   // la consulta se paga por uso
+  ultimoDniParaRuc = dni;
+  const hint = $("#receiptLookupHint");
+  if (hint) hint.textContent = "Buscando el RUC del paciente…";
+  let payload;
+  try {
+    payload = await lookupExternalDni(dni);
+  } catch (error) {
+    if (hint) hint.textContent = "Factura: consulta RUC o completa manualmente.";
+    return;
+  }
+  // pudo volver a boleta mientras se esperaba la respuesta
+  if (form.elements.namedItem("type").value !== "FACTURA") return;
+  if (!/^\d{11}$/.test(String(payload?.ruc || ""))) {
+    if (hint) hint.textContent = "Ese DNI no tiene RUC. Escribe el de la empresa.";
+    return;
+  }
+  form.elements.namedItem("customerDoc").value = payload.ruc;
+  await lookupReceiptDocument();
 }
 
 async function lookupReceiptDocument() {

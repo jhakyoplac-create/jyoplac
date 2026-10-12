@@ -950,6 +950,14 @@ def normalizar_respuesta_documento(kind, number, payload):
             "birthDate": birth_date,
             "sexo": sexo,
             "maritalStatus": marital,
+            # El RUC de persona natural del titular del DNI, que manda DevEx en
+            # su plan Premium. Sirve para la factura: el paciente da su DNI y
+            # el sistema ya sabe a que RUC emitirsela. CODART no lo trae.
+            "ruc": next(
+                (r for r in (first_value(d, ["ruc"]) for d in data_roots)
+                 if re.match(r"^\d{11}$", r or "")),
+                "",
+            ),
             "education": first_value(general or {}, ["nivel_educativo"]),
             "foto": foto,
             "raw": sin_imagenes,
