@@ -907,13 +907,22 @@ def normalizar_respuesta_documento(kind, number, payload):
         birth_date = documento_fecha(first_value(nacimiento, ["fecha"])) if nacimiento else ""
         for data in data_roots:
             birth_date = birth_date or documento_fecha(first_value(data, ["fecha_nacimiento", "fechaNacimiento", "birth_date"]))
+        # "sex" y "marital_status" son de DevEx en su plan Premium, que los
+        # manda sueltos en la raiz; CODART los llama "genero" y "estado_civil"
+        # y los guarda dentro de informacion_general. Se buscan los dos juegos
+        # de nombres: cada proveedor trae los suyos y los del otro no aparecen.
         sexo = ""
         for data in data_roots:
-            letra = first_value(data, ["genero", "gender", "sexo"]).upper()[:1]
+            letra = first_value(data, ["genero", "gender", "sexo", "sex"]).upper()[:1]
             if letra in ("M", "F"):
                 sexo = letra
                 break
-        estado_civil = first_value(general or {}, ["estado_civil"]).upper()
+        estado_civil = first_value(general or {}, ["estado_civil", "marital_status"]).upper()
+        if not estado_civil:
+            for data in data_roots:
+                estado_civil = first_value(data, ["marital_status", "estado_civil"]).upper()
+                if estado_civil:
+                    break
         civiles = {"SOLTER": "Soltero(a)", "CASAD": "Casado(a)", "CONVIVIENTE": "Conviviente", "DIVORCIAD": "Divorciado(a)", "VIUD": "Viudo(a)"}
         marital = next((valor for clave, valor in civiles.items() if estado_civil.startswith(clave)), "")
         # la foto del DNI: CODART la manda como la primera de "images"
