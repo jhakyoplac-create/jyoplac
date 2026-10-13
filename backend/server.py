@@ -2146,7 +2146,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/clinical-history":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+            # Recepcion escribe la nota: toma los datos mientras el paciente
+            # espera y el doctor dicta. Lo que no puede tocar -odontograma,
+            # presupuesto, proformas y firmas- se cierra en la pantalla, no
+            # aqui, porque viajan por otras rutas.
+            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"}):
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("hist")

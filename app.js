@@ -2959,6 +2959,15 @@ function canManageClinical() {
   return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"].includes(currentUser()?.role);
 }
 
+/* Escribir la nota clinica y la hoja del Colegio, que es otra cosa que manejar
+   lo clinico entero. Recepcion entra aqui -toma los datos mientras el paciente
+   espera y el doctor dicta- pero no al odontograma, al presupuesto, a las
+   proformas ni a las firmas de consentimiento, que es donde esta el dinero y
+   la responsabilidad del profesional. */
+function canEditClinicalNote() {
+  return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
+}
+
 function canEditReceivableAmount() {
   return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
 }
@@ -4504,7 +4513,7 @@ const CAMPOS_CLINICOS = [
    que dos equipos no entreguen el mismo. */
 async function guardarHistoriaClinica(patientId) {
   const patient = patientById(patientId);
-  if (!patient || patient.historiaNumero || !canManageClinical()) return;
+  if (!patient || patient.historiaNumero || !canEditClinicalNote()) return;
   if (!confirm(`Se abre la historia clínica de ${patient.name}.
 
 Se le asigna su número, que queda fijo y no se puede cambiar. ¿Continuar?`)) return;
@@ -4540,7 +4549,7 @@ function guardarCampoDeLaHoja(campo) {
     return;
   }
   if (!destino || !nombre || !registro) return;
-  if (!canManageClinical()) return;
+  if (!canEditClinicalNote()) return;
   const valor = String(campo.innerText || "").replace(/ /g, " ").trim();
   if (destino === "paciente") {
     const paciente = patientById(registro);
@@ -4632,7 +4641,7 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   const texto = (valor) => escapeHtml(String(valor || "").trim());
   /* Un campo se escribe en la hoja cuando se esta viendo en pantalla y hay
      donde guardarlo. En el papel es solo la raya. */
-  const sePuedeEscribir = pantalla && canManageClinical();
+  const sePuedeEscribir = pantalla && canEditClinicalNote();
   /* Sin atencion guardada, lo clinico igual se escribe: el primer dato crea
      la atencion de hoy (sin cobro) y desde ahi la hoja sigue sobre ella. Igual
      que en el dental de EmpresaFacil. */
@@ -4869,10 +4878,8 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
 
 function renderClinicalHistory() {
   if (!$('#historyForm input[name="date"]').value) $('#historyForm input[name="date"]').value = todayISO();
-  /* Quien no es clinico -recepcion- mira la historia sin el formulario de la
-     nota: igual no podria guardarla, y asi no parece que pudiera. */
   const formularioDeNota = $("#historyForm");
-  if (formularioDeNota) formularioDeNota.hidden = !canManageClinical();
+  if (formularioDeNota) formularioDeNota.hidden = !canEditClinicalNote();
   const caja = $("#historyTimeline");
   if (!caja) return;
   const patientId = $("#historyPatientFilter").value || state.patients[0]?.id || "";
@@ -10698,7 +10705,7 @@ function bindEvents() {
   $("#historyForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (historySaving) return;
-    if (!canManageClinical()) {
+    if (!canEditClinicalNote()) {
       alert("Tu usuario no tiene permiso para guardar historial clínico.");
       return;
     }
