@@ -6218,6 +6218,10 @@ const TRABAJO_DEL_ODONTOGRAMA = {
   fractura: { detalle: "Fractura", servicio: "" },
   /* Solo cuando estan en rojo. En azul la norma dice que el tratamiento esta
      hecho y en buen estado, asi que no hay nada que cobrar. */
+  /* 5.3.24. La cara gastada es un hallazgo en rojo, o sea trabajo pendiente,
+     pero que lleve una resina, una incrustacion o una ferula lo decide el
+     doctor segun cuanto se perdio y por que. Sin servicio: baja sin precio. */
+  desgaste: { detalle: "Superficie desgastada", servicio: "" },
   endodoncia: { detalle: "Endodoncia", servicio: "Endodoncia" },
   corona_rehacer: { detalle: "Corona definitiva", servicio: "" }
 };
@@ -6283,6 +6287,8 @@ function presupuestoDelOdontograma(patientId) {
     if (conCaries.length === 2) agregar(pieza, "curacion_compuesta", "2 caras", nivel);
     if (conCaries.length > 2) agregar(pieza, "curacion_compleja", `${conCaries.length} caras`, nivel);
     if (caras.some((cara) => diente.sup[cara] === "rest_temp")) agregar(pieza, "restauracion_definitiva");
+    const gastadas = caras.filter((cara) => diente.sup[cara] === "desgaste");
+    if (gastadas.length) agregar(pieza, "desgaste", `${gastadas.length} ${gastadas.length === 1 ? "cara" : "caras"}`);
     const de = diente.pieza || {};
     if ("por_extraer" in de) {
       agregar(pieza, TERCEROS_MOLARES.includes(pieza) ? "extraccion_molar" : "extraccion");
