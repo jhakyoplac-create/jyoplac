@@ -5047,6 +5047,8 @@ function odontogramFichaFor(patientId, sheet) {
            azul en cuanto se recargaba la pantalla. */
         mal: saved.mal || {},
         malCara: saved.malCara || {},
+        // que sigla lleva cada cara: MB en una y CD en otra no son lo mismo
+        sigCara: saved.sigCara || {},
         num: saved.num || null,
         nota: saved.nota || ""
       }

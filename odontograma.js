@@ -331,7 +331,7 @@
   /* ==================== FICHA ==================== */
   function fichaVacia() {
     var d = {};
-    PIEZAS.forEach(function (t) { d[t] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" }; });
+    PIEZAS.forEach(function (t) { d[t] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, sigCara: {}, num: null, nota: "" }; });
     return { dientes: d, spans: [], arcada: { up: null, down: null }, nino: false, esp: "", obs: "" };
   }
   /* Lo que significa cada sigla, con el texto de la norma. Los botones solo
@@ -388,6 +388,11 @@
            esta -en buen estado- hasta que el odontologo lo actualice: el
            rojo nunca llego a guardarse y no hay de donde sacarlo. */
         mal: o.mal || {}, malCara: o.malCara || {},
+        /* Que sigla lleva cada cara. Sin esto el diente solo sabia que tenia
+           caries, no si era MB en una cara y CD en otra, y al desmarcar una no
+           habia forma de saber que sigla quitar del recuadro. Lo guardado
+           antes no lo trae: esas caras toman la primera sigla del hallazgo. */
+        sigCara: o.sigCara || {},
         num: o.num || null, nota: o.nota || ""
       };
       /* Lo marcado como "Migración" antes de seguir la norma no se pierde: pasa
@@ -1192,6 +1197,39 @@
       quitarBox(t, k, coloresDe(m));
       ficha.dientes[t].box.push({ k: k, c: colorDe(m) });
     }
+    /* Las siglas de un hallazgo de cara se reescriben enteras a partir de las
+       caras que lo tienen. Antes se ponian con un toggle y al desmarcar la
+       cara nadie las quitaba: se borraba la caries del diente y su MB se
+       quedaba en el recuadro, y hacia falta un clic de mas -cuatro en total-
+       para dejar la pieza limpia. */
+    function sincronizarSiglasDeCara(t, clave) {
+      var m = meta(clave);
+      if (!m || !m.sig) return;
+      var d = ficha.dientes[t];
+      var colores = coloresDe(m);
+      var caras = Object.keys(d.sup).filter(function (c) { return d.sup[c] === clave; });
+      var puestas = [];
+      caras.forEach(function (c) {
+        var sig = d.sigCara[c] || m.sig[0];
+        if (puestas.indexOf(sig) < 0) puestas.push(sig);
+      });
+      // las de este hallazgo que ya no tiene ninguna cara se van
+      m.sig.forEach(function (sig) {
+        if (puestas.indexOf(sig) < 0) quitarBox(t, sig, colores);
+      });
+      /* Y las que quedan se escriben con su color: rojo si alguna de las caras
+         que la llevan esta en mal estado -un sellante roto y otro entero dan
+         una sola S, y manda el roto-. */
+      puestas.forEach(function (sig) {
+        var enMalEstado = caras.some(function (c) {
+          return (d.sigCara[c] || m.sig[0]) === sig && d.malCara[c];
+        });
+        var color = colorPuesto(m, enMalEstado);
+        var ya = d.box.some(function (b) { return b.k === sig && b.c === color; });
+        if (!ya) { quitarBox(t, sig, colores); d.box.push({ k: sig, c: color }); }
+      });
+    }
+
     function avisar(claves) { onChange(ficha, claves); }
 
     function aplicarPieza(t) {
@@ -1199,7 +1237,7 @@
 
       if (tool.cat === "pieza") {
         if (tool.k === "limpiar") {
-          ficha.dientes[t] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" };
+          ficha.dientes[t] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, sigCara: {}, num: null, nota: "" };
           return [t];
         }
         if (tool.k === "clavija" || tool.k === "gemina") {
@@ -1304,7 +1342,7 @@
       if (ev.target.closest(".odo-clear")) {
         if (!sel || soloLectura) return;
         guardar();
-        ficha.dientes[sel] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" };
+        ficha.dientes[sel] = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, sigCara: {}, num: null, nota: "" };
         ficha.spans = ficha.spans.filter(function (s) { return s.a !== sel && s.b !== sel; });
         render(); avisar([sel, CLAVE_FICHA]);
         return;
@@ -1354,15 +1392,21 @@
         var ms = meta(tool.k);
         // que hallazgo queda tocado: el que se borra o el que se pone
         var afectado = tool.k === "borrar_sup" ? d.sup[cara] : tool.k;
-        if (tool.k === "borrar_sup") { delete d.sup[cara]; delete d.malCara[cara]; }
-        else if (d.sup[cara] === tool.k) { delete d.sup[cara]; delete d.malCara[cara]; }
-        else {
+        if (tool.k === "borrar_sup") {
+          delete d.sup[cara]; delete d.malCara[cara]; delete d.sigCara[cara];
+        } else if (d.sup[cara] === tool.k && (!ms.sig || d.sigCara[cara] === tool.sig)) {
+          // el mismo hallazgo y la misma sigla: se desmarca
+          delete d.sup[cara]; delete d.malCara[cara]; delete d.sigCara[cara];
+        } else {
+          /* El mismo hallazgo con otra sigla no desmarca: cambia el nivel de
+             esa cara. Antes habia que quitarla y volver a ponerla. */
           d.sup[cara] = tool.k;
+          if (ms.sig) d.sigCara[cara] = tool.sig; else delete d.sigCara[cara];
           if (ms.malo && malEstado) d.malCara[cara] = true; else delete d.malCara[cara];
-          // la sigla del recuadro tambien va en rojo si la cara esta en mal
-          // estado: el sellante la escribia siempre en azul
-          if (ms.sig) ponerBox(t, tool.sig, colorDe(ms));
         }
+        // las siglas del recuadro se rehacen desde las caras, no a toggle
+        if (afectado) sincronizarSiglasDeCara(t, afectado);
+        if (tool.k !== "borrar_sup" && tool.k !== afectado) sincronizarSiglasDeCara(t, tool.k);
         /* Los hallazgos de cara que llevan una sigla fija -el DES del
            desgaste- la escriben una sola vez por pieza aunque se marquen
            varias caras, y se la llevan cuando ya no queda ninguna. */
@@ -1547,7 +1591,7 @@
      al modelo de la norma. Lo que no tiene equivalente grafico se conserva
      como nota para no perder informacion. */
   function migrarRegistro(condicion, nota) {
-    var d = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, num: null, nota: "" };
+    var d = { sup: {}, pieza: {}, box: [], mal: {}, malCara: {}, sigCara: {}, num: null, nota: "" };
     var c = String(condicion || "").trim();
     if (c === "Ausente" || c === "Extraido") d.pieza.ausente = "";
     else if (c === "Por extraer") d.pieza.por_extraer = "";
