@@ -400,7 +400,9 @@ function mapApiProforma(row) {
     doctor: row.doctor || "",
     cop: row.cop || "",
     aceptadaEl: (row.aceptada_el || row.aceptadaEl || "").slice(0, 10),
-    tratamientoId: row.tratamiento_id || row.tratamientoId || ""
+    tratamientoId: row.tratamiento_id || row.tratamientoId || "",
+    // el odontograma tal como estaba el dia que se dio la proforma
+    ficha: row.ficha || ""
   };
 }
 
@@ -6061,6 +6063,11 @@ function proformaDelPresupuesto(patientId) {
     patientId,
     patientName: patient.name,
     date: todayISO(),
+    /* El odontograma tal como esta hoy. El presupuesto impreso lo dibujaba
+       leyendo la ficha del momento, asi que tocar un diente hoy le cambiaba el
+       dibujo a una proforma de hace una semana: la hoja que el paciente ya se
+       llevo dejaba de coincidir con la que sale al reimprimirla. */
+    ficha: JSON.stringify(fichaCompacta(odontogramFichaFor(patientId, "inicial"))),
     numero: Math.max(0, ...(state.proformas || []).map((item) => Number(item.numero || 0))) + 1,
     lineas,
     descuento: Math.min(100, Math.max(0, guardado.descuento)),

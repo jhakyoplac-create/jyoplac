@@ -237,6 +237,9 @@ CREATE TABLE IF NOT EXISTS proformas (
   numero INTEGER NOT NULL,
   date TEXT NOT NULL,
   lineas TEXT NOT NULL,
+  -- el odontograma tal como estaba el dia que se dio, para que al reimprimirla
+  -- salga el dibujo de ese dia y no el de hoy
+  ficha TEXT,
   descuento REAL NOT NULL DEFAULT 0,
   doctor TEXT,
   cop TEXT,

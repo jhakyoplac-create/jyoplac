@@ -274,6 +274,7 @@ def ensure_column(conn, table, column, definition):
 
 
 def migrate_db(conn):
+    ensure_column(conn, "proformas", "ficha", "TEXT")
     ensure_column(conn, "patients", "birth_date", "TEXT")
     ensure_column(conn, "patients", "status", "TEXT NOT NULL DEFAULT 'NUEVO'")
     ensure_column(conn, "patients", "created_by_id", "TEXT")
@@ -3260,14 +3261,17 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """
                     INSERT INTO proformas (
                       id, patient_id, patient_name, numero, date, lineas, descuento,
-                      doctor, cop, aceptada_el, tratamiento_id
+                      doctor, cop, aceptada_el, tratamiento_id, ficha
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_name=excluded.patient_name, numero=excluded.numero,
                       date=excluded.date, lineas=excluded.lineas,
                       descuento=excluded.descuento, doctor=excluded.doctor, cop=excluded.cop,
                       aceptada_el=excluded.aceptada_el, tratamiento_id=excluded.tratamiento_id,
+                      /* la copia del odontograma no se pisa con vacio: al
+                         aceptar la proforma se vuelve a guardar sin ella */
+                      ficha=COALESCE(NULLIF(excluded.ficha, ''), proformas.ficha),
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -3282,6 +3286,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("cop", ""),
                         data.get("aceptadaEl", "") or None,
                         data.get("tratamientoId", "") or None,
+                        data.get("ficha", "") or "",
                     ),
                 )
             pid = str(data.get("patientId") or "")

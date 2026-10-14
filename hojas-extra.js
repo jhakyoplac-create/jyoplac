@@ -637,6 +637,33 @@ function tratamientoDeLaLinea(linea) {
     .trim();
 }
 
+/* El odontograma que le corresponde a esta proforma: el que se guardo con ella.
+
+   Las dadas antes de que la proforma se llevara su copia no la tienen; para
+   esas se busca una copia del odontograma guardada ese mismo dia, y si tampoco
+   hay, se dibuja el de ahora, que es lo que se hacia siempre. */
+function fichaDeLaProforma(proforma, patient) {
+  if (proforma.ficha) {
+    try {
+      return window.Odontograma.normalizarFicha(JSON.parse(proforma.ficha));
+    } catch (error) {
+      console.warn("No se pudo leer el odontograma guardado con la proforma.", error);
+    }
+  }
+  const copia = (state.odontogramSnapshots || [])
+    .filter((item) => item.patientId === proforma.patientId && item.sheet === "inicial" && item.date === proforma.date)
+    .sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")))[0];
+  if (copia?.ficha) {
+    try {
+      return window.Odontograma.normalizarFicha(JSON.parse(copia.ficha));
+    } catch (error) {
+      console.warn("No se pudo leer la copia del odontograma de ese dia.", error);
+    }
+  }
+  return odontogramFichaFor(patient.id, "inicial");
+}
+
+
 function presupuestoImpreso(proforma) {
   const patient = patientById(proforma.patientId);
   const config = state.config || {};
@@ -654,7 +681,7 @@ function presupuestoImpreso(proforma) {
     total: total.total + fila.total
   }), { precio: 0, rebaja: 0, total: 0 });
 
-  const dibujo = patient && window.Odontograma ? dibujoDelOdontograma(odontogramFichaFor(patient.id, "inicial")) : null;
+  const dibujo = patient && window.Odontograma ? dibujoDelOdontograma(fichaDeLaProforma(proforma, patient)) : null;
   const firmante = usuarioDelDoctor(proforma.doctor);
   const telefono = config.whatsapp ? `Teléfono para sus consultas: ${config.whatsapp}` : "";
 
