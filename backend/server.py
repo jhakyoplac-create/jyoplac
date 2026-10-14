@@ -610,8 +610,8 @@ def add_audit_event(conn, user, action, detail, patient_id=""):
     purge_old_audit_events(conn)
     conn.execute(
         """
-        INSERT INTO audit_events (id, event_date, action, detail, patient_id, user_id, user_name, user_role)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO audit_events (id, event_date, action, detail, patient_id, user_id, user_name, user_role, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             now_id("audit"),
@@ -622,6 +622,9 @@ def add_audit_event(conn, user, action, detail, patient_id=""):
             user.get("id", ""),
             user.get("name", ""),
             normalize_role(user.get("role", "")),
+            # La hora del consultorio. Dejarsela a la base la ponia en UTC, y el
+            # registro decia que todo habia pasado cinco horas mas tarde.
+            now_lima().strftime("%Y-%m-%d %H:%M:%S"),
         ),
     )
 
