@@ -7180,3 +7180,35 @@ input[type="number"] {
 .doctor-picker-lista li[aria-selected="true"] svg {
   visibility: visible;
 }
+
+/* ---- Pagos y caja en el telefono ----
+   El rediseño de Pagos (2026-10-11) repite la regla de las dos columnas mas
+   abajo que la del celular, y por orden gana: en el telefono el formulario se
+   quedaba con 340 px y a "Caja y saldos" le sobraban unos pocos al costado. No
+   estaba escondido, estaba aplastado hasta no verse, y con el se iban los
+   ingresos del dia y la posibilidad de cobrar desde fuera del consultorio.
+   Aqui se apila debajo, con sus cifras de a dos. */
+@media (max-width: 980px) {
+  #pagos .payments-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #pagos .payments-cash-box .summary-row,
+  #pagos .payments-cash-box .cash-breakdown,
+  #pagos .payments-cash-box .caja-cierre {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #pagos .payments-cash-box .top-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  #pagos .payments-cash-box .caja-cierre,
+  #pagos .payments-cash-box .top-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
