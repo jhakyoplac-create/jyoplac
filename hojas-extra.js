@@ -841,6 +841,19 @@ async function descargarPresupuesto(proformaId) {
   const hoja = caja.querySelector(".hc-hoja.fd.pr");
   try {
     await cargarGeneradorDePdf();
+    /* Los dientes son imagenes y hay que esperarlas. Sin esto el PDF se armaba
+       con lo que hubiera cargado: los dientes salian cortados y, como el
+       odontograma todavia no media lo que iba a medir, la hoja quedaba con un
+       hueco enorme. En las pruebas no se vio porque los dibujos ya estaban en
+       memoria; la primera vez de verdad, no. */
+    await Promise.all([...caja.querySelectorAll("img")].map((img) => (
+      img.complete && img.naturalWidth
+        ? null
+        : new Promise((listo) => { img.addEventListener("load", listo, { once: true }); img.addEventListener("error", listo, { once: true }); })
+    )));
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    // un respiro para que el navegador acomode lo recien cargado
+    await new Promise((listo) => setTimeout(listo, 120));
     // la hoja se acomoda igual que para imprimir: el dibujo a lo ancho y, si
     // hace falta, todo un poco mas chico para que entre en una A4
     ajustarGraficosDeLaHoja(caja);
