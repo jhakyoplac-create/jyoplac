@@ -1350,35 +1350,72 @@ tr.followup-pending td:first-child {
 
 .audit-controles input {
   width: 190px;
+  min-width: 0;
+  flex: 1 1 120px;
 }
 
-.daily-audit-panel {
-  grid-column: 1 / -1;
+/* El titulo de una pieza y los controles en la otra: si no entran en la misma
+   linea, bajan enteros en vez de partir el titulo en dos. */
+.daily-audit-panel .panel-head {
+  flex-wrap: wrap;
+  align-items: baseline;
 }
 
+.daily-audit-panel .panel-head h2 {
+  white-space: nowrap;
+}
+
+.daily-audit-panel .audit-controles {
+  flex: 1 1 260px;
+  justify-content: flex-end;
+}
+
+/* El registro se queda del ancho que tenia. Lo que cambia es que entra mas:
+   letra mas chica y filas mas juntas. */
 .daily-audit-panel .table-wrap {
   max-height: 420px;
   overflow: auto;
 }
 
 .daily-audit-panel table {
-  font-size: 13px;
-  line-height: 1.28;
+  font-size: 11.5px;
+  line-height: 1.2;
 }
 
 .daily-audit-panel th {
-  font-size: 11px;
-  padding: 9px 12px;
+  font-size: 10px;
+  padding: 5px 8px;
 }
 
+/* El tamano va en la celda y no en la tabla: la regla general de td es mas
+   fuerte y se comia el de la tabla, que quedaba escrito sin efecto. */
 .daily-audit-panel td {
-  padding: 10px 12px;
+  padding: 4px 8px;
+  font-size: 11.5px;
   vertical-align: top;
 }
 
-.daily-audit-panel td:first-child {
-  width: 72px;
+/* El reparto del ancho: la hora y el rol lo justo, el usuario sin pasarse, y
+   todo lo que sobra para el movimiento, que es lo que se lee. */
+.daily-audit-panel table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.daily-audit-panel td:first-child,
+.daily-audit-panel th:first-child {
+  width: 44px;
   white-space: nowrap;
+}
+
+.daily-audit-panel td:nth-child(2),
+.daily-audit-panel th:nth-child(2) {
+  width: 23%;
+}
+
+.daily-audit-panel td:nth-child(3),
+.daily-audit-panel th:nth-child(3) {
+  width: 19%;
 }
 
 .income-breakdown-panel table {
