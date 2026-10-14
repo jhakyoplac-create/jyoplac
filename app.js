@@ -6705,6 +6705,7 @@ function hojaDelPlan(patientId) {
                 : puedeEditar ? `<button class="small-btn proforma-aceptar" type="button" data-aceptar-proforma="${item.id}">Aceptar</button>` : ""}
               <button class="small-btn" type="button" data-imprimir-proforma="${item.id}">Imprimir</button>
               <button class="small-btn" type="button" data-imprimir-presupuesto="${item.id}">Imprimir presupuesto</button>
+              <button class="small-btn" type="button" data-descargar-presupuesto="${item.id}">Descargar PDF</button>
               ${puedeEditar && !item.aceptadaEl ? `<button class="small-btn" type="button" data-borrar-proforma="${item.id}">Borrar</button>` : ""}
             </div>
             <details class="proforma-ver"><summary>Ver la hoja</summary>${hojaDeLaProforma(item)}</details>
@@ -9737,6 +9738,8 @@ function bindHojasExtra() {
   });
   // el presupuesto impreso sale de cualquier lista de proformas
   document.addEventListener("click", (event) => {
+    const descargar = event.target.closest("[data-descargar-presupuesto]");
+    if (descargar) { H.descargarPresupuesto(descargar.dataset.descargarPresupuesto); return; }
     const boton = event.target.closest("[data-imprimir-presupuesto]");
     if (boton) H.imprimirPresupuesto(boton.dataset.imprimirPresupuesto);
   });

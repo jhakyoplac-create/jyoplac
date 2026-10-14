@@ -751,6 +751,120 @@ function presupuestoImpreso(proforma) {
   </article>`;
 }
 
+/* ---------- El acomodo de la hoja del presupuesto ----------
+   Se usa en dos sitios: en la ventana de impresion -donde viaja escrito, con
+   toString()- y al armar el PDF. Por eso no toca nada de fuera: todo lo que
+   necesita se lo pasan. */
+
+// el odontograma se encoge para caber en el ancho de la hoja
+function ajustarGraficosDeLaHoja(raiz) {
+  raiz.querySelectorAll(".hc-grafico").forEach(function (caja) {
+    var lienzo = caja.firstElementChild;
+    if (!lienzo || !caja.clientWidth) return;
+    lienzo.style.zoom = "1";
+    var ancho = lienzo.scrollWidth;
+    var alto = lienzo.scrollHeight;
+    var altoMax = Number(caja.dataset.altoMax || 0);
+    var zoom = ancho ? Math.min(1, caja.clientWidth / ancho) : 1;
+    if (altoMax && alto) zoom = Math.min(zoom, altoMax / alto);
+    if (ancho) lienzo.style.zoom = String(zoom);
+  });
+}
+
+/* Una sola hoja. Con pocos tratamientos la hoja entra sola; con muchos se
+   encoge primero el odontograma y despues la letra, lo justo para que quepa. El
+   tope de 0.72 es para que un presupuesto enorme no termine ilegible: ese si se
+   va a dos hojas. */
+function encogerAUnaHoja(hoja) {
+  if (!hoja) return;
+  var cabe = 297 * 96 / 25.4;   // una A4 de alto, en pixeles de CSS
+  hoja.style.zoom = "1";
+  if (!hoja.scrollHeight || hoja.scrollHeight <= cabe) return;
+  var caja = hoja.querySelector(".pr-odontograma");
+  if (caja) {
+    var sobra = hoja.scrollHeight - cabe;
+    var alto = caja.getBoundingClientRect().height;
+    // no baja del 80%: mas chico las siglas de las piezas no se leen
+    var corta = Math.max(alto * 0.8, alto - sobra);
+    if (alto && corta < alto) {
+      caja.dataset.altoMax = String(Math.round(corta));
+      ajustarGraficosDeLaHoja(hoja.ownerDocument);
+    }
+  }
+  var queda = hoja.scrollHeight;
+  if (queda <= cabe) return;
+  hoja.style.zoom = String(Math.max(0.72, cabe / queda));
+}
+
+
+// lo que la hoja necesita para verse igual fuera de la pantalla
+const ESTILOS_DEL_PRESUPUESTO = `
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff !important; }
+      body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 8mm 12mm !important; max-width: 210mm; margin: 0 auto; }
+      .pr-tabla tr { break-inside: avoid; }`;
+
+
+/* El generador pesa casi un mega, asi que se carga solo cuando alguien pide un
+   PDF y se queda para los siguientes. */
+let generadorPedido = null;
+function cargarGeneradorDePdf() {
+  if (window.html2pdf) return Promise.resolve();
+  if (!generadorPedido) {
+    generadorPedido = new Promise(function (listo, falla) {
+      const guion = document.createElement("script");
+      guion.src = "vendor/html2pdf-0.10.1.min.js";
+      guion.onload = listo;
+      guion.onerror = function () { generadorPedido = null; falla(new Error("No se pudo cargar el generador de PDF.")); };
+      document.head.appendChild(guion);
+    });
+  }
+  return generadorPedido;
+}
+
+
+/* El presupuesto como archivo, sin pasar por la ventana de impresion.
+
+   La hoja se arma escondida en esta misma pagina -una ventana nueva la bloquea
+   el navegador cuando el clic no viene de un boton suyo-, se acomoda igual que
+   para imprimir y se guarda. El zoom con el que se encoge lo entiende la
+   impresion pero no el generador, asi que para el archivo se cambia por una
+   escala, que si respeta, y el papel lo pone la lamina que la envuelve. */
+async function descargarPresupuesto(proformaId) {
+  const proforma = (state.proformas || []).find((item) => item.id === proformaId);
+  if (!proforma) return;
+  const caja = document.createElement("div");
+  caja.style.cssText = "position:fixed;left:-20000px;top:0;width:210mm;background:#fff;z-index:-1;";
+  caja.innerHTML = `<style>${ESTILOS_DEL_PRESUPUESTO}</style>${presupuestoImpreso(proforma)}`;
+  document.body.appendChild(caja);
+  const hoja = caja.querySelector(".hc-hoja.fd.pr");
+  try {
+    await cargarGeneradorDePdf();
+    // la hoja se acomoda igual que para imprimir: el dibujo a lo ancho y, si
+    // hace falta, todo un poco mas chico para que entre en una A4
+    ajustarGraficosDeLaHoja(caja);
+    encogerAUnaHoja(hoja);
+    /* Un pelo mas chica de lo que cabe: con la hoja justo al borde de la A4,
+       el redondeo del generador abria una segunda pagina en blanco, y lo que
+       llegaba por WhatsApp eran dos hojas, una vacia. */
+    hoja.style.zoom = String((Number(hoja.style.zoom || 1) || 1) * 0.995);
+    await window.html2pdf().set({
+      margin: 0,
+      filename: `Presupuesto ${numeroDeProforma(proforma.numero)} - ${String(proforma.patientName || "paciente").replace(/[\\/:*?"<>|]/g, " ").trim()}.pdf`,
+      image: { type: "jpeg", quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+    }).from(hoja).save();
+  } catch (error) {
+    console.warn("No se pudo armar el PDF del presupuesto.", error);
+    alert("No se pudo armar el PDF. Usa «Imprimir presupuesto» y elige «Guardar como PDF».");
+  } finally {
+    caja.remove();
+  }
+}
+
+
 function imprimirPresupuesto(proformaId) {
   const proforma = (state.proformas || []).find((item) => item.id === proformaId);
   if (!proforma) return;
@@ -766,68 +880,19 @@ function imprimirPresupuesto(proformaId) {
     <base href="${escapeHtml(location.href)}">
     <title>Presupuesto ${escapeHtml(String(proforma.numero || ""))} ${escapeHtml(proforma.patientName || "")}</title>
     ${hojasDeEstilo}
-    <style>
-      @page { size: A4; margin: 0; }
-      html, body { background: #fff !important; }
-      body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 8mm 12mm !important; max-width: 210mm; margin: 0 auto; }
-      .pr-tabla tr { break-inside: avoid; }
+    <style>${ESTILOS_DEL_PRESUPUESTO}
     </style></head><body>
     ${presupuestoImpreso(proforma)}
     <script>
       (function () {
-        // el odontograma se encoge para caber en el ancho de la hoja
-        function ajustar() {
-          document.querySelectorAll(".hc-grafico").forEach(function (caja) {
-            var lienzo = caja.firstElementChild;
-            if (!lienzo || !caja.clientWidth) return;
-            lienzo.style.zoom = "1";
-            var ancho = lienzo.scrollWidth;
-            var alto = lienzo.scrollHeight;
-            var altoMax = Number(caja.dataset.altoMax || 0);
-            var zoom = ancho ? Math.min(1, caja.clientWidth / ancho) : 1;
-            if (altoMax && alto) zoom = Math.min(zoom, altoMax / alto);
-            if (ancho) lienzo.style.zoom = String(zoom);
-          });
-        }
-        /* Una sola hoja. Con pocos tratamientos la hoja entra sola y no se
-           toca nada; con muchos -veinte piezas son veinte filas- se pasaba a
-           una segunda hoja donde solo caian las ultimas lineas, las firmas y
-           las notas, y el total salia repetido arriba y abajo. En vez de dejar
-           las letras chicas para todos, se encoge solo cuando hace falta y lo
-           justo para que quepa. El tope de 0.72 es para que un presupuesto
-           enorme no termine ilegible: ese si se va a dos hojas. */
-        function unaSolaHoja() {
-          var hoja = document.querySelector(".hc-hoja.fd.pr");
-          if (!hoja) return;
-          var cabe = 297 * 96 / 25.4;   // una A4 de alto, en pixeles de CSS
-          hoja.style.zoom = "1";
-          if (!hoja.scrollHeight || hoja.scrollHeight <= cabe) return;
-
-          /* Lo que sobra se le quita primero al odontograma y solo despues a
-             la letra: en un presupuesto lo que el paciente lee son los montos,
-             y el dibujo se entiende igual mas chico. Sin esto, veinte
-             tratamientos dejaban las cifras en menos de 7 puntos. */
-          var caja = hoja.querySelector(".pr-odontograma");
-          if (caja) {
-            var sobra = hoja.scrollHeight - cabe;
-            var alto = caja.getBoundingClientRect().height;
-            // no baja del 80%: mas chico las siglas de las piezas no se leen
-            var corta = Math.max(alto * 0.8, alto - sobra);
-            if (alto && corta < alto) {
-              caja.dataset.altoMax = String(Math.round(corta));
-              ajustar();
-            }
-          }
-
-          var queda = hoja.scrollHeight;
-          if (queda <= cabe) return;
-          /* El tope de 0.72 es para que un presupuesto enorme no termine
-             ilegible: ese si se va a dos hojas. */
-          hoja.style.zoom = String(Math.max(0.72, cabe / queda));
-        }
+        ${ajustarGraficosDeLaHoja.toString()}
+        ${encogerAUnaHoja.toString()}
         window.addEventListener("load", function () {
-          setTimeout(function () { ajustar(); unaSolaHoja(); window.print(); }, 350);
+          setTimeout(function () {
+            ajustarGraficosDeLaHoja(document);
+            encogerAUnaHoja(document.querySelector(".hc-hoja.fd.pr"));
+            window.print();
+          }, 350);
         });
       })();
     <\/script>
@@ -1089,5 +1154,5 @@ function cambiarFormatoDelOdontograma(marcado) {
   return true;
 }
 
-window.HojasExtra = { fichaDeDatos, marcarSiNoDeLaFicha, cargarFoto, ponerFotoDelDni, traerFotoDeLaFicha, imprimirFichaDeDatos, ponerFoto, quitarFoto, hojaDeEvolucion, imprimirHojaDeEvolucion, guardarCeldaDeEvolucion, cambiarDoctorDeEvolucion, borrarFilaDeEvolucion, presupuestoImpreso, imprimirPresupuesto, fichaEstomatologica, imprimirFichaEstomatologica, alternarMarcaEstomatologica, cambiarFormatoDelOdontograma };
+window.HojasExtra = { descargarPresupuesto, fichaDeDatos, marcarSiNoDeLaFicha, cargarFoto, ponerFotoDelDni, traerFotoDeLaFicha, imprimirFichaDeDatos, ponerFoto, quitarFoto, hojaDeEvolucion, imprimirHojaDeEvolucion, guardarCeldaDeEvolucion, cambiarDoctorDeEvolucion, borrarFilaDeEvolucion, presupuestoImpreso, imprimirPresupuesto, fichaEstomatologica, imprimirFichaEstomatologica, alternarMarcaEstomatologica, cambiarFormatoDelOdontograma };
 })();
