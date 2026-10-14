@@ -1074,6 +1074,9 @@ function activeViewRefreshRange() {
     return { from: today, to: today };
   }
   if (currentView === "reportes") {
+    /* El registro de hoy cambia mientras se mira. Un dia anterior ya esta
+       cerrado y no se vuelve a pedir. */
+    if (!bitacora.dia || bitacora.dia === today) cargarBitacora(bitacora.dia);
     const month = $("#reportMonth")?.value || today.slice(0, 7);
     const compareMonth = $("#compareMonth")?.value || previousMonth(month);
     return reportRefreshRange(month, compareMonth);
@@ -2934,8 +2937,20 @@ function veDineroEnInicio() {
   return currentUser()?.role !== "DOCTOR_ATENCION";
 }
 
+/* Lo que la pantalla quiere dejar anotado: abrir una historia, firmarla,
+   descontar de un tratamiento. Con servidor se manda alla, que es donde vive el
+   registro de los siete dias; antes se salia por aqui sin hacer nada y todo
+   esto no quedaba anotado en ninguna parte. */
 function addLocalAuditEvent(action, detail, patientId = "") {
-  if (API_ENABLED) return;
+  if (API_ENABLED) {
+    if (!apiToken) return;
+    fetch("/api/activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+      body: JSON.stringify({ action, detail, patientId })
+    }).catch(() => {});
+    return;
+  }
   const user = currentUser();
   state.auditEvents = state.auditEvents.filter((event) => event.eventDate === todayISO());
   state.auditEvents.unshift({
@@ -3273,6 +3288,8 @@ function renderActiveView() {
       break;
     case "reportes":
       renderReports();
+      // el registro de actividad vive en el servidor: se pide al entrar
+      cargarBitacora(bitacora.dia || "");
       break;
     case "campanas":
       renderCampaigns();
@@ -8479,18 +8496,145 @@ function openReceptionPatientsModal() {
   $("#receptionPatientsDialog")?.showModal();
 }
 
+/* El registro de actividad de los ultimos siete dias: quien hizo que, a que
+   hora, en que dia. El servidor guarda una semana y borra lo anterior; aqui se
+   elige el dia, se busca y se exporta.
+
+   Se pide al servidor y no se saca del estado: el estado solo trae el dia de
+   hoy -es lo que necesita el arranque- y pedir siete dias en cada refresco
+   seria traer lo mismo una y otra vez para nada. */
+const bitacora = { dia: "", eventos: [], dias: [], cargando: false, error: "" };
+
+function etiquetaDeDia(fecha) {
+  if (fecha === todayISO()) return "Hoy";
+  const ayer = new Date(`${todayISO()}T12:00:00`);
+  ayer.setDate(ayer.getDate() - 1);
+  if (fecha === ayer.toISOString().slice(0, 10)) return "Ayer";
+  const dia = new Date(`${fecha}T12:00:00`);
+  const texto = dia.toLocaleDateString("es-PE", { weekday: "long", day: "2-digit", month: "2-digit" });
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+async function cargarBitacora(dia = "") {
+  if (!API_ENABLED || !apiToken) {
+    bitacora.eventos = state.auditEvents.filter((event) => event.eventDate === todayISO());
+    bitacora.dias = [{ fecha: todayISO(), total: bitacora.eventos.length }];
+    bitacora.dia = todayISO();
+    renderDailyAuditReport();
+    return;
+  }
+  bitacora.cargando = true;
+  bitacora.error = "";
+  renderDailyAuditReport();
+  try {
+    const respuesta = await fetch(`/api/audit-events${dia ? `?date=${encodeURIComponent(dia)}` : ""}`, {
+      headers: { Authorization: `Bearer ${apiToken}` }
+    });
+    const datos = await respuesta.json();
+    if (!respuesta.ok) throw new Error(datos.error || "No se pudo leer el registro.");
+    bitacora.eventos = Array.isArray(datos.auditEvents) ? datos.auditEvents : [];
+    bitacora.dias = Array.isArray(datos.dias) ? datos.dias : [];
+    bitacora.dia = dia || (bitacora.dias[0]?.fecha || todayISO());
+  } catch (error) {
+    bitacora.eventos = [];
+    bitacora.error = error.message || "No se pudo leer el registro.";
+  } finally {
+    bitacora.cargando = false;
+    renderDailyAuditReport();
+  }
+}
+
+function eventosDeLaBitacora() {
+  const busca = String($("#auditSearch")?.value || "").trim().toLowerCase();
+  if (!busca) return bitacora.eventos;
+  return bitacora.eventos.filter((evento) => [
+    evento.user_name || evento.userName,
+    roleLabels[evento.user_role || evento.userRole] || "",
+    evento.detail,
+    evento.action
+  ].join(" ").toLowerCase().includes(busca));
+}
+
+function horaDelEvento(evento) {
+  const cuando = evento.created_at || evento.createdAt;
+  if (!cuando) return "";
+  /* El servidor guarda la hora sin zona ("2026-10-14 09:12:03"), que el
+     navegador leeria como hora local y mostraria corrida. Se parte el texto. */
+  const partes = String(cuando).replace("T", " ").split(" ");
+  return (partes[1] || "").slice(0, 5);
+}
+
 function renderDailyAuditReport() {
-  const events = state.auditEvents.filter((event) => event.eventDate === todayISO()).slice(0, 12);
-  const rows = events.map((event) => {
-    const time = event.createdAt ? new Date(event.createdAt).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" }) : "";
-    return `<tr>
-      <td>${escapeHtml(time)}</td>
-      <td>${escapeHtml(event.userName || "Usuario")}</td>
-      <td>${escapeHtml(roleLabels[event.userRole] || event.userRole || "")}</td>
-      <td>${escapeHtml(event.detail || "")}</td>
-    </tr>`;
-  }).join("");
-  $("#dailyAuditReport").innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Accion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Sin actividad registrada hoy.</td></tr>`}</tbody></table>`;
+  const caja = $("#dailyAuditReport");
+  if (!caja) return;
+
+  const selector = $("#auditDay");
+  if (selector) {
+    const dias = bitacora.dias.length ? bitacora.dias : [{ fecha: todayISO(), total: 0 }];
+    const html = dias.map((dia) => {
+      const marca = dia.total ? `${dia.total} movimiento${dia.total === 1 ? "" : "s"}` : "sin movimientos";
+      return `<option value="${dia.fecha}"${dia.fecha === bitacora.dia ? " selected" : ""}>${escapeHtml(etiquetaDeDia(dia.fecha))} — ${marca}</option>`;
+    }).join("");
+    if (selector.dataset.pintado !== html) {
+      selector.innerHTML = html;
+      selector.dataset.pintado = html;
+    }
+  }
+
+  if (bitacora.cargando && !bitacora.eventos.length) {
+    caja.innerHTML = `<p class="muted">Leyendo el registro…</p>`;
+    return;
+  }
+  if (bitacora.error) {
+    caja.innerHTML = `<p class="muted">${escapeHtml(bitacora.error)}</p>`;
+    return;
+  }
+
+  const eventos = eventosDeLaBitacora();
+  const rows = eventos.map((evento) => `<tr>
+      <td>${escapeHtml(horaDelEvento(evento))}</td>
+      <td>${escapeHtml(evento.user_name || evento.userName || "Usuario")}</td>
+      <td>${escapeHtml(roleLabels[evento.user_role || evento.userRole] || evento.user_role || evento.userRole || "")}</td>
+      <td>${escapeHtml(evento.detail || "")}</td>
+    </tr>`).join("");
+  const vacio = bitacora.eventos.length
+    ? "Ningun movimiento coincide con lo que buscas."
+    : "Sin actividad registrada este dia.";
+  caja.innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Movimiento</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="4">${vacio}</td></tr>`}</tbody></table>`;
+}
+
+/* Para abrir en Excel: punto y coma como separador y la marca del inicio, que
+   es lo que hace que Excel en castellano respete las columnas y los acentos. */
+function exportarBitacora() {
+  const eventos = eventosDeLaBitacora();
+  if (!eventos.length) {
+    alert("No hay movimientos para exportar en este dia.");
+    return;
+  }
+  const campo = (texto) => `"${String(texto ?? "").replace(/"/g, '""')}"`;
+  const lineas = [["Fecha", "Hora", "Usuario", "Rol", "Accion", "Movimiento"].map(campo).join(";")];
+  eventos.forEach((evento) => {
+    lineas.push([
+      evento.event_date || evento.eventDate || bitacora.dia,
+      horaDelEvento(evento),
+      evento.user_name || evento.userName || "",
+      roleLabels[evento.user_role || evento.userRole] || evento.user_role || evento.userRole || "",
+      evento.action || "",
+      evento.detail || ""
+    ].map(campo).join(";"));
+  });
+  // sin escapes en el codigo: la marca del inicio y el salto, por su numero
+  const marcaDeExcel = String.fromCharCode(0xFEFF);
+  const salto = String.fromCharCode(13, 10);
+  const blob = new Blob([marcaDeExcel + lineas.join(salto)], { type: "text/csv;charset=utf-8;" });
+  const enlace = document.createElement("a");
+  enlace.href = URL.createObjectURL(blob);
+  enlace.download = `actividad-${bitacora.dia || todayISO()}.csv`;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
 }
 
 function dailyIncomeBreakdownRows(month) {
@@ -11756,6 +11900,10 @@ function bindEvents() {
     $("#expenseDialog").close();
     render();
   });
+
+  $("#auditDay")?.addEventListener("change", (event) => cargarBitacora(event.target.value));
+  $("#auditSearch")?.addEventListener("input", () => renderDailyAuditReport());
+  $("#auditExport")?.addEventListener("click", exportarBitacora);
 
   $("#configForm").services?.addEventListener("input", () => renderPreciosDeConfig(true));
   /* En cuanto se escribe algo, el formulario queda marcado y el refresco de los

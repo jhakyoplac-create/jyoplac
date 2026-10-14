@@ -590,8 +590,20 @@ def corregir_metodo_de_compras_con_utilidad(conn):
         print(f"[Dental]   {identificador} {fecha} {detalle}")
 
 
+# Cuantos dias se guarda el registro de actividad. Antes se borraba todo lo que
+# no fuera de hoy, asi que al dia siguiente no quedaba con que mirar quien hizo
+# que. Una semana alcanza para revisar y no crece sin fin.
+DIAS_DE_BITACORA = 7
+
+
+def dias_de_bitacora():
+    """Los dias que se pueden consultar, del mas reciente al mas antiguo."""
+    hoy = date.fromisoformat(today_lima())
+    return [(hoy - timedelta(days=n)).isoformat() for n in range(DIAS_DE_BITACORA)]
+
+
 def purge_old_audit_events(conn):
-    conn.execute("DELETE FROM audit_events WHERE event_date <> ?", (today_lima(),))
+    conn.execute("DELETE FROM audit_events WHERE event_date < ?", (dias_de_bitacora()[-1],))
 
 
 def add_audit_event(conn, user, action, detail, patient_id=""):
@@ -612,6 +624,63 @@ def add_audit_event(conn, user, action, detail, patient_id=""):
             normalize_role(user.get("role", "")),
         ),
     )
+
+
+# Como se llama cada cosa de Configuracion en el registro de actividad: sirve
+# para poder leer "cambio la lista de tratamientos" en vez de "services".
+ETIQUETAS_DE_CONFIG = {
+    "clinicName": "nombre del consultorio",
+    "issuerRuc": "RUC",
+    "issuerAddress": "direccion",
+    "issuerDistrict": "distrito",
+    "start": "hora de inicio",
+    "end": "hora de cierre",
+    "interval": "duracion de la cita",
+    "inactiveDays": "dias sin atender",
+    "enableAgendaPayments": "cobro desde la agenda",
+    "whatsapp": "WhatsApp",
+    "doctors": "doctores",
+    "units": "consultorios",
+    "services": "lista de tratamientos",
+    "servicesCustomized": "lista propia de tratamientos",
+    "listaDePrecios": "lista de precios",
+    "commissions": "comisiones por doctor",
+    "generalCashOpening": "saldo inicial de caja",
+    "generalBankOpening": "saldo inicial del banco",
+    "generalUtilityOpening": "utilidad inicial",
+    "monthlyOpenings": "saldos del mes",
+    "fichaOdontogramaColegio": "ficha del colegio",
+}
+
+
+def nombre_de_paciente(patient_id):
+    """El nombre, para que el registro diga "la nota de Maria Quispe" y no un
+    codigo que no le dice nada a nadie."""
+    pid = str(patient_id or "").strip()
+    if not pid:
+        return "un paciente"
+    try:
+        with db() as conn:
+            fila = conn.execute("SELECT name FROM patients WHERE id = ?", (pid,)).fetchone()
+        return (row_to_dict(fila).get("name") if fila else "") or "un paciente"
+    except Exception:  # noqa: BLE001
+        return "un paciente"
+
+
+def anotar(user, action, detail, patient_id=""):
+    """Anota un movimiento en el registro de actividad.
+
+    Abre su propia conexion para poder llamarse desde cualquier ruta sin
+    arrastrar la del bloque, y se trga sus propios errores a proposito: que no
+    se pueda anotar no es razon para que al doctor le falle el guardado.
+    """
+    if not user:
+        return
+    try:
+        with db() as conn:
+            add_audit_event(conn, user, action, detail, patient_id)
+    except Exception as error:  # noqa: BLE001
+        print(f"[Dental] No se pudo anotar la actividad: {error}")
 
 
 def appointment_audit_event(data, existing_appointment, patient_name):
@@ -1411,16 +1480,35 @@ def list_signers():
         ]
 
 
-def list_audit_events():
+def list_audit_events(fecha=None):
+    """La actividad de un dia. Sin fecha, la de hoy, que es lo que pide el
+    arranque del sistema."""
+    dias = dias_de_bitacora()
+    dia = fecha if fecha in dias else dias[0]
     with db() as conn:
         purge_old_audit_events(conn)
         return [
             row_to_dict(row)
             for row in conn.execute(
                 "SELECT * FROM audit_events WHERE event_date = ? ORDER BY created_at DESC",
-                (today_lima(),),
+                (dia,),
             ).fetchall()
         ]
+
+
+def resumen_de_bitacora():
+    """Cuantos movimientos tiene cada uno de los dias guardados, para que la
+    pantalla pueda ofrecer los dias y decir cuales estan vacios."""
+    with db() as conn:
+        purge_old_audit_events(conn)
+        filas = conn.execute(
+            "SELECT event_date, COUNT(*) AS total FROM audit_events GROUP BY event_date"
+        ).fetchall()
+    totales = {}
+    for fila in filas:
+        datos = row_to_dict(fila)
+        totales[str(datos.get("event_date"))] = int(datos.get("total") or 0)
+    return [{"fecha": dia, "total": totales.get(dia, 0)} for dia in dias_de_bitacora()]
 
 
 def inventory_snapshot(conn):
@@ -1639,7 +1727,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/audit-events":
             if not require_role(self, {"ADMIN"}):
                 return
-            return send_json(self, {"auditEvents": list_audit_events()})
+            # ?date=YYYY-MM-DD para mirar un dia anterior; sin fecha, hoy
+            pedido = (parse_qs(parsed.query).get("date") or [""])[0].strip()
+            return send_json(self, {
+                "auditEvents": list_audit_events(pedido),
+                "dias": resumen_de_bitacora(),
+            })
 
         if parsed.path == "/api/sunat/estado":
             # solo dice si esta lista y con que serie emite; nada secreto
@@ -1676,14 +1769,34 @@ class DentalHandler(SimpleHTTPRequestHandler):
             expires_at = int(time.time() + session_seconds)
             token = make_token(row["id"], expires_at)
             sessions[token] = {"user_id": row["id"], "expires": expires_at}
+            anotar(row_to_dict(row), "INGRESO", "Entro al sistema")
             return send_json(self, {
                 "token": token,
                 "expiresAt": expires_at * 1000,
                 "user": {"id": row["id"], "name": row["name"], "username": row["username"], "role": normalize_role(row["role"]), "active": row["active"]},
             })
 
+        if parsed.path == "/api/activity":
+            """Lo que la pantalla quiere dejar anotado y el servidor no ve.
+
+            Abrir la historia de un paciente, entrar a una pantalla, imprimir
+            una hoja: no cambian nada, asi que no pasan por ninguna otra ruta,
+            pero son justo lo que hay que poder mirar despues. El detalle se
+            corta para que nadie llene el registro desde afuera."""
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
+                return
+            data = read_json(self)
+            accion = re.sub(r"[^A-Z_]", "", str(data.get("action") or "").upper())[:40]
+            detalle = str(data.get("detail") or "").strip()[:300]
+            if not accion or not detalle:
+                return send_json(self, {"error": "Actividad incompleta."}, 400)
+            anotar(user, accion, detalle, str(data.get("patientId") or ""))
+            return send_json(self, {"ok": True})
+
         if parsed.path == "/api/logout":
             token = self.headers.get("Authorization", "").replace("Bearer ", "").strip()
+            anotar(auth_user(self), "SALIDA", "Salio del sistema")
             sessions.pop(token, None)
             return send_json(self, {"ok": True})
 
@@ -2125,7 +2238,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/patient-photo":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            if not user:
                 return
             data = read_json(self)
             patient_id = str(data.get("id") or "").strip()
@@ -2143,6 +2257,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         "INSERT INTO patient_photos (patient_id, foto, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
                         (patient_id, foto),
                     )
+            accion = "Quito" if data.get("delete") else "Guardo"
+            anotar(user, "FOTO_PACIENTE", f"{accion} la foto de {nombre_de_paciente(patient_id)}", patient_id)
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/clinical-history":
@@ -2150,7 +2266,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             # espera y el doctor dicta. Lo que no puede tocar -odontograma,
             # presupuesto, proformas y firmas- se cierra en la pantalla, no
             # aqui, porque viajan por otras rutas.
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("hist")
@@ -2320,6 +2437,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             """,
                             (data["patientId"], data["date"]),
                         )
+            pid = str(data.get("patientId") or "")
+            anotar(user, "NOTA_CLINICA", f"Guardo la nota clinica de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/receivables":
@@ -2382,10 +2501,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         "UPDATE appointments SET status = 'ATENDIDA', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND patient_id = ?",
                         (cita, data["patientId"]),
                     )
+            pid = str(data.get("patientId") or "")
+            anotar(user, "DEUDA", f"Anoto una deuda de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/treatments":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("t")
@@ -2410,10 +2532,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("notes", ""),
                     ),
                 )
+            pid = str(data.get("patientId") or "")
+            servicio = str(data.get("service") or "tratamiento")
+            anotar(user, "PLAN_TRATAMIENTO", f"Guardo {servicio} en el plan de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/odontogram":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("odo")
@@ -2440,6 +2566,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     "SELECT id FROM odontogram WHERE patient_id=? AND tooth=?",
                     (data["patientId"], data["tooth"]),
                 ).fetchone()
+            pid = str(data.get("patientId") or "")
+            anotar(user, "ODONTOGRAMA", f"Marco el diente {data.get('tooth')} de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": row["id"] if row else item_id})
 
         if parsed.path == "/api/odontogram-snapshots":
@@ -2447,7 +2575,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             # reemplaza la copia de ese dia con lo ultimo. Antes cada guardado
             # sumaba una fila y el historial se llenaba de copias iguales. Las
             # repetidas que ya estaban no se borran: la pantalla muestra la ultima.
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            if not user:
                 return
             data = read_json(self)
             ficha = str(data.get("ficha") or "").strip()
@@ -2490,10 +2619,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                             ficha,
                         ),
                     )
+            pid = str(data.get("patientId") or "")
+            anotar(user, "ODONTOGRAMA_COPIA", f"Guardo una copia del odontograma ({ficha}) de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/inventory-products":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("prod")
@@ -2526,10 +2658,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     ),
                 )
                 snapshot = inventory_snapshot(conn)
+            anotar(user, "INVENTARIO_PRODUCTO", f"Guardo el producto {name} del inventario")
             return send_json(self, {"ok": True, "id": item_id, **snapshot})
 
         if parsed.path == "/api/inventory-movements":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("mov")
@@ -2570,6 +2704,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     ),
                 )
                 snapshot = inventory_snapshot(conn)
+            anotar(user, "INVENTARIO_MOVIMIENTO", f"{movement_type.capitalize()} de {quantity:g} en el inventario")
             return send_json(self, {"ok": True, "id": item_id, **snapshot})
 
         if parsed.path == "/api/payments":
@@ -2585,12 +2720,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     if not item_id:
                         return send_json(self, {"error": "Pago no indicado."}, 400)
                     with db() as conn:
-                        row = conn.execute("SELECT id FROM payments WHERE id = ?", (item_id,)).fetchone()
+                        row = conn.execute("SELECT id, patient_id, amount FROM payments WHERE id = ?", (item_id,)).fetchone()
                         if not row:
                             return send_json(self, {"error": "Pago no encontrado."}, 404)
+                        borrado = row_to_dict(row)
                         reverse_payment_inventory(conn, item_id)
                         conn.execute("DELETE FROM payments WHERE id = ?", (item_id,))
                         snapshot = inventory_snapshot(conn)
+                    pid = str(borrado.get("patient_id") or "")
+                    anotar(quien_cobra, "COBRO_ELIMINADO",
+                           f"Elimino un cobro de S/ {float(borrado.get('amount') or 0):.2f} de {nombre_de_paciente(pid)}", pid)
                     return send_json(self, {"ok": True, "id": item_id, **snapshot})
                 item_id = data.get("id") or now_id("pay")
                 amount = float(data.get("amount") or 0)
@@ -2823,12 +2962,15 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         )
                     apply_payment_inventory(conn, item_id, payment_date, product_items)
                     snapshot = inventory_snapshot(conn)
+                pid = str(data.get("patientId") or "")
+                anotar(quien_cobra, "COBRO", f"Cobro S/ {amount:.2f} en {method or 'efectivo'} a {nombre_de_paciente(pid)}", pid)
                 return send_json(self, {"ok": True, "id": item_id, **snapshot})
             except Exception as exc:
                 return send_json(self, {"error": f"No se pudo guardar el pago: {exc}"}, 500)
 
         if parsed.path == "/api/electronic-receipts":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id") or now_id("cpe")
@@ -2929,11 +3071,15 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
                         return send_json(self, {"error": "Ese numero de comprobante ya existe."}, 400)
                     raise
+            pid = str(data.get("patientId") or "")
+            anotar(user, "COMPROBANTE",
+                   f"Emitio {receipt_type.lower()} {series}-{number} de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": item_id, "series": series, "number": number})
 
         # ---------- Facturacion electronica ante SUNAT ----------
         if parsed.path == "/api/sunat/emitir":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             comprobante_id = str(data.get("id") or "").strip()
@@ -2944,10 +3090,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     resultado = sunat_emision.emitir(conn, comprobante_id)
             except Exception as error:
                 return send_json(self, {"error": str(error)}, 400)
+            anotar(user, "SUNAT_ENVIO", f"Envio a SUNAT el comprobante {comprobante_id}")
             return send_json(self, {"ok": True, **resultado})
 
         if parsed.path == "/api/sunat/resumen":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             # por defecto el dia anterior, que es lo que toca informar
@@ -2960,6 +3108,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     resultado = sunat_emision.enviar_resumen_diario(conn, fecha)
             except Exception as error:
                 return send_json(self, {"error": str(error)}, 400)
+            anotar(user, "SUNAT_RESUMEN", f"Envio a SUNAT el resumen de boletas del {fecha}")
             return send_json(self, {"ok": True, "fecha": fecha, **resultado})
 
         if parsed.path == "/api/sunat/revisar":
@@ -2985,7 +3134,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"error": str(error)}, 400)
 
         if parsed.path == "/api/sunat/correlativo":
-            if not require_role(self, {"ADMIN"}):
+            user = require_role(self, {"ADMIN"})
+            if not user:
                 return
             data = read_json(self)
             serie = str(data.get("serie") or "").strip().upper()
@@ -2994,10 +3144,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"error": "Indica la serie y el siguiente numero."}, 400)
             with db() as conn:
                 sunat_emision.fijar_correlativo(conn, serie, siguiente)
+            anotar(user, "SUNAT_CORRELATIVO", f"Puso el correlativo de {serie} en {siguiente}")
             return send_json(self, {"ok": True, "serie": serie, "siguiente": siguiente})
 
         if parsed.path == "/api/expenses":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             if data.get("delete"):
@@ -3011,6 +3163,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     if not row:
                         return send_json(self, {"error": "Egreso no encontrado."}, 404)
                     conn.execute("DELETE FROM expenses WHERE id = ?", (item_id,))
+                anotar(user, "EGRESO_ELIMINADO", "Elimino un egreso de la caja")
                 return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("exp")
             with db() as conn:
@@ -3059,10 +3212,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         1 if data.get("closed") else 0,
                     ),
                 )
+            anotar(user, "EGRESO",
+                   f"Anoto un egreso de S/ {float(data.get('amount') or 0):.2f}: {data.get('detail') or 'sin detalle'}")
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/petty-cash":
-            if not require_role(self, {"ADMIN", "DOCTOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR"})
+            if not user:
                 return
             data = read_json(self)
             amount = float(data.get("amount") or 0)
@@ -3079,10 +3235,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 session = conn.execute("SELECT id FROM cash_sessions WHERE date=? AND closed_at IS NULL", (date,)).fetchone()
                 if session:
                     conn.execute("UPDATE cash_sessions SET opening_cash=? WHERE id=?", (amount, session["id"]))
+            anotar(user, "CAJA_CHICA", f"Dejo S/ {amount:.2f} de caja chica del {date}")
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/proformas":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id")
@@ -3091,6 +3249,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if data.get("borrar"):
                 with db() as conn:
                     conn.execute("DELETE FROM proformas WHERE id = ?", (item_id,))
+                pid = str(data.get("patientId") or "")
+                anotar(user, "PROFORMA_ELIMINADA", f"Elimino la proforma de {nombre_de_paciente(pid)}", pid)
                 return send_json(self, {"ok": True, "id": item_id})
             with db() as conn:
                 conn.execute(
@@ -3121,10 +3281,13 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("tratamientoId", "") or None,
                     ),
                 )
+            pid = str(data.get("patientId") or "")
+            anotar(user, "PROFORMA", f"Guardo la proforma de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/consentimientos":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            if not user:
                 return
             data = read_json(self)
             item_id = data.get("id")
@@ -3163,10 +3326,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         """,
                         (data.get("firmaDoctor"), data.get("fechaDoctor", ""), data.get("doctorFirmante", ""), item_id),
                     )
+            pid = str(data.get("patientId") or "")
+            anotar(user, "CONSENTIMIENTO",
+                   f"Firmo el consentimiento de {data.get('tipo')} de {nombre_de_paciente(pid)}", pid)
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/config":
-            if not require_role(self, {"ADMIN", "DOCTOR"}):
+            user = require_role(self, {"ADMIN", "DOCTOR"})
+            if not user:
                 return
             data = read_json(self)
             values = {}
@@ -3201,10 +3368,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     if isinstance(valor, (int, float)) and 0 <= valor <= 100
                 }
             set_config(values)
+            cambiado = [ETIQUETAS_DE_CONFIG.get(clave, clave) for clave in values]
+            anotar(user, "CONFIGURACION",
+                   f"Cambio en Configuracion: {', '.join(cambiado) if cambiado else 'nada'}")
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/reset-operational":
-            if not require_role(self, {"ADMIN"}):
+            user = require_role(self, {"ADMIN"})
+            if not user:
                 return
             with db() as conn:
                 for table in [
@@ -3229,10 +3400,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 conn.execute(
                     "INSERT INTO app_config (key, value) VALUES ('generalUtilityOpening', '0') ON CONFLICT(key) DO UPDATE SET value='0'"
                 )
+            anotar(user, "DATOS_BORRADOS", "Borro los datos operativos del sistema")
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/cash/open":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             date = data.get("date")
@@ -3265,10 +3438,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """,
                     (item_id, date, opening_cash, data.get("openedAt") or time.strftime("%Y-%m-%dT%H:%M:%S")),
                 )
+            anotar(user, "CAJA_APERTURA", f"Abrio la caja del {date} con S/ {opening_cash:.2f}")
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/cash/close":
-            if not require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"}):
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_TRABAJADOR", "RECEPCION"})
+            if not user:
                 return
             data = read_json(self)
             date = data.get("date")
@@ -3333,6 +3508,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """,
                     (now_id("petty"), date),
                 )
+            anotar(user, "CAJA_CIERRE", f"Cerro la caja del {date}")
             return send_json(self, {"ok": True, "difference": difference})
 
         send_json(self, {"error": "Ruta no encontrada"}, 404)

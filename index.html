@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261011-lista-de-doctores" />
+    <link rel="stylesheet" href="styles.css?v=20261014-registro-de-actividad" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -936,7 +936,14 @@
         </div>
         <div class="content-grid two">
           <section class="panel daily-audit-panel">
-            <div class="panel-head"><h2>Registro diario de actividad</h2></div>
+            <div class="panel-head">
+              <h2>Registro de actividad</h2>
+              <div class="audit-controles">
+                <select id="auditDay" aria-label="Dia del registro"></select>
+                <input id="auditSearch" type="search" placeholder="Buscar usuario o movimiento" aria-label="Buscar en el registro" />
+                <button id="auditExport" class="small-btn" type="button">Exportar</button>
+              </div>
+            </div>
             <div id="dailyAuditReport" class="table-wrap"></div>
           </section>
           <section class="panel">
@@ -1370,6 +1377,6 @@
     <!-- El ojito para ver lo que se escribe en los campos de contrasena. -->
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
     <script src="hojas-extra.js?v=20261011-ficha-escribible"></script>
-    <script src="app.js?v=20261014-configuracion-no-se-pisa"></script>
+    <script src="app.js?v=20261014-registro-de-actividad"></script>
   </body>
 </html>

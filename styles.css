@@ -1328,6 +1328,39 @@ tr.followup-pending td:first-child {
   background: var(--surface);
 }
 
+/* Los controles del registro de actividad: elegir el dia, buscar y exportar.
+   En pantalla angosta se van apilando solos en vez de salirse del panel. */
+.audit-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.audit-controles select,
+.audit-controles input {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+}
+
+.audit-controles input {
+  width: 190px;
+}
+
+.daily-audit-panel {
+  grid-column: 1 / -1;
+}
+
+.daily-audit-panel .table-wrap {
+  max-height: 420px;
+  overflow: auto;
+}
+
 .daily-audit-panel table {
   font-size: 13px;
   line-height: 1.28;
