@@ -3171,6 +3171,8 @@ function mostrarSelloDelUsuario(imagen) {
 
 function setView(view) {
   if (!hasRoleView(view)) view = (roleViews[currentUser()?.role] || ["dashboard"])[0];
+  // si se sale de Configuracion sin guardar, lo escrito se descarta
+  if (currentView === "configuracion" && view !== "configuracion") olvidarCambiosDeConfig();
   currentView = view;
   if (view === "historial") {
     const historyDate = $('#historyForm input[name="date"]');
@@ -8632,9 +8634,26 @@ function renderPreciosDeConfig(conservarTecleado = false) {
 }
 
 
+/* Si el formulario tiene algo escrito sin guardar, el refresco de los datos no
+   lo toca. Antes el unico escudo era que el cursor estuviera dentro: bastaba
+   hacer clic fuera y el siguiente refresco reescribia los campos con lo que
+   habia en el servidor, asi que un tratamiento recien renombrado volvia a su
+   nombre viejo y al pulsar Guardar se guardaba lo viejo. */
+function configTieneCambiosSinGuardar() {
+  const form = $("#configForm");
+  return Boolean(form && form.dataset.tocado === "1");
+}
+
+function olvidarCambiosDeConfig() {
+  const form = $("#configForm");
+  if (form) delete form.dataset.tocado;
+}
+
 function renderConfig() {
   const form = $("#configForm");
-  if (!(document.activeElement && form.contains(document.activeElement))) {
+  const escribiendo = (document.activeElement && form.contains(document.activeElement))
+    || configTieneCambiosSinGuardar();
+  if (!escribiendo) {
     form.clinicName.value = state.config.clinicName;
     /* La direccion y la ciudad salen en el membrete de la historia, del
        consentimiento y de la proforma, y en el "En Moyobamba" del cierre. */
@@ -11739,6 +11758,15 @@ function bindEvents() {
   });
 
   $("#configForm").services?.addEventListener("input", () => renderPreciosDeConfig(true));
+  /* En cuanto se escribe algo, el formulario queda marcado y el refresco de los
+     datos deja de tocarlo hasta que se guarde o se salga de la pantalla. */
+  ["input", "change"].forEach((evento) => {
+    $("#configForm").addEventListener(evento, (ev) => {
+      if (ev.target instanceof HTMLElement && ev.target.closest("#configForm")) {
+        $("#configForm").dataset.tocado = "1";
+      }
+    });
+  });
   $("#configForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!puedeConfigurar()) {
@@ -11803,6 +11831,7 @@ function bindEvents() {
       alert(error.message);
       return;
     }
+    olvidarCambiosDeConfig();
     if (!API_ENABLED) saveState();
     render();
   });
