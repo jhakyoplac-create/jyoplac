@@ -6100,38 +6100,6 @@ const sumaDeLaProforma = (proforma) => (proforma?.lineas || [])
   .reduce((total, linea) => total + Number(linea.precio || 0) * Math.max(1, Number(linea.cantidad || 1)), 0);
 
 
-/* El presupuesto por WhatsApp, en texto, igual que la constancia de pago.
-
-   Va escrito y no como archivo: mandar la hoja adjunta pide la API de WhatsApp
-   Business. Asi el paciente lo lee en el chat, le queda, y el doctor no depende
-   de nada mas que su telefono. Si el paciente no tiene celular anotado,
-   WhatsApp pregunta a quien mandarlo. */
-function enlaceWhatsappDeLaProforma(proforma) {
-  const config = state.config || {};
-  const patient = patientById(proforma.patientId);
-  const suma = sumaDeLaProforma(proforma);
-  const descuento = Math.min(100, Math.max(0, Number(proforma.descuento || 0)));
-  const rebaja = Math.round(suma * descuento) / 100;
-  const nombre = friendlyName(patient?.name || proforma.patientName || "");
-  const lineas = [
-    `Hola${nombre ? ` *${nombre}*` : ""}, le saludamos de *${config.clinicName || "su consultorio dental"}*.`,
-    "",
-    `*Presupuesto ${numeroDeProforma(proforma.numero)}* · ${formatDate(proforma.date)}`,
-  ];
-  (proforma.lineas || []).forEach((linea) => {
-    const cantidad = Math.max(1, Number(linea.cantidad || 1));
-    const total = Number(linea.precio || 0) * cantidad;
-    const pieza = linea.pieza ? `Pieza ${linea.pieza}: ` : "";
-    lineas.push(`• ${pieza}${linea.detalle || linea.servicio || ""}${cantidad > 1 ? ` x${cantidad}` : ""} — S/ ${total.toFixed(2)}`);
-  });
-  if (descuento > 0) lineas.push(`Descuento ${descuento} %: − S/ ${rebaja.toFixed(2)}`);
-  lineas.push(`*Total: S/ ${(suma - rebaja).toFixed(2)}*`);
-  lineas.push("");
-  lineas.push("Este presupuesto se mantiene 30 días. Cualquier duda, con gusto se la explicamos.");
-  const mensaje = lineas.join(String.fromCharCode(10));
-  return `https://wa.me/${whatsappPhone(patient?.phone)}?text=${encodeURIComponent(mensaje)}`;
-}
-
 
 /* La hoja que se imprime y se lleva el paciente: el logo del consultorio, sus
    datos, lo que se le va a hacer con su precio, el total y hasta cuando vale.
@@ -6739,7 +6707,6 @@ function hojaDelPlan(patientId) {
               <button class="small-btn" type="button" data-imprimir-proforma="${item.id}">Imprimir</button>
               <button class="small-btn" type="button" data-imprimir-presupuesto="${item.id}">Imprimir presupuesto</button>
               <button class="small-btn" type="button" data-imagen-presupuesto="${item.id}">Imagen</button>
-              <a class="small-btn" target="_blank" rel="noopener" href="${enlaceWhatsappDeLaProforma(item)}">WhatsApp</a>
               ${puedeEditar && !item.aceptadaEl ? `<button class="small-btn" type="button" data-borrar-proforma="${item.id}">Borrar</button>` : ""}
             </div>
             <details class="proforma-ver"><summary>Ver la hoja</summary>${hojaDeLaProforma(item)}</details>
