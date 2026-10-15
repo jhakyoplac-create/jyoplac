@@ -6738,6 +6738,7 @@ function hojaDelPlan(patientId) {
                 : puedeEditar ? `<button class="small-btn proforma-aceptar" type="button" data-aceptar-proforma="${item.id}">Aceptar</button>` : ""}
               <button class="small-btn" type="button" data-imprimir-proforma="${item.id}">Imprimir</button>
               <button class="small-btn" type="button" data-imprimir-presupuesto="${item.id}">Imprimir presupuesto</button>
+              <button class="small-btn" type="button" data-imagen-presupuesto="${item.id}">Imagen</button>
               <a class="small-btn" target="_blank" rel="noopener" href="${enlaceWhatsappDeLaProforma(item)}">WhatsApp</a>
               ${puedeEditar && !item.aceptadaEl ? `<button class="small-btn" type="button" data-borrar-proforma="${item.id}">Borrar</button>` : ""}
             </div>
@@ -9771,6 +9772,8 @@ function bindHojasExtra() {
   });
   // el presupuesto impreso sale de cualquier lista de proformas
   document.addEventListener("click", (event) => {
+    const imagen = event.target.closest("[data-imagen-presupuesto]");
+    if (imagen) { H.imprimirPresupuesto(imagen.dataset.imagenPresupuesto, true); return; }
     const boton = event.target.closest("[data-imprimir-presupuesto]");
     if (boton) H.imprimirPresupuesto(boton.dataset.imprimirPresupuesto);
   });

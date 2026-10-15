@@ -751,7 +751,7 @@ function presupuestoImpreso(proforma) {
   </article>`;
 }
 
-function imprimirPresupuesto(proformaId) {
+function imprimirPresupuesto(proformaId, paraImagen = false) {
   const proforma = (state.proformas || []).find((item) => item.id === proformaId);
   if (!proforma) return;
   const ventana = window.open("", "_blank", "width=900,height=1100");
@@ -772,8 +772,19 @@ function imprimirPresupuesto(proformaId) {
       body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 8mm 12mm !important; max-width: 210mm; margin: 0 auto; }
       .pr-tabla tr { break-inside: avoid; }
+      /* la misma barra verde de la constancia de pago */
+      .pr-acciones { max-width: 210mm; margin: 0 auto 6mm; padding: 0 12mm; text-align: right; }
+      .pr-whatsapp { display: inline-block; padding: 8px 16px; border: 0; border-radius: 6px; background: #1fa855; color: #fff; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
+      .pr-whatsapp:disabled { opacity: 0.7; cursor: wait; }
+      .pr-aviso { margin: 6px 0 0; font-family: Arial, sans-serif; font-size: 12px; color: #4b5563; }
+      @media print { .pr-acciones { display: none; } }
     </style></head><body>
     ${presupuestoImpreso(proforma)}
+    <div class="pr-acciones">
+      <button class="pr-whatsapp" id="enviarWhatsapp" type="button" data-archivo="${escapeHtml(`Presupuesto ${numeroDeProforma(proforma.numero)} - ${String(proforma.patientName || "paciente").replace(/[\/:*?"<>|]/g, " ").trim()}`)}">Enviar imagen por WhatsApp</button>
+      <p class="pr-aviso" id="avisoWhatsapp"></p>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
     <script>
       (function () {
         // el odontograma se encoge para caber en el ancho de la hoja
@@ -827,7 +838,70 @@ function imprimirPresupuesto(proformaId) {
           hoja.style.zoom = String(Math.max(0.72, cabe / queda));
         }
         window.addEventListener("load", function () {
-          setTimeout(function () { ajustar(); unaSolaHoja(); window.print(); }, 350);
+          setTimeout(function () {
+            /* Para la imagen, la hoja se arma al ancho de una A4 aunque la
+               ventana sea angosta: en el celular lo es, y el odontograma se
+               encogia para caber en ese ancho, con las piezas encimadas. */
+            if (${paraImagen ? "true" : "false"}) {
+              var hoja = document.querySelector(".hc-hoja.fd.pr");
+              document.body.style.width = "794px";
+              if (hoja) { hoja.style.width = "794px"; hoja.style.maxWidth = "none"; }
+            }
+            ajustar();
+            unaSolaHoja();
+            if (!${paraImagen ? "true" : "false"}) window.print();
+          }, 350);
+        });
+
+        /* La imagen de la hoja al menu Compartir del equipo, y desde ahi a
+           WhatsApp. Es el mismo camino de la constancia de pago: en el celular
+           sale el menu de compartir; donde no lo hay -casi toda computadora- la
+           imagen se descarga para adjuntarla a mano. */
+        var boton = document.getElementById("enviarWhatsapp");
+        var aviso = document.getElementById("avisoWhatsapp");
+        var puedeCompartir = Boolean(navigator.canShare && navigator.share);
+        var textoBoton = puedeCompartir ? "Enviar imagen por WhatsApp" : "Descargar imagen";
+        boton.textContent = textoBoton;
+        function listo(mensaje) {
+          boton.disabled = false;
+          boton.textContent = textoBoton;
+          aviso.textContent = mensaje || "";
+        }
+        boton.addEventListener("click", function () {
+          if (!window.html2canvas) {
+            listo("Para armar la imagen hace falta internet. Mientras tanto, imprime el presupuesto.");
+            return;
+          }
+          boton.disabled = true;
+          boton.textContent = "Preparando imagen...";
+          var nombre = boton.dataset.archivo + ".png";
+          /* La hoja se retrata siempre al ancho de una A4 -794 pixeles-, no al
+             de la ventana: en el celular la ventana es angosta y la imagen
+             salia toda apretada, con las piezas encimadas y la columna del
+             precio cortada. Y ahi es justo donde se usa. */
+          window.html2canvas(document.querySelector(".hc-hoja.fd.pr"), { scale: 2, backgroundColor: "#ffffff", logging: false, windowWidth: 794 }).then(function (lienzo) {
+            lienzo.toBlob(function (imagen) {
+              if (!imagen) return listo("No se pudo armar la imagen.");
+              var archivo = new File([imagen], nombre, { type: "image/png" });
+              if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+                navigator.share({ files: [archivo], title: boton.dataset.archivo }).then(function () {
+                  listo("");
+                }).catch(function (error) {
+                  // cancelar desde el menu de compartir no es un fallo
+                  listo(error && error.name === "AbortError" ? "" : "No se pudo compartir la imagen.");
+                });
+                return;
+              }
+              var enlace = document.createElement("a");
+              enlace.href = URL.createObjectURL(imagen);
+              enlace.download = nombre;
+              enlace.click();
+              setTimeout(function () { URL.revokeObjectURL(enlace.href); }, 4000);
+              listo("La imagen se descargo (" + nombre + "). Adjuntala en WhatsApp.");
+            }, "image/png");
+          }).catch(function () {
+            listo("No se pudo armar la imagen.");
+          });
         });
       })();
     <\/script>
