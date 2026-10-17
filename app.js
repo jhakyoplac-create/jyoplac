@@ -4154,7 +4154,9 @@ function relatedFollowUpAppointments(appointment) {
   return state.appointments
     .filter((item) => {
       if (item.id === appointment.id || item.patientId !== appointment.patientId) return false;
-      if (appointmentSortKey(item) <= appointmentSortKey(appointment)) return false;
+      // desde la misma franja en adelante: el paciente puede tener dos
+      // registros a la misma hora, el que se cancelo y el que si se atendio
+      if (appointmentSortKey(item) < appointmentSortKey(appointment)) return false;
       return !["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(String(item.status || "").toUpperCase());
     })
     .sort((a, b) => appointmentSortKey(a).localeCompare(appointmentSortKey(b)));
