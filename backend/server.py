@@ -2741,6 +2741,27 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 data = read_json(self)
+                if data.get("soloAtendio"):
+                    # Corregir quien atendio sin volver a guardar el cobro
+                    # entero: reescribirlo completo arriesga perder campos que
+                    # el navegador no tenga a mano, y aqui lo unico que esta
+                    # mal es el nombre.
+                    if not require_role(self, {"ADMIN", "DOCTOR"}):
+                        return
+                    item_id = data.get("id")
+                    nuevo_doctor = str(data.get("attendedBy") or "").strip()
+                    if not item_id or not nuevo_doctor:
+                        return send_json(self, {"error": "Falta el cobro o el doctor."}, 400)
+                    with db() as conn:
+                        fila = conn.execute("SELECT id, patient_id, attended_by FROM payments WHERE id = ?", (item_id,)).fetchone()
+                        if not fila:
+                            return send_json(self, {"error": "Pago no encontrado."}, 404)
+                        antes = str(fila["attended_by"] or "")
+                        pid = str(fila["patient_id"] or "")
+                        conn.execute("UPDATE payments SET attended_by = ? WHERE id = ?", (nuevo_doctor, item_id))
+                    anotar(quien_cobra, "COBRO_ATENDIO",
+                           f"Corrigio quien atendio el cobro de {nombre_de_paciente(pid)}: {antes or 'sin nombre'} -> {nuevo_doctor}", pid)
+                    return send_json(self, {"ok": True, "id": item_id, "antes": antes, "ahora": nuevo_doctor})
                 if data.get("delete"):
                     if not require_role(self, {"ADMIN", "DOCTOR"}):
                         return

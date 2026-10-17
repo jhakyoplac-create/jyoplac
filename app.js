@@ -1301,6 +1301,16 @@ async function deleteReceivableApi(id) {
   await apiFetch("/api/receivables", { method: "POST", body: JSON.stringify({ id, delete: true }) });
 }
 
+/* Corrige solo quien atendio en un cobro ya guardado. Se uso para cuadrar
+   octubre, cuando el formulario dejaba el nombre del cobro anterior. */
+async function corregirDoctorDelCobro(id, attendedBy) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/payments", { method: "POST", body: JSON.stringify({ id, attendedBy, soloAtendio: true }) });
+  const pago = state.payments.find((item) => item.id === id);
+  if (pago) pago.attendedBy = attendedBy;
+}
+window.corregirDoctorDelCobro = corregirDoctorDelCobro;
+
 async function saveTreatmentApi(treatment) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/treatments", { method: "POST", body: JSON.stringify(treatment) });
