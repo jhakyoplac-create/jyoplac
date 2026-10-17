@@ -3433,6 +3433,9 @@ function renderTreatmentPaymentOptions() {
     if (clearDebtBtn) clearDebtBtn.hidden = true;
     updatePaymentChange();
     aplicarCuadroDeDescuento();
+    /* El doctor de la cita, puesto solo. Sin esto quedaba el del cobro
+       anterior y la comision se le acreditaba a quien no atendio. */
+    sugerirDoctorDelPago();
     return;
   }
   const patientId = patientIdFromPaymentSelection(patientSelect.value);
