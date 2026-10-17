@@ -2450,6 +2450,30 @@ class DentalHandler(SimpleHTTPRequestHandler):
             if not user:
                 return
             data = read_json(self)
+            if data.get("delete"):
+                # Anular una deuda anotada por error la borra de verdad. Antes
+                # solo se le apagaba la marca de pendiente y el monto seguia en
+                # pie, asi que el paciente la seguia debiendo y la deuda
+                # reaparecia en Caja como atencion pendiente.
+                # Solo el doctor y el administrador, y solo si no hay ningun
+                # cobro colgando: borrarla con pagos dejaria ese dinero sin a
+                # que atencion pertenece.
+                if normalize_role(user["role"]) not in {"ADMIN", "DOCTOR"}:
+                    return send_json(self, {"error": "Solo doctores y administrador pueden anular una deuda."}, 403)
+                item_id = data.get("id")
+                if not item_id:
+                    return send_json(self, {"error": "Deuda no indicada."}, 400)
+                with db() as conn:
+                    cobros = conn.execute(
+                        "SELECT COUNT(*) AS total FROM payments WHERE history_id = ?",
+                        (item_id,),
+                    ).fetchone()
+                    if cobros and cobros["total"]:
+                        return send_json(self, {"error": "Esa deuda ya tiene cobros: no se puede borrar."}, 400)
+                    conn.execute("DELETE FROM clinical_history WHERE id = ?", (item_id,))
+                pid = str(data.get("patientId") or "")
+                anotar(user, "DEUDA_ANULADA", f"Anulo una deuda de {nombre_de_paciente(pid)}", pid)
+                return send_json(self, {"ok": True, "id": item_id, "deleted": True})
             item_id = data.get("id") or now_id("hist")
             edit_amount = bool(data.get("editAmount"))
             with db() as conn:

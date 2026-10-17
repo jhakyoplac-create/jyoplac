@@ -1296,6 +1296,11 @@ async function saveReceivableApi(entry, options = {}) {
   if (result.id) entry.id = result.id;
 }
 
+async function deleteReceivableApi(id) {
+  if (!API_ENABLED || !apiToken) return;
+  await apiFetch("/api/receivables", { method: "POST", body: JSON.stringify({ id, delete: true }) });
+}
+
 async function saveTreatmentApi(treatment) {
   if (!API_ENABLED || !apiToken) return;
   const result = await apiFetch("/api/treatments", { method: "POST", body: JSON.stringify(treatment) });
@@ -4079,7 +4084,23 @@ async function updateReceivableAmount(entry, amount) {
    se borra: la ficha queda, solo deja de estar pendiente y sale de la agenda
    de cobro. Lo que ya se abono sigue en caja. */
 async function voidReceivable(entry) {
-  const updated = { ...entry, creditPending: false, creditAmount: 0 };
+  /* Anotada por error o duplicada: se borra. Antes solo se le apagaba la marca
+     de pendiente y el monto seguia en pie, asi que el paciente la seguia
+     debiendo y la deuda reaparecia en Caja como atencion pendiente -Cuentas
+     por cobrar lista las que tienen la marca y Caja las que no-, o sea que
+     anular la mudaba de lista en vez de cancelarla.
+
+     Si ya tiene cobros no se puede borrar sin dejar ese dinero huerfano: en
+     ese caso se le pone de precio lo ya pagado, que deja el saldo en cero y
+     no toca la caja. */
+  if (historyPaid(entry.id) <= 0) {
+    await deleteReceivableApi(entry.id);
+    state.clinicalHistory = state.clinicalHistory.filter((item) => item.id !== entry.id);
+    if (!API_ENABLED) saveState();
+    render();
+    return;
+  }
+  const updated = { ...entry, creditPending: false, creditAmount: 0, agreedPrice: historyPaid(entry.id) };
   await saveReceivableApi(updated, { editAmount: true });
   upsert(state.clinicalHistory, updated);
   if (!API_ENABLED) saveState();
@@ -5199,6 +5220,9 @@ function historialDePagos(patientId) {
      que ese dia no vino nadie. */
   const notas = (state.clinicalHistory || [])
     .filter((entry) => entry.patientId === patientId)
+    /* La deuda anulada no se ve: es una "Cuenta por cobrar" sin monto y sin
+       ningun cobro, asi que no dice nada y confundia con una deuda viva. */
+    .filter((entry) => !(esSoloDeuda(entry) && Number(entry.agreedPrice || 0) <= 0 && historyPaid(entry.id) <= 0))
     .map((entry) => {
       const saldo = historyBalance(entry.id);
       const precio = Number(entry.agreedPrice || 0);
