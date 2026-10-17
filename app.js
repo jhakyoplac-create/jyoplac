@@ -8355,12 +8355,24 @@ function renderCommissions() {
   const hasta = $("#commissionTo");
   if (!desde || !hasta) return;
   const month = $("#reportMonth")?.value || todayISO().slice(0, 7);
+  const alDia = () => {
+    const finDeMes = monthEnd(month);
+    return finDeMes < todayISO() ? finDeMes : todayISO();
+  };
   // al cambiar el mes del reporte, el rango se va a ese mes
   if (desde.dataset.mes !== month || !desde.value || !hasta.value) {
-    const finDeMes = monthEnd(month);
     desde.value = `${month}-01`;
-    hasta.value = finDeMes < todayISO() ? finDeMes : todayISO();
+    hasta.value = alDia();
     desde.dataset.mes = month;
+    hasta.dataset.auto = "1";
+  } else if (hasta.dataset.auto === "1" && hasta.value !== alDia()) {
+    /* El consultorio abre el sistema en la mañana y no lo cierra, a veces en
+       varios dias seguidos. El "hasta" se calculaba una sola vez, asi que se
+       quedaba en el dia que lo abrieron: los cobros nuevos caian fuera del
+       rango y la tabla parecia congelada aunque el dinero si estaba entrando.
+       Mientras nadie haya escrito las fechas a mano, el "hasta" se estira
+       solo hasta hoy. */
+    hasta.value = alDia();
   }
   const metrics = reportMetrics(month);
   const appointments = metrics.appointments;
@@ -8390,6 +8402,9 @@ function renderCommissions() {
 /* CM trae los pagos por rango: si las fechas salen de lo que el reporte ya
    cargo, se pide el rango que cubre las dos cosas para no perder ninguna. */
 function refreshCommissionsRange() {
+  // escrita a mano: a partir de aqui el rango es suyo y no se estira solo
+  const campoHasta = $("#commissionTo");
+  if (campoHasta) campoHasta.dataset.auto = "";
   renderCommissions();
   const month = $("#reportMonth")?.value || todayISO().slice(0, 7);
   const compareMonth = $("#compareMonth")?.value || previousMonth(month);
