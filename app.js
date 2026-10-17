@@ -4183,6 +4183,10 @@ function haySeguimientoMasReciente(appointment) {
 function isFollowUpOpen(appointment) {
   const status = appointmentFollowUpStatus(appointment);
   if (!status || status === "CERRADO") return false;
+  /* Si la cita termino atendida no hay nada que reprogramar: el paciente vino.
+     Pasa al cancelar y que despues venga igual -cobrarla la marca atendida- y
+     antes se quedaba en la lista de llamar para siempre. */
+  if (String(appointment.status || "").toUpperCase() === "ATENDIDA") return false;
   if (attendedAfterFollowUp(appointment)) return false;
   if (haySeguimientoMasReciente(appointment)) return false;
   if (status === "REPROGRAMADO") {
