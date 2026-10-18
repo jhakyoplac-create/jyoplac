@@ -3419,7 +3419,16 @@ function renderTreatmentPaymentOptions() {
     historySelect.innerHTML = `<option value="">Cita del dia - ${escapeHtml(appointment.service || "Servicio")}</option>${cobros}`;
     // con un tratamiento por pagar se puede elegir cobrarlo en vez de la cita
     historySelect.disabled = !cobros;
-    if (previo && existe(previo)) historySelect.value = previo;
+    // mismaSeleccion y no previo: la opcion de la cita vale cadena vacia, y
+    // tomarla como "no eligio nada" impedia pasar del plan a la cita a mano
+    if (mismaSeleccion && existe(previo)) historySelect.value = previo;
+    else if (cobros) {
+      /* Con un plan aceptado con saldo, el cobro de la cita va contra el
+         plan: es a lo que viene el paciente. La cita se marca atendida
+         igual, solo cambia de donde se descuenta el dinero. */
+      const plan = [...historySelect.options].find((option) => option.value.startsWith("trat:"));
+      if (plan) historySelect.value = plan.value;
+    }
     if (String(historySelect.value).startsWith("trat:")) {
       updatePaymentDue();
       return;
