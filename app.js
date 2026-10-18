@@ -4402,12 +4402,11 @@ function renderPatients() {
   const query = ($("#globalSearch")?.value || "").trim().toLowerCase();
   const filteredPatients = state.patients
     .filter((patient) => [patient.name, patient.dni, patient.phone, patient.birthDate].join(" ").toLowerCase().includes(query));
-  const showAppointmentDetails = Boolean(query);
-  if (!showAppointmentDetails) {
-    expandedPatientInfoId = "";
-  } else if (filteredPatients.length === 1) {
-    expandedPatientInfoId = filteredPatients[0].id;
-  } else if (!filteredPatients.some((patient) => patient.id === expandedPatientInfoId)) {
+  /* Las citas se abren solo cuando alguien pulsa "Ver citas". Antes se abrian
+     solas al escribir en el buscador, que sorprendia: se buscaba un paciente y
+     la fila se desplegaba sin pedirlo. Lo unico que queda es cerrar la que
+     estaba abierta si el filtro la dejo fuera de la lista. */
+  if (expandedPatientInfoId && !filteredPatients.some((patient) => patient.id === expandedPatientInfoId)) {
     expandedPatientInfoId = "";
   }
   const counter = $("#patientCount");
@@ -4419,15 +4418,15 @@ function renderPatients() {
       const status = patientStatus(patient);
       const ageText = patientAgeText(patient);
       const highlight = patient.id === lastSavedPatientId ? "row-highlight" : "";
-      const expanded = showAppointmentDetails && expandedPatientInfoId === patient.id;
-      const detailButton = showAppointmentDetails ? `<button class="small-btn" data-toggle-patient-info="${patient.id}">${expanded ? "Ocultar citas" : "Ver citas"}</button>` : "";
+      const expanded = expandedPatientInfoId === patient.id;
+      const detailButton = `<button class="small-btn" data-toggle-patient-info="${patient.id}">${expanded ? "Ocultar citas" : "Ver citas"}</button>`;
       const mainRow = `<tr class="${highlight}" data-patient-row="${patient.id}">
         <td><strong>${escapeHtml(patient.name)}</strong><br><span class="muted">${escapeHtml(patient.dni)}</span></td>
         <td>${escapeHtml(patient.phone)}${patient.birthDate ? `<br><span class="muted">${formatDate(patient.birthDate)}${ageText ? ` | ${ageText}` : ""}</span>` : ""}</td>
         <td>${escapeHtml(patient.doctor)}</td>
         <td><span class="status ${CLASE_ESTADO[status] ?? ""}" ${TITULO_ESTADO[status] ? `title="${TITULO_ESTADO[status]}"` : ""}>${status}</span></td>
         <td>${money(patientDebt(patient.id))}</td>
-        <td class="row-actions">${detailButton}<button class="small-btn" data-edit-patient="${patient.id}">Editar</button>${canManagePayments() ? `<button class="small-btn" data-pay-patient="${patient.id}">Pago</button>` : ""}${canDeletePatients() ? `<button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button>` : ""}</td>
+        <td class="row-actions"><button class="small-btn" data-edit-patient="${patient.id}">Editar</button>${detailButton}${canDeletePatients() ? `<button class="small-btn danger-btn" data-delete-patient="${patient.id}">Eliminar</button>` : ""}</td>
       </tr>`;
       const detailRow = expanded ? `<tr class="patient-detail-row"><td colspan="6">${renderPatientAppointmentDetail(patient.id)}</td></tr>` : "";
       return mainRow + detailRow;
@@ -10655,7 +10654,6 @@ function bindEvents() {
   $("#patientsTable").addEventListener("click", async (event) => {
     const toggleInfo = event.target.closest("[data-toggle-patient-info]");
     const edit = event.target.closest("[data-edit-patient]");
-    const pay = event.target.closest("[data-pay-patient]");
     const del = event.target.closest("[data-delete-patient]");
     if (toggleInfo) {
       const patientId = toggleInfo.dataset.togglePatientInfo;
@@ -10685,11 +10683,6 @@ function bindEvents() {
       ajustarDetalleDeEnfermedad();
       const submitButton = form.querySelector('button[type="submit"]');
       if (submitButton) submitButton.textContent = "Actualizar paciente";
-    }
-    if (pay) {
-      setView("pagos");
-      fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), pay.dataset.payPatient);
-      renderTreatmentPaymentOptions();
     }
     if (del) {
       if (!canDeletePatients()) {
