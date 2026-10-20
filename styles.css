@@ -6534,6 +6534,12 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   max-width: 150px;
   object-fit: contain;
 }
+/* En la ficha estomatologica el sello va mas grande: ahi firma solo el
+   doctor y sobra el ancho de la raya (Aurea, 2026-10-20). */
+.es-pie .pr-sello {
+  max-height: 96px;
+  max-width: 230px;
+}
 .pr-notas {
   margin-top: 11px;
   font-size: 10.5px;
