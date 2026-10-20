@@ -340,10 +340,29 @@ async function imprimirFichaDeDatos(patientId) {
       @page { size: A4; margin: 0; }
       html, body { background: #fff !important; }
       body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 8mm 12mm !important; max-width: 210mm; margin: 0 auto; }
+      .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 7mm 11mm !important; max-width: 210mm; margin: 0 auto; line-height: 1.28; }
+      /* Una sola hoja: la ficha medía unos 1220 px y el A4 tiene 1123, así que
+         la firma se iba sola a una segunda página (Arte Dental, 2026-10-20).
+         Se aprietan los renglones y el aire de la firma solo en el papel. */
+      .fd-dato, .fd-sino { min-height: 18px; }
+      .fd-identidad { margin: 8px 0 6px; }
+      .fd-seccion { margin: 8px 0 4px; }
+      .fd-subseccion { margin: 6px 0 3px; }
+      .fd-pie { margin-top: 44px; break-inside: avoid; }
+      .fd-pie:has(img) { margin-top: 6px; }
     </style></head><body>
     ${fichaDeDatos(patientId, { pantalla: false, foto })}
-    <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });<\/script>
+    <script>
+      /* Si con todo eso la ficha aún no cabe -respuestas largas-, se encoge lo
+         justo para que entre entera en el A4 y la firma no quede sola. */
+      window.addEventListener("load", function () {
+        var hoja = document.querySelector(".hc-hoja.fd");
+        var alto = hoja ? hoja.getBoundingClientRect().height : 0;
+        var maximo = 1110;
+        if (alto > maximo) hoja.style.zoom = (maximo / alto).toFixed(3);
+        setTimeout(function () { window.print(); }, 350);
+      });
+    <\/script>
     </body></html>`);
   ventana.document.close();
 }
