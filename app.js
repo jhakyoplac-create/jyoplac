@@ -5049,10 +5049,13 @@ async function imprimirHistoria(patientId) {
     <title>Historia clínica ${escapeHtml(patient.name)}</title>
     ${hojasDeEstilo}
     <style>
-      @page { size: A4; margin: 12mm; }
+      /* Sin tamaño fijo de papel: la hoja toma el ancho del papel que tenga la
+         impresora. Con el A4 fijo, una impresora de otro tamaño cortaba la
+         historia por la derecha (2026-10-20). */
+      @page { margin: 12mm; }
       html, body { background: #fff !important; }
       body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .hc-hoja { border: 0 !important; border-radius: 0 !important; padding: 0 !important; max-width: 186mm; margin: 0 auto; }
+      .hc-hoja { border: 0 !important; border-radius: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; margin: 0 !important; }
       .hc-seccion-odontograma, .hc-tratamiento, .hc-firma, tr { break-inside: avoid; }
       .table-wrap { overflow: visible !important; }
     </style></head><body>
