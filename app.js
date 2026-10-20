@@ -391,6 +391,15 @@ function mapApiConsentimiento(row) {
 }
 
 
+/* Las firmas de la proforma viajan en una sola columna JSON del servidor. */
+function firmasDeLaProforma(row) {
+  let firmas = row.firmas;
+  if (typeof firmas === "string") {
+    try { firmas = JSON.parse(firmas); } catch (error) { firmas = null; }
+  }
+  return firmas && typeof firmas === "object" ? firmas : {};
+}
+
 function mapApiProforma(row) {
   let lineas = row.lineas;
   if (typeof lineas === "string") {
@@ -401,6 +410,7 @@ function mapApiProforma(row) {
     }
   }
   return {
+    ...firmasDeLaProforma(row),
     id: row.id,
     patientId: row.patient_id || row.patientId || "",
     patientName: row.patient_name || row.patientName || "",
@@ -441,6 +451,7 @@ function parseListaDePrecios(value, fallback) {
    a mano y los datos de la Ficha estomatologica. En el servidor van juntos, en
    JSON, en la columna hojas. */
 const CAMPOS_DE_LAS_HOJAS = [
+  "firmaFicha", "firmaFichaFecha", "firmaFichaPor", "firmaEstomatologica", "firmaEstomatologicaFecha", "firmaEstomatologicaPor",
   "evolucion", "estTalla", "estPeso", "estImpresion", "estCabeza", "estCuello", "estMejillas",
   "estLengua", "estPisoDeBoca", "estPaladar", "estEncias", "estVestibulo",
   "estEspecificaciones", "estObservaciones", "estInforme", "estAuxiliares", "estCie",
@@ -4912,18 +4923,28 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
      el momento, se guarda dentro de esta historia y queda anotado quien firmo y
      cuando. El sello del consultorio si es fijo: identifica al consultorio, no
      autoriza nada por si solo. */
-  /* La firma dibujada en pantalla ya no sale en la historia: se sella y se
-     firma a mano sobre el papel (pedido del 2026-10-09). */
+  /* La firma se dibuja en pantalla, como en el consentimiento, y se guarda
+     dentro de esta historia con quien firmo y cuando. Se quito el 2026-10-09
+     para firmar sobre el papel y volvio el 2026-10-20 a pedido de Arte Dental;
+     el que prefiera el papel simplemente no pulsa Firmar. */
+  const firmada = Boolean(nota.firma);
   const cierre = `<div class="hcf-cierre">
       ${elegirProfesional}
       ${cop ? `<p class="hcf-cop">COP N.° ${escapeHtml(cop)}</p>` : ""}
       ${sello ? `<img class="hcf-sello-imagen" src="${escapeHtml(sello)}" alt="Sello de ${escapeHtml(profesional)}" />` : ""}
+      ${firmada ? `<img class="hcf-firma" src="${escapeHtml(nota.firma)}" alt="Firma del profesional" />` : ""}
       <div class="hcf-sello">
         <span>Sello y firma</span>
+        ${sePuedeEscribir && nota.id
+          ? `<button class="small-btn" type="button" data-firmar-profesional="${nota.id}">${firmada ? "Firmar de nuevo" : "Firmar aquí"}</button>`
+          : ""}
         ${/* Imprimir vive al final de la hoja, no arriba: se imprime cuando ya
               se termino de leerla y de firmarla, no antes. */
           pantalla ? `<button class="ghost hcf-imprimir" type="button" data-imprimir-historia="${patient.id}">Imprimir historia</button>` : ""}
       </div>
+      ${firmada
+        ? `<p class="hcf-firmada">Firmada por ${escapeHtml(nota.firmadaPor || profesional)} el ${formatDate(String(nota.firmadaEl || "").slice(0, 10))}${String(nota.firmadaEl || "").slice(11, 16) ? ` a las ${String(nota.firmadaEl).slice(11, 16)}` : ""}</p>`
+        : ""}
     </div>`;
 
   /* En pantalla el odontograma vive en su propia pestana -con el inicial y el
@@ -5931,7 +5952,7 @@ async function abrirFirmaDelProfesional(historiaId) {
   if (entrada.firma && !(await uiConfirm(`Esta historia ya está firmada por ${entrada.firmadaPor || "el profesional"}. ¿Reemplazar la firma por la tuya?`))) return;
   const quien = currentUser();
   prepararLienzoDeFirma(
-    { destino: "historia", historiaId },
+    { destino: "historia", historiaId, titulo: "Firma del profesional" },
     `${quien?.name || "El profesional"} firma con el dedo o con el mouse dentro del recuadro.`
   );
 }
@@ -5942,6 +5963,45 @@ async function abrirFirmaDelProfesional(historiaId) {
    falta y se guarda dentro del estado que viaja a la nube en cada cambio. Se
    recorta al trazo -casi todo el recuadro es aire- y se baja a un ancho fijo,
    que para una firma sobra: queda en una fraccion de lo que pesaba. */
+/* La firma de los demas documentos -la proforma, la ficha de datos, la ficha
+   estomatologica-: el mismo recuadro, y se guarda dentro del documento con la
+   fecha y quien la puso. Firma el paciente o el doctor segun el campo. */
+function abrirFirmaDeDocumento({ firmarDocumento: destino, firmaId: id, firmaCampo: campo }) {
+  if (!canManageClinical()) {
+    uiAlert("Tu usuario no puede firmar documentos.");
+    return;
+  }
+  const documento = destino === "proforma"
+    ? (state.proformas || []).find((item) => item.id === id)
+    : patientById(id);
+  if (!documento) return;
+  const patient = destino === "proforma" ? patientById(documento.patientId) : documento;
+  const firmaElDoctor = campo === "firmaDoctor" || campo === "firmaEstomatologica";
+  const quien = firmaElDoctor ? (currentUser()?.name || "El cirujano dentista") : (patient?.name || "El paciente");
+  prepararLienzoDeFirma(
+    { destino: "documento", coleccion: destino, id, campo, quien, patientId: patient?.id || "", titulo: firmaElDoctor ? "Firma del cirujano dentista" : "Firma del paciente" },
+    `${quien} firma con el dedo o con el mouse dentro del recuadro.`
+  );
+}
+
+
+/* La firma dibujada en pantalla de cualquier documento -la proforma, las
+   fichas, la historia-: la imagen encima de la raya si ya se firmo, con quien
+   y cuando, y en pantalla el boton para firmar. El boton dice que documento y
+   que campo es; el guardado generico de la firma lo lee (Arte Dental,
+   2026-10-20: "todo documento que lleva firma deberia poder firmarse en la
+   computadora"). */
+function firmaVirtual({ imagen = "", fecha = "", por = "", etiqueta = "Firma", pantalla = false, destino = "", id = "", campo = "firma" }) {
+  const dibujo = imagen ? `<img class="firma-virtual-img" src="${escapeHtml(imagen)}" alt="${escapeHtml(etiqueta)}" />` : "";
+  const dato = imagen && fecha
+    ? `<small class="firma-virtual-dato">Firmado el ${formatDate(String(fecha).slice(0, 10))}${por ? ` · ${escapeHtml(por)}` : ""}</small>`
+    : "";
+  const boton = pantalla
+    ? `<button class="small-btn firma-virtual-boton" type="button" data-firmar-documento="${escapeHtml(destino)}" data-firma-id="${escapeHtml(id)}" data-firma-campo="${escapeHtml(campo)}">${imagen ? "Firmar de nuevo" : "Firmar aquí"}</button>`
+    : "";
+  return { dibujo, dato, boton };
+}
+
 function firmaComprimida(lienzo, anchoMaximo = 420) {
   const pincel = lienzo.getContext("2d");
   let datos;
@@ -5995,6 +6055,9 @@ function prepararLienzoDeFirma(datos, pistaTexto) {
   firmaEnCurso = { ...datos, trazos: false };
   const pista = $("#signatureHint");
   if (pista) pista.textContent = pistaTexto;
+  // el recuadro es el mismo para todos: el titulo dice quien firma
+  const titulo = dialogo.querySelector("h2");
+  if (titulo) titulo.textContent = datos.titulo || "Firma del paciente";
   dialogo.showModal();
   const escala = window.devicePixelRatio || 1;
   const ancho = lienzo.clientWidth || 640;
@@ -6067,6 +6130,24 @@ function bindFirmaDelConsentimiento() {
         `El cirujano dentista firmó el consentimiento de ${consentimiento.tipo}: ${patientById(consentimiento.patientId)?.name || "Paciente"}`,
         consentimiento.patientId
       );
+      firmaEnCurso = null;
+      $("#signatureDialog")?.close("ok");
+      renderClinicalHistory();
+      return;
+    }
+    if (firmaEnCurso.destino === "documento") {
+      const documento = firmaEnCurso.coleccion === "proforma"
+        ? (state.proformas || []).find((item) => item.id === firmaEnCurso.id)
+        : patientById(firmaEnCurso.id);
+      if (!documento) return;
+      documento[firmaEnCurso.campo] = imagen;
+      documento[`${firmaEnCurso.campo}Fecha`] = todayISO();
+      documento[`${firmaEnCurso.campo}Por`] = firmaEnCurso.quien || "";
+      if (firmaEnCurso.coleccion === "paciente") savePatientApi(documento).catch((error) => uiAlert(error.message));
+      if (firmaEnCurso.coleccion === "proforma") saveProformaApi(documento).catch((error) => uiAlert(error.message));
+      if (!API_ENABLED) saveState();
+      const cual = firmaEnCurso.coleccion === "proforma" ? "la proforma" : firmaEnCurso.campo === "firmaFicha" ? "la ficha de datos" : "la ficha estomatológica";
+      addLocalAuditEvent("DOCUMENTO_FIRMADO", `${firmaEnCurso.quien || "Alguien"} firmó ${cual} de ${patientById(firmaEnCurso.patientId)?.name || "un paciente"}`, firmaEnCurso.patientId);
       firmaEnCurso = null;
       $("#signatureDialog")?.close("ok");
       renderClinicalHistory();
@@ -6173,11 +6254,15 @@ const sumaDeLaProforma = (proforma) => (proforma?.lineas || [])
 /* La hoja que se imprime y se lleva el paciente: el logo del consultorio, sus
    datos, lo que se le va a hacer con su precio, el total y hasta cuando vale.
    La misma en pantalla y en papel. */
-function hojaDeLaProforma(proforma) {
+function hojaDeLaProforma(proforma, { pantalla = false } = {}) {
   const patient = patientById(proforma.patientId);
   const config = state.config || {};
   const subtotal = sumaDeLaProforma(proforma);
   const rebaja = Math.round(subtotal * Number(proforma.descuento || 0)) / 100;
+  /* Las dos firmas de la proforma, dibujadas en pantalla y guardadas con ella. */
+  const puedeFirmar = pantalla && canManageClinical();
+  const firmaDelDoctor = firmaVirtual({ imagen: proforma.firmaDoctor, fecha: proforma.firmaDoctorFecha, por: proforma.firmaDoctorPor, etiqueta: "Firma del cirujano dentista", pantalla: puedeFirmar, destino: "proforma", id: proforma.id, campo: "firmaDoctor" });
+  const firmaDelPaciente = firmaVirtual({ imagen: proforma.firma, fecha: proforma.firmaFecha, por: proforma.firmaPor, etiqueta: "Firma del paciente", pantalla: puedeFirmar, destino: "proforma", id: proforma.id, campo: "firma" });
   return `<article class="hc-hoja proforma-hoja">
     <header class="hc-cabecera">
       <div class="hc-clinica">
@@ -6216,8 +6301,8 @@ function hojaDeLaProforma(proforma) {
     </table></div>
     <p class="proforma-nota">Este presupuesto cubre los tratamientos detallados arriba. Los precios se mantienen 30 días desde la fecha de esta proforma. Si durante el tratamiento aparece algo que hoy no se ve, se conversa antes de hacerlo.</p>
     <footer class="hc-firma">
-      <div>${escapeHtml(proforma.doctor || "")}<br>Cirujano dentista${proforma.cop ? ` · COP N.° ${escapeHtml(proforma.cop)}` : ""}</div>
-      <div>Firma del paciente</div>
+      <div>${firmaDelDoctor.dibujo}<div class="hc-firma-linea">${escapeHtml(proforma.doctor || "")}<br>Cirujano dentista${proforma.cop ? ` · COP N.° ${escapeHtml(proforma.cop)}` : ""}</div>${firmaDelDoctor.dato}${firmaDelDoctor.boton}</div>
+      <div>${firmaDelPaciente.dibujo}<div class="hc-firma-linea">Firma del paciente</div>${firmaDelPaciente.dato}${firmaDelPaciente.boton}</div>
     </footer>
   </article>`;
 }
@@ -6948,7 +7033,7 @@ function hojaDelPlan(patientId) {
               <button class="small-btn" type="button" data-imagen-presupuesto="${item.id}">Imagen</button>
               ${puedeEditar && !item.aceptadaEl ? `<button class="small-btn" type="button" data-borrar-proforma="${item.id}">Borrar</button>` : ""}
             </div>
-            <details class="proforma-ver"><summary>Ver la hoja</summary>${hojaDeLaProforma(item)}</details>
+            <details class="proforma-ver"><summary>Ver la hoja</summary>${hojaDeLaProforma(item, { pantalla: true })}</details>
           </div>`;
         }).join("")
         : `<p class="muted">Todavía no se le ha entregado ninguna proforma.</p>`}
@@ -11317,9 +11402,14 @@ function bindEvents() {
         return;
       }
       prepararLienzoDeFirma(
-        { destino: "consentimiento-dentista", consentimientoId: firmarDentista.dataset.firmarDentista },
+        { destino: "consentimiento-dentista", consentimientoId: firmarDentista.dataset.firmarDentista, titulo: "Firma del cirujano dentista" },
         `${currentUser()?.name || "El cirujano dentista"} firma con el dedo o con el mouse dentro del recuadro.`
       );
+      return;
+    }
+    const firmarDocumento = event.target.closest("[data-firmar-documento]");
+    if (firmarDocumento) {
+      abrirFirmaDeDocumento(firmarDocumento.dataset);
       return;
     }
     const imprimir = event.target.closest("[data-imprimir-consentimiento]");

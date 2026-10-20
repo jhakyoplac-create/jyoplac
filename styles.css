@@ -3974,14 +3974,47 @@ menu {
   margin-top: 28px;
 }
 
-.hc-firma div {
+.hc-firma > div {
   flex: 1;
   max-width: 240px;
-  padding-top: 4px;
-  border-top: 1px solid #1f2a2e;
   color: #5b6b70;
   font-size: 11px;
   text-align: center;
+}
+
+.hc-firma .hc-firma-linea {
+  padding-top: 4px;
+  border-top: 1px solid #1f2a2e;
+}
+
+/* La firma dibujada en pantalla, en cualquier documento: encima de la raya,
+   con la fecha debajo, y en pantalla el boton para firmar. */
+.firma-virtual-img {
+  display: block;
+  max-width: 200px;
+  max-height: 70px;
+  margin: 0 auto 2px;
+}
+
+.firma-virtual-dato {
+  display: block;
+  font-size: 10px;
+  color: #5b6b70;
+}
+
+.firma-virtual-boton {
+  margin-top: 4px;
+}
+
+.ev-firma .firma-virtual-img {
+  max-height: 40px;
+  margin: 0 0 2px;
+}
+
+@media print {
+  .firma-virtual-boton {
+    display: none;
+  }
 }
 
 /* la copia del odontograma que dibuja el grafico de la hoja no se ve */
@@ -5602,8 +5635,16 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   color: #5b6b70;
 }
 
+/* El ancho va en el dialogo y no en el formulario de adentro: con el ancho
+   en el formulario, la ventana se quedaba en los 520 px de cualquier dialogo
+   y el recuadro de 680 se salia por la derecha, con barra de desplazamiento
+   y el boton Guardar cortado (Arte Dental, 2026-10-20). */
+#signatureDialog {
+  width: min(720px, calc(100vw - 28px));
+}
+
 .signature-modal {
-  width: min(680px, calc(100vw - 32px));
+  width: auto;
   padding: 14px 16px;
 }
 

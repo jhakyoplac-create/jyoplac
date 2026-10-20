@@ -275,6 +275,8 @@ def ensure_column(conn, table, column, definition):
 
 def migrate_db(conn):
     ensure_column(conn, "proformas", "ficha", "TEXT")
+    # las firmas dibujadas en pantalla de la proforma (paciente y doctor), en JSON
+    ensure_column(conn, "proformas", "firmas", "TEXT")
     ensure_column(conn, "patients", "birth_date", "TEXT")
     ensure_column(conn, "patients", "status", "TEXT NOT NULL DEFAULT 'NUEVO'")
     ensure_column(conn, "patients", "created_by_id", "TEXT")
@@ -1116,6 +1118,15 @@ def consultar_documento(kind, number):
         "error": f"No se pudo consultar el {kind.upper()}. Completa los datos manualmente.",
         "detail": last_404,
     }, 502
+
+
+CAMPOS_DE_FIRMA = ("firma", "firmaFecha", "firmaPor", "firmaDoctor", "firmaDoctorFecha", "firmaDoctorPor")
+
+
+def firmas_de_la_proforma(data):
+    """Las firmas dibujadas en pantalla, juntas en un JSON; vacio si no hay."""
+    firmas = {campo: data[campo] for campo in CAMPOS_DE_FIRMA if data.get(campo)}
+    return json.dumps(firmas, ensure_ascii=False) if firmas else ""
 
 
 def list_table(table, order="created_at DESC"):
@@ -3308,9 +3319,9 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     """
                     INSERT INTO proformas (
                       id, patient_id, patient_name, numero, date, lineas, descuento,
-                      doctor, cop, aceptada_el, tratamiento_id, ficha
+                      doctor, cop, aceptada_el, tratamiento_id, ficha, firmas
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       patient_name=excluded.patient_name, numero=excluded.numero,
                       date=excluded.date, lineas=excluded.lineas,
@@ -3319,6 +3330,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                       /* la copia del odontograma no se pisa con vacio: al
                          aceptar la proforma se vuelve a guardar sin ella */
                       ficha=COALESCE(NULLIF(excluded.ficha, ''), proformas.ficha),
+                      firmas=COALESCE(NULLIF(excluded.firmas, ''), proformas.firmas),
                       updated_at=CURRENT_TIMESTAMP
                     """,
                     (
@@ -3334,6 +3346,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         data.get("aceptadaEl", "") or None,
                         data.get("tratamientoId", "") or None,
                         data.get("ficha", "") or "",
+                        firmas_de_la_proforma(data),
                     ),
                 )
             pid = str(data.get("patientId") or "")

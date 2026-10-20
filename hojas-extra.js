@@ -171,6 +171,7 @@ function fichaDeDatos(patientId, { pantalla = true, foto = null } = {}) {
   const edad = patient.birthDate ? ageFromBirthDate(patient.birthDate) : null;
   const laFoto = foto ?? fotoEnMemoria(patientId);
   const puedeEditar = pantalla && canManageClinical();
+  const firmaDeLaFicha = firmaVirtual({ imagen: patient.firmaFicha, fecha: patient.firmaFichaFecha, por: patient.firmaFichaPor, etiqueta: "Firma del paciente", pantalla: puedeEditar, destino: "paciente", id: patient.id, campo: "firmaFicha" });
   const sexo = patient.sexo === "F" ? "Femenino" : patient.sexo === "M" ? "Masculino" : "";
   const creada = patient.historiaDesde || String(patient.createdAt || "").slice(0, 10) || todayISO();
   const titular = patient.guardianName
@@ -303,7 +304,7 @@ function fichaDeDatos(patientId, { pantalla = true, foto = null } = {}) {
     </section>
 
     <footer class="fd-pie">
-      <div class="fd-firma"><i></i><span>Firma del paciente / tutor</span></div>
+      <div class="fd-firma">${firmaDeLaFicha.dibujo}<i></i><span>Firma del paciente / tutor</span>${firmaDeLaFicha.dato}${firmaDeLaFicha.boton}</div>
     </footer>
     ${pantalla ? `<p class="fd-acciones"><button class="ghost" type="button" data-imprimir-ficha="${patient.id}">Imprimir ficha de datos</button></p>` : ""}
   </article>`;
@@ -468,6 +469,7 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
     id: nota.id,
     date: nota.date,
     hora: nota.hora || "",
+    firma: nota.firma || "",
     texto: "evolucion" in nota
       ? String(nota.evolucion || "")
       : [nota.reason, nota.procedure]
@@ -493,9 +495,9 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
       ${(doctores.includes(actual) || !actual ? doctores : [actual, ...doctores])
         .map((nombre) => `<option value="${escapeHtml(nombre)}"${nombre === actual ? " selected" : ""}>${escapeHtml(nombre)}</option>`).join("")}
     </select>`;
-  const firma = (doctor, selector = "") => {
+  const firma = (doctor, selector = "", dibujada = "") => {
     const usuario = usuarioDelDoctor(doctor);
-    return `${usuario?.sello ? `<img src="${escapeHtml(usuario.sello)}" alt="Sello de ${escapeHtml(doctor)}" />` : ""}
+    return `${dibujada ? `<img class="firma-virtual-img" src="${escapeHtml(dibujada)}" alt="Firma" />` : ""}${usuario?.sello ? `<img src="${escapeHtml(usuario.sello)}" alt="Sello de ${escapeHtml(doctor)}" />` : ""}
       ${selector || (doctor ? `<span>${escapeHtml(doctor)}</span>` : "")}
       ${usuario?.cop ? `<span>COP ${escapeHtml(usuario.cop)}</span>` : ""}`;
   };
@@ -507,7 +509,7 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
       <td class="ev-asist"></td>
       <td class="ev-firma">${firma(fila.doctor, sePuedeEscribir && doctores.length
         ? elegirDoctor(fila.doctor, `${fila.tipo === "nota" ? `data-ev-nota="${escapeHtml(fila.id)}"` : `data-ev-fila="${escapeHtml(fila.id)}"`} data-paciente="${patient.id}" aria-label="Doctor que atendió"`)
-        : "")}</td>
+        : "", fila.firma || "")}</td>
       <td class="ev-vb">${sePuedeEscribir && fila.tipo === "mano"
         ? `<button class="ev-borrar" type="button" title="Borrar esta fila" data-ev-borrar="${escapeHtml(fila.id)}" data-paciente="${patient.id}">×</button>`
         : ""}</td>
@@ -733,11 +735,12 @@ function presupuestoImpreso(proforma) {
     <footer class="pr-firmas">
       <div class="fd-firma">
         ${firmante?.sello ? `<img class="pr-sello" src="${escapeHtml(firmante.sello)}" alt="" />` : ""}
+        ${proforma.firmaDoctor ? `<img class="firma-virtual-img" src="${escapeHtml(proforma.firmaDoctor)}" alt="" />` : ""}
         <i></i>
         <span>Firma del odontólogo tratante</span>
         ${proforma.doctor ? `<small>${escapeHtml(proforma.doctor)}${proforma.cop ? ` · COP ${escapeHtml(proforma.cop)}` : ""}</small>` : ""}
       </div>
-      <div class="fd-firma"><i></i><span>Firma del paciente / apoderado</span></div>
+      <div class="fd-firma">${proforma.firma ? `<img class="firma-virtual-img" src="${escapeHtml(proforma.firma)}" alt="" />` : ""}<i></i><span>Firma del paciente / apoderado</span></div>
     </footer>
     <section class="pr-notas">
       <p>* Después de la evaluación con otro especialista o servicio, el presupuesto podría incrementar o disminuir.</p>
@@ -961,6 +964,7 @@ function fichaEstomatologica(patientId, { pantalla = true } = {}) {
   const config = state.config || {};
   const color = /^#[0-9a-f]{6}$/i.test(config.primaryColor || "") ? config.primaryColor : "#00a6d6";
   const sePuedeEscribir = pantalla && canManageClinical();
+  const firmaDelDoctor = firmaVirtual({ imagen: patient.firmaEstomatologica, fecha: patient.firmaEstomatologicaFecha, por: patient.firmaEstomatologicaPor, etiqueta: "Firma del doctor tratante", pantalla: sePuedeEscribir, destino: "paciente", id: patient.id, campo: "firmaEstomatologica" });
 
   // la primera atencion, y la que tenga escrita la parte clinica (como la historia)
   const atenciones = state.clinicalHistory
@@ -1089,9 +1093,11 @@ function fichaEstomatologica(patientId, { pantalla = true } = {}) {
       </div>
       <div class="fd-firma">
         ${firmante?.sello ? `<img class="pr-sello" src="${escapeHtml(firmante.sello)}" alt="" />` : ""}
+        ${firmaDelDoctor.dibujo}
         <i></i>
         <span>Firma y sello del Dr. tratante</span>
         ${doctor ? `<small>${escapeHtml(doctor)}${firmante?.cop ? ` · COP ${escapeHtml(firmante.cop)}` : ""}</small>` : ""}
+        ${firmaDelDoctor.dato}${firmaDelDoctor.boton}
       </div>
     </footer>
     ${pantalla
