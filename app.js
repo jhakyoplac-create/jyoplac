@@ -4534,39 +4534,6 @@ function prepararVistaDeLaHoja() {
 }
 
 
-function odontogramaParaLaHoja(patientId) {
-  if (typeof Odontograma === "undefined" || !patientId) return null;
-  const copia = copiasDelOdontograma(patientId)[0] || null;
-  const ficha = copia
-    ? Odontograma.normalizarFicha(parseFindings(copia.ficha))
-    : odontogramFichaFor(patientId, "inicial");
-  const compacta = fichaCompacta(ficha);
-  if (!Object.keys(compacta.dientes).length && !compacta.spans.length && !compacta.esp) return null;
-  if (!vistaDeLaHoja) {
-    const caja = document.createElement("div");
-    caja.className = "hc-odontograma-oculto";
-    caja.setAttribute("aria-hidden", "true");
-    const cabecera = document.createElement("div");
-    lienzoDeLaHoja = document.createElement("div");
-    caja.append(cabecera, lienzoDeLaHoja);
-    document.body.appendChild(caja);
-    vistaDeLaHoja = Odontograma.crear({ barra: null, cabecera, lienzo: lienzoDeLaHoja, rutaImagenes: "assets/dientes/" });
-    vistaDeLaHoja.setPacientes([], "");
-    vistaDeLaHoja.setSoloLectura(true);
-  }
-  vistaDeLaHoja.cargar(ficha);
-  const arco = lienzoDeLaHoja.querySelector(".odo-arco");
-  return {
-    html: arco ? arco.innerHTML : "",
-    hallazgos: (Odontograma.PIEZAS || [])
-      .map((pieza) => ({ pieza, texto: vistaDeLaHoja.resumenPieza(pieza) }))
-      .filter((item) => item.texto),
-    especificaciones: ficha.esp || "",
-    origen: copia
-      ? `copia del ${formatDate(copia.date)}${copia.sheet === "evolucion" ? " · evolución" : ""}${copia.doctor ? ` · ${copia.doctor}` : ""}`
-      : "odontograma actual, sin copia guardada"
-  };
-}
 
 /* El grafico mide lo mismo que en la pantalla del odontograma, mas ancho que
    la hoja: se reduce hasta que entre. Sin ancho -la pantalla oculta- no se
@@ -4707,7 +4674,6 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   const notas = state.clinicalHistory
     .filter((entry) => entry.patientId === patientId)
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  const odontograma = odontogramaParaLaHoja(patientId);
   const atenciones = notas.filter((entry) => !esSoloDeuda(entry));
   const primeraAtencion = atenciones.length ? atenciones[atenciones.length - 1] : null;
   /* La historia se escribe en la primera atencion y desde ahi acompana al
@@ -4947,16 +4913,10 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
         : ""}
     </div>`;
 
-  /* En pantalla el odontograma vive en su propia pestana -con el inicial y el
-     de evolucion, como pide la norma-, asi que aqui se omite para no verlo dos
-     veces. En la hoja impresa si va, al final: el papel que se archiva se
-     entrega completo. */
-  const odonto = pantalla || !odontograma ? "" : `<section class="hcf-odontograma">
-      ${titulo(`Odontograma · ${escapeHtml(odontograma.origen)}`)}
-      <div class="hc-grafico"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${odontograma.html}</div></div></div>
-      ${odontograma.hallazgos.length ? `<ul class="hc-hallazgos">${odontograma.hallazgos.map((item) => `<li><strong>${escapeHtml(item.pieza)}</strong> ${escapeHtml(item.texto)}</li>`).join("")}</ul>` : ""}
-      ${odontograma.especificaciones ? `<p class="hc-observacion"><span>Especificaciones:</span> ${escapeHtml(odontograma.especificaciones)}</p>` : ""}
-    </section>`;
+  /* El odontograma ya no sale en la historia impresa: el consultorio lo
+     imprime aparte, con el inicial y el de evolucion, y aqui salia repetido
+     (Aurea, 2026-10-20). En pantalla vive en su propia pestana. */
+  const odonto = "";
 
   return `<article class="hc-hoja hcf">
     ${cabecera}
