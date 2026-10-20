@@ -5832,8 +5832,13 @@ function bloqueDeFirmas(patient, tipo, { pantalla = true } = {}) {
     : pantalla
       ? `<button class="small-btn" type="button" data-firmar-consentimiento="${tipo}">Firmar aquí</button>`
       : "";
-  // el COP se guarda en el usuario de la doctora; si no lo puso, queda la linea
-  const cop = usuarioDelDoctor(patient.doctor || (state.config?.doctors || [])[0] || "")?.cop || "";
+  // el COP y el sello se guardan en el usuario de la doctora; si no los puso, queda la linea
+  const dentista = usuarioDelDoctor(patient.doctor || (state.config?.doctors || [])[0] || "");
+  const cop = dentista?.cop || "";
+  /* El sello del doctor sobre su raya, como en el papel sellado (Aurea,
+     2026-10-20). Sale siempre que el doctor lo tenga cargado en su usuario;
+     la firma dibujada, si la hay, cae encima como sobre un sello real. */
+  const sello = dentista?.sello ? `<img class="ci-sello" src="${escapeHtml(dentista.sello)}" alt="Sello del cirujano dentista" />` : "";
   /* El dentista firma aparte, con su propia fecha: no se copia la del
      paciente. Firma despues de el, sobre el documento que el paciente ya
      acepto; mientras no firme, su lado queda con la linea en blanco. */
@@ -5843,9 +5848,9 @@ function bloqueDeFirmas(patient, tipo, { pantalla = true } = {}) {
     : pantalla && firmado?.firma
       ? `<button class="small-btn" type="button" data-firmar-dentista="${firmado.id}">Firmar aquí</button>`
       : "";
-  return `<div class="ci-firmas">
+  return `<div class="ci-firmas${sello ? " ci-firmas-con-sello" : ""}">
       <div>${firma}Paciente o Representante legal</div>
-      <div>${firmaDelDentista}Cirujano Dentista<br>COP N.º ${cop ? escapeHtml(cop) : RAYA}</div>
+      <div>${sello}${firmaDelDentista}Cirujano Dentista<br>COP N.º ${cop ? escapeHtml(cop) : RAYA}</div>
     </div>`;
 }
 

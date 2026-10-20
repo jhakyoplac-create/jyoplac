@@ -5629,6 +5629,25 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   margin: -62px auto 4px;
 }
 
+/* el sello del doctor tambien se apoya sobre su raya; con sello la hoja
+   deja mas aire arriba para que no pise el ultimo parrafo */
+.ci-firmas.ci-firmas-con-sello {
+  margin-top: 104px;
+}
+
+.ci-sello {
+  display: block;
+  max-width: 210px;
+  max-height: 92px;
+  margin: -98px auto 6px;
+  object-fit: contain;
+}
+
+/* con sello, la firma dibujada del doctor cae sobre el, como en el papel */
+.ci-sello + .ci-firma {
+  margin-top: -76px;
+}
+
 .ci-firmas small {
   display: block;
   font-size: 10px;
