@@ -1023,8 +1023,13 @@ function fichaEstomatologica(patientId, { pantalla = true } = {}) {
   // la casilla junto al titulo elige el dibujo: el de la casa o el esquematico del Colegio
   const colegio = Boolean(config.fichaOdontogramaColegio);
   const dibujo = !colegio && window.Odontograma ? dibujoDelOdontograma(window.Odontograma.fichaVacia(), { completo: true, enBlanco: true }) : null;
-  const firmante = usuarioDelDoctor(nota.attendedBy || patient.doctor);
-  const doctor = nombreCompletoDelDoctor(nota.attendedBy || patient.doctor);
+  /* El primero de los nombres que sea un usuario registrado: si la atencion
+     quedo con el nombre mal escrito ("Carla" por "Karla"), el del paciente
+     si trae su sello y su COP (Aurea, 2026-10-20). */
+  const nombres = [nota.attendedBy, patient.doctor].map((nombre) => String(nombre || "").trim()).filter(Boolean);
+  const elegido = nombres.find((nombre) => usuarioDelDoctor(nombre)) || nombres[0] || "";
+  const firmante = usuarioDelDoctor(elegido);
+  const doctor = nombreCompletoDelDoctor(elegido);
   const fechaDeIngreso = patient.historiaDesde || primera?.date || String(patient.createdAt || "").slice(0, 10);
   const mitad = Math.ceil(DIAGNOSTICOS_CIE.length / 2);
   const columnaCie = (items) => items.map(([codigo, nombre]) => `<p class="es-cie">
@@ -1120,7 +1125,7 @@ function fichaEstomatologica(patientId, { pantalla = true } = {}) {
       </div>
     </footer>
     ${pantalla
-      ? `<p class="fd-acciones">${sePuedeEscribir ? `<span class="muted">Se escribe sobre cada raya y se guarda al salir de ella; las casillas se marcan con un clic.</span>` : ""}
+      ? `<p class="fd-acciones">
           <button class="ghost" type="button" data-imprimir-estomatologica="${patient.id}">Imprimir ficha estomatológica</button></p>`
       : ""}
   </article>`;

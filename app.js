@@ -5731,8 +5731,13 @@ function usuarioDelDoctor(etiqueta) {
   const exacto = usuarios.find((usuario) => enMinusculas(usuario.name) === enMinusculas(corto));
   if (exacto) return exacto;
   const clinicos = ["DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "ADMIN"];
+  /* El nombre de pila escrito de oido: "Carla" es Karla, "Yesica" es Jessica.
+     Se compara sin tildes y con las letras que suenan igual juntas. */
+  const deOido = (texto) => enMinusculas(texto).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/qu/g, "k").replace(/j/g, "y").replace(/y/g, "i").replace(/z/g, "s")
+    .replace(/c(?=[ei])/g, "s").replace(/c/g, "k").replace(/v/g, "b").replace(/h/g, "").replace(/(.)\1+/g, "$1");
   const candidatos = usuarios.filter((usuario) =>
-    clinicos.includes(usuario.role) && enMinusculas(usuario.name).split(/\s+/)[0] === enMinusculas(corto));
+    clinicos.includes(usuario.role) && deOido(enMinusculas(usuario.name).split(/\s+/)[0]) === deOido(corto));
   return candidatos.length === 1 ? candidatos[0] : null;
 }
 
