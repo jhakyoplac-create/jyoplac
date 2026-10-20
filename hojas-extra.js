@@ -488,7 +488,6 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
     id: nota.id,
     date: nota.date,
     hora: nota.hora || "",
-    firma: nota.firma || "",
     texto: "evolucion" in nota
       ? String(nota.evolucion || "")
       : [nota.reason, nota.procedure]
@@ -514,10 +513,11 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
       ${(doctores.includes(actual) || !actual ? doctores : [actual, ...doctores])
         .map((nombre) => `<option value="${escapeHtml(nombre)}"${nombre === actual ? " selected" : ""}>${escapeHtml(nombre)}</option>`).join("")}
     </select>`;
-  const firma = (doctor, selector = "", dibujada = "") => {
+  /* Sin la imagen del sello ni la firma dibujada: en cada fila hacian la
+     hoja el doble de alta (Aurea, 2026-10-20). Queda el doctor y su COP. */
+  const firma = (doctor, selector = "") => {
     const usuario = usuarioDelDoctor(doctor);
-    return `${dibujada ? `<img class="firma-virtual-img" src="${escapeHtml(dibujada)}" alt="Firma" />` : ""}${usuario?.sello ? `<img src="${escapeHtml(usuario.sello)}" alt="Sello de ${escapeHtml(doctor)}" />` : ""}
-      ${selector || (doctor ? `<span>${escapeHtml(doctor)}</span>` : "")}
+    return `${selector || (doctor ? `<span>${escapeHtml(doctor)}</span>` : "")}
       ${usuario?.cop ? `<span>COP ${escapeHtml(usuario.cop)}</span>` : ""}`;
   };
 
@@ -528,7 +528,7 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
       <td class="ev-asist"></td>
       <td class="ev-firma">${firma(fila.doctor, sePuedeEscribir && doctores.length
         ? elegirDoctor(fila.doctor, `${fila.tipo === "nota" ? `data-ev-nota="${escapeHtml(fila.id)}"` : `data-ev-fila="${escapeHtml(fila.id)}"`} data-paciente="${patient.id}" aria-label="Doctor que atendió"`)
-        : "", fila.firma || "")}</td>
+        : "")}</td>
       <td class="ev-vb">${sePuedeEscribir && fila.tipo === "mano"
         ? `<button class="ev-borrar" type="button" title="Borrar esta fila" data-ev-borrar="${escapeHtml(fila.id)}" data-paciente="${patient.id}">×</button>`
         : ""}</td>
