@@ -999,7 +999,12 @@ function fichaEstomatologica(patientId, { pantalla = true } = {}) {
     const editable = sePuedeEscribir && tipo && registro
       ? ` contenteditable="plaintext-only" role="textbox" tabindex="0" class="hcf-escribible" data-destino="${tipo}" data-campo="${nombre}" data-registro="${escapeHtml(registro)}"`
       : "";
-    return `<p class="fd-dato es-dato ${clase}"><span>${etiqueta}:</span><b${editable}>${escapeHtml(String(valor || "").trim())}</b></p>`;
+    /* Los renglones de Especificaciones y Observaciones son rayas de verdad
+       detras del texto: una trama de fondo perdia rayas al imprimir o achicar
+       la hoja y quedaban huecos disparejos (Aurea, 2026-10-20). Van fuera del
+       texto para que no se guarden con lo que se escribe. */
+    const renglones = clase.includes("es-renglonado") ? `<span class="es-renglones" aria-hidden="true">${"<i></i>".repeat(16)}</span>` : "";
+    return `<p class="fd-dato es-dato ${clase}"><span>${etiqueta}:</span><b${editable}>${escapeHtml(String(valor || "").trim())}</b>${renglones}</p>`;
   };
   const dePaciente = (nombre) => `paciente|${nombre}|${patient.id}`;
   // sin atencion, el primer signo vital abre la de hoy (como en la historia clinica)
@@ -1093,8 +1098,8 @@ function fichaEstomatologica(patientId, { pantalla = true } = {}) {
           ? `<div class="hc-grafico es-grafico" data-alto-max="360"><div class="odo-raiz hc-grafico-lienzo"><div class="odo-arco">${dibujo.html}</div></div></div>`
           : `<p class="muted es-sin-odontograma">Sin odontograma registrado.</p>`}
       <div class="es-notas">
-        ${campo("Especificaciones", patient.estEspecificaciones, dePaciente("estEspecificaciones"), "fd-pregunta")}
-        ${campo("Observaciones", patient.estObservaciones, dePaciente("estObservaciones"), "fd-pregunta")}
+        ${campo("Especificaciones", patient.estEspecificaciones, dePaciente("estEspecificaciones"), "fd-pregunta es-renglonado")}
+        ${campo("Observaciones", patient.estObservaciones, dePaciente("estObservaciones"), "fd-pregunta es-renglonado")}
       </div>
     </div>
 
@@ -1168,7 +1173,30 @@ function imprimirFichaEstomatologica(patientId) {
             if (ancho) lienzo.style.zoom = String(zoom);
           });
         }
-        window.addEventListener("load", function () { setTimeout(function () { ajustar(); window.print(); }, 350); });
+        /* Una sola hoja: si la ficha no cabe en el A4 -con el sello grande la
+           firma se iba a una segunda pagina (Aurea, 2026-10-20)- se achica
+           el odontograma lo que sobra, sin bajar de 240 px; si aun asi no
+           cabe, se encoge la hoja entera lo justo. */
+        function caberEnUnaHoja() {
+          var hoja = document.querySelector(".hc-hoja.fd");
+          if (!hoja) return;
+          var maximo = 1110;
+          var sobra = hoja.getBoundingClientRect().height - maximo;
+          var grafico = document.querySelector(".es-grafico");
+          var esquema = document.querySelector(".esq-odontograma");
+          if (sobra > 0 && esquema) {
+            // el esquema del Colegio es una imagen: se le baja el tope de alto
+            var actual = esquema.getBoundingClientRect().height;
+            esquema.style.maxHeight = Math.max(240, Math.floor(actual - sobra - 4)) + "px";
+          } else if (sobra > 0 && grafico) {
+            var tope = Number(grafico.dataset.altoMax || 360);
+            grafico.dataset.altoMax = String(Math.max(240, Math.floor(tope - sobra - 4)));
+            ajustar();
+          }
+          var alto = hoja.getBoundingClientRect().height;
+          if (alto > maximo) hoja.style.zoom = (maximo / alto).toFixed(3);
+        }
+        window.addEventListener("load", function () { setTimeout(function () { ajustar(); caberEnUnaHoja(); window.print(); }, 350); });
       })();
     <\/script>
     </body></html>`);

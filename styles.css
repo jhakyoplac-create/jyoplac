@@ -6620,19 +6620,41 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   grid-template-rows: 1fr 1fr;
   gap: 10px;
 }
+/* el texto y sus renglones ocupan la misma celda: el texto encima */
 .es-notas .fd-dato {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
   align-items: stretch;
 }
 .es-notas .fd-dato > b {
-  flex: 1;
+  grid-row: 2;
+  grid-column: 1;
+  position: relative;
+  z-index: 1;
   min-height: 84px;
   border-bottom: 0;
   font-weight: 400;
   line-height: 21px;
   white-space: pre-wrap;
-  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 20px, #aab6ba 20px, #aab6ba 21px);
+}
+/* Rayas de borde, no de fondo: el navegador siempre dibuja un borde, aunque
+   la hoja se achique para entrar en el A4. Sobran rayas y se recortan. */
+.es-renglones {
+  grid-row: 2;
+  grid-column: 1;
+  /* sin alto propio: solo llena el espacio del texto, no lo agranda */
+  contain: size;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: none;
+}
+.es-renglones i {
+  flex: none;
+  box-sizing: border-box;
+  height: 21px;
+  border-bottom: 1px solid #aab6ba;
 }
 .es-auxiliares {
   display: grid;
