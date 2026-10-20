@@ -6304,39 +6304,176 @@ function imprimirProforma(proformaId) {
    lo rojo esta pendiente y lo azul ya se hizo, asi que no hay que inventar
    nada, solo leer la ficha. Una caries en una cara es una curacion simple; en
    dos, compuesta; en tres o mas, compleja, que es como se cobra (2026-10-10).
-   Si el consultorio no tiene "Curaciones Complejas" en su lista de servicios,
-   la compleja toma el precio de la compuesta. */
+   Si el consultorio no tiene una curacion compleja en su lista, la compleja
+   toma el precio de la compuesta.
+
+   El precio sale de la lista de servicios del consultorio, pero cada uno le
+   pone su nombre a las cosas: Arte Dental dice "Restauraciones Simples" donde
+   el sistema traia "Curaciones Simples", otro dira "Resina simple" u
+   "Obturacion simple", y la endodoncia la cobran por la pieza -anterior,
+   premolar, molar- con nombres distintos en cada sitio. Antes se buscaba el
+   nombre exacto y a quien lo escribia distinto le bajaba todo sin precio
+   (Arte Dental, 2026-10-19). Ahora se busca por lo que significa: la familia
+   de la palabra y el calificativo, en servicioDelTrabajo().
+
+   "busca" es la familia de palabras; "tamano" el calificativo que tiene que
+   llevar; "porPieza" que se cobra segun donde esta la pieza; "unico" que solo
+   se toma el precio si en la lista hay uno solo de esa familia, porque el
+   odontograma no sabe de que material es la corona o la protesis y entre
+   varias no adivina (regla del 2026-10-10). */
 const TRABAJO_DEL_ODONTOGRAMA = {
-  curacion_simple: { detalle: "Curación simple", servicio: "Curaciones Simples" },
-  curacion_compuesta: { detalle: "Curación compuesta", servicio: "Curaciones Compuestas" },
-  curacion_compleja: { detalle: "Curación compleja", servicio: "Curaciones Complejas", respaldo: "Curaciones Compuestas" },
-  /* Sin servicio: el odontograma ve que hay que cambiar la temporal, pero no
-     por que -resina, amalgama, una incrustacion- y cada material cuesta
-     distinto. El precio lo pone el doctor. */
-  restauracion_definitiva: { detalle: "Restauración definitiva", servicio: "" },
-  extraccion: { detalle: "Extracción", servicio: "Extracción Simple" },
-  extraccion_molar: { detalle: "Extracción de tercer molar", servicio: "Extracción Tercer Molar" },
-  resto_radicular: { detalle: "Extracción de resto radicular", servicio: "Extracción Simple" },
-  /* Lo mismo con la corona: puede ser de porcelana, de zirconio o
-     metal-ceramica, y el odontograma no tiene como saberlo. */
-  corona_definitiva: { detalle: "Corona definitiva", servicio: "" },
-  fractura: { detalle: "Fractura", servicio: "" },
-  /* Solo cuando estan en rojo. En azul la norma dice que el tratamiento esta
-     hecho y en buen estado, asi que no hay nada que cobrar. */
+  curacion_simple: { detalle: "Curación simple", busca: "curacion", tamano: "simple" },
+  curacion_compuesta: { detalle: "Curación compuesta", busca: "curacion", tamano: "compuesta" },
+  curacion_compleja: { detalle: "Curación compleja", busca: "curacion", tamano: "compleja", respaldo: "compuesta" },
+  /* La temporal se cambia por una definitiva: se cobra como la curacion de
+     esas mismas caras. */
+  restauracion_definitiva: { detalle: "Restauración definitiva", busca: "curacion", porCaras: true },
+  sellante_rehacer: { detalle: "Sellante", busca: "sellante", unico: true },
+  extraccion: { detalle: "Extracción", busca: "extraccion", tamano: "simple" },
+  extraccion_molar: { detalle: "Extracción de tercer molar", busca: "extraccion", tamano: "tercer_molar" },
+  resto_radicular: { detalle: "Extracción de resto radicular", busca: "extraccion", tamano: "simple" },
+  /* El odontograma ve que la pieza necesita corona, pero no si la quieren de
+     porcelana, de zirconio o metal-ceramica, y cada una cuesta distinto. Solo
+     si el consultorio tiene una sola corona en su lista se toma esa; si tiene
+     varias, baja sin precio y el doctor la elige. */
+  corona_definitiva: { detalle: "Corona definitiva", busca: "corona", unico: true },
+  corona_rehacer: { detalle: "Corona definitiva", busca: "corona", unico: true },
+  espigo_rehacer: { detalle: "Espigo-muñón", busca: "espigo", unico: true },
+  implante_rehacer: { detalle: "Implante dental", busca: "implante", unico: true },
+  fractura: { detalle: "Fractura" },
   /* 5.3.24. La cara gastada es un hallazgo en rojo, o sea trabajo pendiente,
      pero que lleve una resina, una incrustacion o una ferula lo decide el
      doctor segun cuanto se perdio y por que. Sin servicio: baja sin precio. */
-  desgaste: { detalle: "Superficie desgastada", servicio: "" },
-  endodoncia: { detalle: "Endodoncia", servicio: "Endodoncia" },
-  corona_rehacer: { detalle: "Corona definitiva", servicio: "" }
+  desgaste: { detalle: "Superficie desgastada" },
+  /* El tratamiento pulpar en rojo baja segun su sigla (5.3.36): TC es la
+     endodoncia, y en un diente de leche PP y PC son la pulpotomia y la
+     pulpectomia, que se cobran aparte. */
+  endodoncia: { detalle: "Endodoncia", busca: "endodoncia", porPieza: true },
+  pulpotomia: { detalle: "Pulpotomía", busca: "pulpotomia" },
+  pulpectomia: { detalle: "Pulpectomía", busca: "pulpectomia" },
+  /* Los trazos entre piezas y del maxilar, cuando estan en rojo. */
+  protesis_fija: { detalle: "Prótesis fija", busca: "protesis_fija", unico: true },
+  protesis_rem: { detalle: "Prótesis removible", busca: "protesis_removible", unico: true },
+  orto_fija: { detalle: "Ortodoncia fija", busca: "ortodoncia_fija", unico: true },
+  orto_rem: { detalle: "Ortodoncia removible", busca: "ortodoncia_removible", unico: true },
+  protesis_total: { detalle: "Prótesis total", busca: "protesis_total", unico: true }
 };
 
 const TERCEROS_MOLARES = ["18", "28", "38", "48"];
 
+/* Como puede estar escrito cada trabajo en la lista del consultorio. Son
+   raices: "curacion" vale para "Curaciones", "restauracion" para
+   "Restauraciones". Con "+" tienen que estar las dos: "protesis+fija". Con
+   "=" la palabra tiene que ser esa exacta: "=poste", porque "posterior"
+   tambien empieza asi. */
+const FAMILIAS_DE_SERVICIO = {
+  curacion: ["curacion", "restauracion", "obturacion", "resina", "empaste"],
+  sellante: ["sellante", "sellador"],
+  extraccion: ["extraccion", "exodoncia"],
+  endodoncia: ["endodoncia", "conducto", "endodontic"],
+  pulpotomia: ["pulpotomia"],
+  pulpectomia: ["pulpectomia"],
+  corona: ["corona"],
+  espigo: ["espigo", "perno", "=poste", "munon"],
+  implante: ["implante"],
+  protesis_fija: ["protesis+fija", "puente"],
+  protesis_removible: ["protesis+removible", "protesis+parcial", "ppr"],
+  ortodoncia_fija: ["bracket", "ortodoncia+fija", "aparato+fijo"],
+  ortodoncia_removible: ["ortodoncia+removible", "aparato+removible", "placa+removible", "hawley"],
+  protesis_total: ["protesis+total", "protesis+completa", "dentadura"]
+};
+const TAMANOS_DE_SERVICIO = {
+  simple: ["simple"],
+  compuesta: ["compuest"],
+  compleja: ["complej"],
+  tercer_molar: ["tercer", "cordal", "juicio", "3er", "3ra"]
+};
+/* Donde esta la pieza, para la endodoncia que se cobra distinto por raices:
+   anterior (1 a 3), premolar (4 y 5) y molar (6 a 8). */
+const UBICACIONES_DE_PIEZA = {
+  anterior: ["anterior", "unirradic", "uniradic", "monorradic", "monoradic", "incisiv", "canin"],
+  premolar: ["premolar", "birradic", "biradic"],
+  molar: ["molar", "posterior", "multirradic", "multiradic", "polirradic", "poliradic"]
+};
+/* Lo que aparta un servicio: es de ninos (vale solo para dientes de leche), es
+   provisional, o se llama parecido pero es otra cosa (un retratamiento, una
+   exodoncia quirurgica, un control de ortodoncia, el retiro de los brackets). */
+const RAICES_DE_NINO = ["nino", "ninos", "infantil", "pediatr", "leche", "decidu"];
+const RAICES_QUE_NO_SON_SIMPLE = ["complej", "quirurg", "incluid", "retenid", "impact", "semi"];
+const RAICES_QUE_NO_SON_EL_TRABAJO = ["temporal", "provisional", "retrat", "control", "retiro", "reparacion", "rebase", "cementa", "recementa"];
+
+function palabrasDelServicio(nombre) {
+  return sinTildes(nombre).replace(/[^a-z0-9]+/g, " ").split(" ").filter(Boolean);
+}
+function tieneRaiz(palabras, raices) {
+  const vale = (palabra, parte) => (parte.startsWith("=") ? palabra === parte.slice(1) : palabra.startsWith(parte));
+  return raices.some((raiz) => raiz.split("+").every((parte) => palabras.some((palabra) => vale(palabra, parte))));
+}
+function esDeLeche(pieza) {
+  return Number(String(pieza).charAt(0)) >= 5;
+}
+function ubicacionDePieza(pieza) {
+  const n = Number(String(pieza).charAt(1));
+  if (esDeLeche(pieza)) return n <= 3 ? "anterior" : "molar";
+  if (n <= 3) return "anterior";
+  if (n <= 5) return "premolar";
+  return "molar";
+}
+
+/* Busca en la lista del consultorio el servicio que corresponde a un trabajo
+   del odontograma en una pieza. Devuelve el servicio tal como lo escribio el
+   consultorio, con su precio, o nada si no hay uno que encaje: entonces la
+   linea baja sin precio y el doctor lo pone. */
+function servicioDelTrabajo(trabajo, pieza, tamano = trabajo.tamano) {
+  if (!trabajo.busca) return null;
+  const familia = FAMILIAS_DE_SERVICIO[trabajo.busca] || [];
+  const deLeche = esDeLeche(pieza);
+  const todasLasUbicaciones = Object.values(UBICACIONES_DE_PIEZA).flat();
+  const aqui = UBICACIONES_DE_PIEZA[ubicacionDePieza(pieza)] || [];
+  const encaja = (palabras) => {
+    if (tamano === "simple") {
+      // "Exodoncia Simple" o "Exodoncia" a secas; nunca la de tercer molar ni la compleja
+      if (tieneRaiz(palabras, TAMANOS_DE_SERVICIO.tercer_molar) || tieneRaiz(palabras, RAICES_QUE_NO_SON_SIMPLE)) return false;
+      // la curacion si tiene que decir "simple": "Restauraciones Esteticas" no es una
+      return trabajo.busca !== "curacion" || tieneRaiz(palabras, TAMANOS_DE_SERVICIO.simple);
+    }
+    if (tamano) return tieneRaiz(palabras, TAMANOS_DE_SERVICIO[tamano] || []);
+    // la endodoncia de esta ubicacion; si el consultorio no la distingue, la general
+    if (trabajo.porPieza) return tieneRaiz(palabras, aqui) || !tieneRaiz(palabras, todasLasUbicaciones);
+    // "Implante mas corona" es el implante, no la corona
+    if (trabajo.busca === "corona") return !tieneRaiz(palabras, FAMILIAS_DE_SERVICIO.implante);
+    return true;
+  };
+  let candidatos = (state.services || [])
+    .filter((item) => item.active !== false)
+    .map((item) => ({ item, palabras: palabrasDelServicio(item.name) }))
+    .filter(({ palabras }) => tieneRaiz(palabras, familia))
+    .filter(({ palabras }) => !tieneRaiz(palabras, RAICES_QUE_NO_SON_EL_TRABAJO))
+    .filter(({ palabras }) => encaja(palabras));
+  // la de ninos vale para un diente de leche; para una pieza permanente, nunca
+  const deNinos = candidatos.filter(({ palabras }) => tieneRaiz(palabras, RAICES_DE_NINO));
+  candidatos = deLeche && deNinos.length ? deNinos : candidatos.filter((c) => !deNinos.includes(c));
+  if (!candidatos.length) return trabajo.respaldo && tamano !== trabajo.respaldo ? servicioDelTrabajo(trabajo, pieza, trabajo.respaldo) : null;
+  if (trabajo.porPieza) {
+    // la que dice la ubicacion de esta pieza gana a la general
+    const deAqui = candidatos.filter(({ palabras }) => tieneRaiz(palabras, aqui));
+    if (deAqui.length) candidatos = deAqui;
+  }
+  if (tamano === "simple") {
+    // "Exodoncia Simple" gana a "Exodoncia" a secas
+    const dichaSimple = candidatos.filter(({ palabras }) => tieneRaiz(palabras, TAMANOS_DE_SERVICIO.simple));
+    if (dichaSimple.length) candidatos = dichaSimple;
+  }
+  // entre varias de la misma familia no se adivina el material
+  if (trabajo.unico && candidatos.length > 1) return null;
+  // y entre iguales, la de nombre mas corto: es la mas general
+  return candidatos.sort((a, b) => a.palabras.length - b.palabras.length)[0].item;
+}
+
 /* Hasta donde llego la caries de esta pieza. La sigla se guarda en el recuadro
    y el presupuesto nunca la miraba: contaba caras y nada mas, asi que una
    mancha blanca y una caries que toca el nervio salian las dos como la misma
-   curacion. De mas superficial a mas honda. */
+   curacion de siempre. De mas superficial a mas honda. */
 const NIVELES_DE_CARIES = ["MB", "CE", "CD", "CDP"];
 function nivelDeCaries(diente) {
   let nivel = "";
@@ -6344,6 +6481,12 @@ function nivelDeCaries(diente) {
     if (NIVELES_DE_CARIES.indexOf(marca.k) > NIVELES_DE_CARIES.indexOf(nivel)) nivel = marca.k;
   });
   return nivel;
+}
+
+/* La sigla del tratamiento pulpar que la pieza tiene en su recuadro. */
+function siglaPulpar(diente) {
+  const marca = (diente.box || []).find((m) => ["TC", "PC", "PP"].includes(m.k));
+  return marca ? marca.k : "";
 }
 
 function sinTildes(texto) {
@@ -6365,21 +6508,26 @@ function presupuestoDelOdontograma(patientId) {
   if (!Odontograma || !patientId) return [];
   const ficha = odontogramFichaFor(patientId, "inicial");
   const lineas = [];
-  const agregar = (pieza, clave, nota = "", nivel = "") => {
+  const tamanoPorCaras = (caras) => (caras === 1 ? "simple" : caras === 2 ? "compuesta" : "compleja");
+  const agregar = (pieza, clave, nota = "", nivel = "", caras = 0) => {
     const trabajo = TRABAJO_DEL_ODONTOGRAMA[clave];
     if (!trabajo) return;
+    const tamano = trabajo.porCaras ? tamanoPorCaras(caras) : trabajo.tamano;
+    const servicio = trabajo.porCaras
+      ? (servicioDelTrabajo(trabajo, pieza, tamano) || (tamano === "compleja" ? servicioDelTrabajo(trabajo, pieza, "compuesta") : null))
+      : servicioDelTrabajo(trabajo, pieza);
     /* La mancha blanca no tiene cavidad que rellenar: se controla y se
        remineraliza. Baja igual al presupuesto, pero sin precio, para que el
        doctor decida si cobra algo o quita la linea. */
-    const deLista = precioDelServicio(trabajo.servicio) ?? precioDelServicio(trabajo.respaldo);
     lineas.push({
       clave: `${pieza}:${clave}`,
       pieza,
       /* Que la caries toque el nervio no decide el tratamiento -eso lo evalua
          el doctor-, pero tiene que verlo en la linea para elegir. */
       detalle: trabajo.detalle + (nota ? ` · ${nota}` : "") + (nivel === "CDP" ? " · compromiso pulpar" : ""),
-      servicio: trabajo.servicio,
-      precioLista: nivel === "MB" ? "" : deLista
+      // con el nombre que el consultorio le da en su lista
+      servicio: servicio ? servicio.name : "",
+      precioLista: nivel === "MB" ? "" : (servicio ? Number(servicio.price || 0) : null)
     });
   };
   (Odontograma.PIEZAS || []).forEach((pieza) => {
@@ -6391,7 +6539,11 @@ function presupuestoDelOdontograma(patientId) {
     if (conCaries.length === 1) agregar(pieza, "curacion_simple", "1 cara", nivel);
     if (conCaries.length === 2) agregar(pieza, "curacion_compuesta", "2 caras", nivel);
     if (conCaries.length > 2) agregar(pieza, "curacion_compleja", `${conCaries.length} caras`, nivel);
-    if (caras.some((cara) => diente.sup[cara] === "rest_temp")) agregar(pieza, "restauracion_definitiva");
+    const temporales = caras.filter((cara) => diente.sup[cara] === "rest_temp");
+    if (temporales.length) agregar(pieza, "restauracion_definitiva", `${temporales.length} ${temporales.length === 1 ? "cara" : "caras"}`, "", temporales.length);
+    // el sellante en rojo esta en mal estado: se vuelve a poner
+    const malCara = diente.malCara || {};
+    if (caras.some((cara) => diente.sup[cara] === "sellante" && malCara[cara])) agregar(pieza, "sellante_rehacer");
     const gastadas = caras.filter((cara) => diente.sup[cara] === "desgaste");
     if (gastadas.length) agregar(pieza, "desgaste", `${gastadas.length} ${gastadas.length === 1 ? "cara" : "caras"}`);
     const de = diente.pieza || {};
@@ -6402,8 +6554,26 @@ function presupuestoDelOdontograma(patientId) {
     if ("corona_tmp" in de) agregar(pieza, "corona_definitiva");
     if ("fractura" in de) agregar(pieza, "fractura");
     const mal = diente.mal || {};
-    if ("pulpar" in de && mal.pulpar) agregar(pieza, "endodoncia");
+    if ("pulpar" in de && mal.pulpar) {
+      const sigla = siglaPulpar(diente);
+      if (sigla === "PP") agregar(pieza, "pulpotomia");
+      else if (sigla === "PC") agregar(pieza, "pulpectomia");
+      else agregar(pieza, "endodoncia", ubicacionDePieza(pieza));
+    }
     if ("corona_def" in de && mal.corona_def) agregar(pieza, "corona_rehacer");
+    if ("espigo" in de && mal.espigo) agregar(pieza, "espigo_rehacer");
+    if ("implante" in de && mal.implante) agregar(pieza, "implante_rehacer");
+  });
+  /* Los trazos entre piezas -protesis, ortodoncia- y los del maxilar, solo en
+     rojo: en azul estan bien y no hay nada que hacer. La "pieza" de la linea
+     es el tramo que abarcan. */
+  (ficha.spans || []).forEach((trazo) => {
+    if (!trazo.mal || !TRABAJO_DEL_ODONTOGRAMA[trazo.k]) return;
+    agregar(`${trazo.a}-${trazo.b}`, trazo.k);
+  });
+  const arcada = ficha.arcada || {};
+  ["up", "down"].forEach((arco) => {
+    if (arcada[arco] === "protesis_total" && arcada[arco + "Mal"]) agregar(arco === "up" ? "Sup." : "Inf.", "protesis_total");
   });
   return lineas;
 }
