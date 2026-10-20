@@ -7212,3 +7212,109 @@ input[type="number"] {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Ventanas propias (dialogos.js) en lugar de las del navegador. Mismo
+   aspecto que la ventana de cobro: caja blanca, titulo en negrita y los
+   botones de la marca del consultorio. Lo que borra o anula, en rojo. */
+dialog.ui-dialogo {
+  width: min(460px, calc(100vw - 32px));
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.ui-dialogo-caja {
+  padding: 22px 24px 20px;
+  margin: 0;
+}
+
+.ui-dialogo-cabeza {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ui-dialogo-icono {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-primary) 18%, #fff);
+  position: relative;
+}
+
+.ui-dialogo-icono::before {
+  content: "i";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 800 16px/1 Georgia, serif;
+  color: color-mix(in srgb, var(--brand-primary) 70%, #000);
+}
+
+.ui-dialogo-peligro .ui-dialogo-icono {
+  background: #fde8e8;
+}
+
+.ui-dialogo-peligro .ui-dialogo-icono::before {
+  content: "!";
+  font-family: inherit;
+  color: #b42318;
+}
+
+.ui-dialogo-titulo {
+  margin: 5px 0 0;
+  font-size: 17px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.ui-dialogo-texto {
+  margin: 12px 0 0 46px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.ui-dialogo-campo {
+  display: block;
+  width: 100%;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.ui-dialogo-error {
+  margin: 8px 0 0;
+  color: #b42318;
+  font-size: 13px;
+}
+
+.ui-dialogo-botones {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 0;
+}
+
+.ui-dialogo-boton {
+  min-width: 112px;
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+.ui-dialogo-peligro .primary.ui-dialogo-boton {
+  background: #c62828;
+  background-image: none;
+  color: #fff;
+}
+
+@media (max-width: 480px) {
+  .ui-dialogo-texto { margin-left: 0; }
+  .ui-dialogo-boton { flex: 1 1 0; }
+}

@@ -1293,11 +1293,11 @@
         if (!pendiente) { pendiente = t; return []; }
         if (pendiente === t) { pendiente = null; return []; }
         if (filaDe(pendiente) !== filaDe(t)) {
-          alert("Las dos piezas deben pertenecer al mismo maxilar y a la misma dentición.");
+          (window.uiAlert || window.alert)("Las dos piezas deben pertenecer al mismo maxilar y a la misma dentición.");
           pendiente = t; return [];
         }
         if (m.vecinas && Math.abs(indiceDe(pendiente) - indiceDe(t)) !== 1) {
-          alert("Este hallazgo se registra entre dos piezas correlativas.");
+          (window.uiAlert || window.alert)("Este hallazgo se registra entre dos piezas correlativas.");
           pendiente = t; return [];
         }
         ficha.spans.push({ k: tool.k, a: pendiente, b: t, arco: arcoDe(t), mal: Boolean(m.malo && malEstado) });
@@ -1470,7 +1470,7 @@
       var arco = lienzo.querySelector(".odo-arco").innerHTML;
 
       var w = window.open("", "_blank", "width=1200,height=800");
-      if (!w) { alert("El navegador bloqueo la ventana de impresion."); return; }
+      if (!w) { (window.uiAlert || window.alert)("El navegador bloqueo la ventana de impresion."); return; }
       w.document.write(
         '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
         // la ventana nueva parte de about:blank, asi que sin base las rutas
@@ -1479,7 +1479,7 @@
         "<title>Odontograma " + esc(p.nombre || "") + "</title>" +
         hojasDeLaPagina() +
         "<style>" + estilosImpresion() + "</style></head><body>" +
-        '<div class="cab"><div><h2>Odontograma ' + (hoja === "inicial" ? "inicial" : "de evolucion") + "</h2>" +
+        '<div class="cab"><div><h2>Odontograma ' + (hoja === "inicial" ? "inicial" : "de evolución") + "</h2>" +
         "<p>Ficha estomatológica &mdash; Norma Técnica del Odontograma (MINSA)</p></div>" +
         '<div style="text-align:right"><p><b>Fecha:</b> ' + fecha + "</p>" +
         (opts.tituloClinica ? "<p><b>" + esc(opts.tituloClinica) + "</b></p>" : "") + "</div></div>" +

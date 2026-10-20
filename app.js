@@ -14,6 +14,8 @@ const seedData = {
     lunchStart: "13:00",
     lunchEnd: "15:00",
     inactiveDays: 30,
+    lockAfterMinutes: 60,
+    lockElegido: false,
     whatsapp: "930914176",
     doctors: ["Carlos", "Maghy", "Tercero (por contratar)"],
     units: ["Unidad 1", "Unidad 2"],
@@ -96,8 +98,8 @@ const seedData = {
   ],
   electronicReceipts: [],
   clinicalHistory: [
-    { id: "h1", patientId: "p1", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Control de ortodoncia", anamnesis: "Sin cambios relevantes.", exam: "Higiene regular.", diagnosis: "Evolucion favorable", plan: "Continuar controles.", procedure: "Cambio de ligas y revision de brackets.", instructions: "Mantener higiene y volver en 30 dias.", agreedPrice: 80 },
-    { id: "h2", patientId: "p2", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Consulta inicial", anamnesis: "Niega alergias.", exam: "Evaluacion intraoral inicial.", diagnosis: "Evaluacion pendiente", plan: "Solicitar radiografia.", procedure: "Revision clinica general.", instructions: "Tomar radiografia panoramica.", agreedPrice: 50 }
+    { id: "h1", patientId: "p1", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Control de ortodoncia", anamnesis: "Sin cambios relevantes.", exam: "Higiene regular.", diagnosis: "Evolución favorable", plan: "Continuar controles.", procedure: "Cambio de ligas y revisión de brackets.", instructions: "Mantener higiene y volver en 30 días.", agreedPrice: 80 },
+    { id: "h2", patientId: "p2", date: "2026-05-15", attendedBy: "Maghy", attended: true, reason: "Consulta inicial", anamnesis: "Niega alergias.", exam: "Evaluacion intraoral inicial.", diagnosis: "Evaluacion pendiente", plan: "Solicitar radiografia.", procedure: "Revisión clínica general.", instructions: "Tomar radiografia panoramica.", agreedPrice: 50 }
   ],
   odontogramSnapshots: [],
   proformas: [],
@@ -258,6 +260,15 @@ function normalizeState(data) {
   data.config.lunchEnd = validTime(data.config.lunchEnd) ? data.config.lunchEnd : defaults.lunchEnd;
   data.config.interval = Number(data.config.interval) > 0 ? Number(data.config.interval) : defaults.interval;
   data.config.inactiveDays = Number(data.config.inactiveDays) > 0 ? Number(data.config.inactiveDays) : defaults.inactiveDays;
+  /* Minutos sin uso antes de pedir la clave otra vez (igual que el dental de
+     EmpresaFacil). Nace en 1 hora: hay historias clinicas abiertas en una compu
+     que usa mas de una persona. lockElegido se marca al guardar Configuracion;
+     sin esa marca un 0 se lee como 1 hora. Quien elige "Nunca" y guarda, queda
+     en nunca. */
+  data.config.lockElegido = data.config.lockElegido === true || String(data.config.lockElegido).toLowerCase() === "true";
+  data.config.lockAfterMinutes = Number(data.config.lockAfterMinutes) > 0
+    ? Number(data.config.lockAfterMinutes)
+    : (data.config.lockElegido ? 0 : 60);
   data.config.generalCashOpening = Number(data.config.generalCashOpening ?? defaults.generalCashOpening);
   data.config.generalBankOpening = Number(data.config.generalBankOpening ?? defaults.generalBankOpening);
   data.config.generalUtilityOpening = Number(data.config.generalUtilityOpening ?? defaults.generalUtilityOpening ?? 0);
@@ -329,7 +340,7 @@ async function apiFetch(path, options = {}) {
   }
   if (response.status === 401) {
     clearApiSession();
-    throw new Error("Sesion vencida. Cierra sesion e ingresa nuevamente.");
+    throw new Error("Sesión vencida. Cierra sesión e ingresa nuevamente.");
   }
   if (!response.ok) throw new Error(payload.error || responseText || `Servidor respondio con error ${response.status}.`);
   return payload;
@@ -869,6 +880,13 @@ function applyApiBootstrap(payload) {
     state.config.end = payload.config.end || state.config.end;
     state.config.interval = Number(payload.config.interval ?? state.config.interval);
     state.config.inactiveDays = Number(payload.config.inactiveDays ?? state.config.inactiveDays);
+    if (payload.config.lockElegido !== undefined) {
+      state.config.lockElegido = String(payload.config.lockElegido).toLowerCase() === "true";
+    }
+    if (payload.config.lockAfterMinutes !== undefined) {
+      state.config.lockAfterMinutes = Number(payload.config.lockAfterMinutes) || 0;
+    }
+    if (!state.config.lockElegido && !(Number(state.config.lockAfterMinutes) > 0)) state.config.lockAfterMinutes = 60;
     if (payload.config.enableAgendaPayments !== undefined) {
       state.config.enableAgendaPayments = String(payload.config.enableAgendaPayments).toLowerCase() !== "false";
     }
@@ -1638,7 +1656,7 @@ function validatePatientData(data) {
   if (!/^9\d{8}$/.test(phone)) errors.push("El celular debe tener 9 digitos y empezar con 9.");
   if (!name || name.split(" ").filter(Boolean).length < 2) errors.push("Ingresa nombres y apellidos completos del paciente.");
   if (!/^[A-ZÁÉÍÓÚÜÑ ]+$/i.test(name)) errors.push("El nombre solo debe contener letras y espacios.");
-  if (!validISODate(birthDate)) errors.push("Ingresa una fecha de nacimiento valida.");
+  if (!validISODate(birthDate)) errors.push("Ingresa una fecha de nacimiento válida.");
   else {
     const age = ageFromBirthDate(birthDate);
     if (age === null) errors.push("La fecha de nacimiento no puede ser futura.");
@@ -1754,14 +1772,14 @@ function businessDayInfo(date) {
     open: start < end,
     start,
     end,
-    message: day === 6 ? "Sabado: atencion hasta la 1:00 p.m." : ""
+    message: day === 6 ? "Sábado: atención hasta la 1:00 p.m." : ""
   };
 }
 
 function appointmentAvailabilityError(candidate) {
   const day = dayOfWeek(candidate.date);
   const info = businessDayInfo(candidate.date);
-  if (!info.open) return "No hay atencion los domingos. Selecciona otra fecha.";
+  if (!info.open) return "No hay atención los domingos. Selecciona otra fecha.";
   const appointmentStart = minutes(candidate.time);
   const service = serviceByName(candidate.service);
   const appointmentEnd = appointmentStart + Number(candidate.duration || service?.duration || state.config.interval);
@@ -1769,15 +1787,15 @@ function appointmentAvailabilityError(candidate) {
   const lunchEnd = minutes(state.config.lunchEnd);
   if (day === 6) {
     if (appointmentStart < info.start || appointmentStart > info.end) {
-      return info.message || `La atencion solo esta disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
+      return info.message || `La atención solo está disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
     }
     return "";
   }
   if (appointmentStart < info.start || appointmentEnd > info.end) {
-    return info.message || `La atencion solo esta disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
+    return info.message || `La atención solo está disponible de ${timeFromMinutes(info.start)} a ${timeFromMinutes(info.end)}.`;
   }
   if (appointmentStart < lunchEnd && appointmentEnd > lunchStart) {
-    return `No hay atencion de ${agendaTimeLabel(state.config.lunchStart)} a ${agendaTimeLabel(state.config.lunchEnd)} por horario de almuerzo.`;
+    return `No hay atención de ${agendaTimeLabel(state.config.lunchStart)} a ${agendaTimeLabel(state.config.lunchEnd)} por horario de almuerzo.`;
   }
   return "";
 }
@@ -2576,9 +2594,9 @@ const CLASE_ESTADO = {
   INACTIVO: "danger",
 };
 const TITULO_ESTADO = {
-  "SIN CITA": "Se atendio pero no tiene proxima cita agendada",
+  "SIN CITA": "Se atendió pero no tiene próxima cita agendada",
   "CONTROL VENCIDO": "Su tratamiento necesita control periodico y ya paso la fecha",
-  INACTIVO: "Sin venir desde hace mas del limite configurado",
+  INACTIVO: "Sin venir desde hace más del límite configurado",
 };
 
 /* Traduce el estado a lo que hay que hacer con ese paciente. En el CSV el
@@ -2586,14 +2604,14 @@ const TITULO_ESTADO = {
    recepcion necesita para trabajar la lista. */
 function queLeFalta(patient, estado, dias) {
   if (patient.nextAppointment) return `Citado para ${formatDate(patient.nextAppointment)}`;
-  if (estado === "CONTROL VENCIDO") return `Control vencido hace ${dias} dias, llamar`;
-  if (estado === "SIN CITA") return "Falta agendarle la proxima cita";
+  if (estado === "CONTROL VENCIDO") return `Control vencido hace ${dias} días, llamar`;
+  if (estado === "SIN CITA") return "Falta agendarle la próxima cita";
   if (estado === "INACTIVO") {
     return dias === null
       ? "No ha venido nunca, va a promociones"
-      : `No viene hace ${dias} dias, va a promociones`;
+      : `No viene hace ${dias} días, va a promociones`;
   }
-  if (estado === "NUEVO") return "Registrado, todavia no viene";
+  if (estado === "NUEVO") return "Registrado, todavía no viene";
   return "";
 }
 
@@ -2706,7 +2724,7 @@ function fillPaymentPatientSelect(select, selected = "") {
   const groups = [];
   if (selectedOption) groups.push(`<optgroup label="Paciente seleccionado">${selectedOption}</optgroup>`);
   if (debtOptions.length) groups.push(`<optgroup label="Atenciones pendientes">${debtOptions.join("")}</optgroup>`);
-  if (agendaOptions.length) groups.push(`<optgroup label="Citas del dia">${agendaOptions.join("")}</optgroup>`);
+  if (agendaOptions.length) groups.push(`<optgroup label="Citas del día">${agendaOptions.join("")}</optgroup>`);
   select.innerHTML = groups.length ? groups.join("") : `<option value="">Sin pacientes pendientes</option>`;
   if (selected && paymentSelectionExists(selected)) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
@@ -2800,7 +2818,7 @@ function fillAppointmentPatientSelectForDate(select, date, selected = "") {
     .sort((a, b) => a.name.localeCompare(b.name));
   select.innerHTML = patients.length
     ? patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.name)} - ${escapeHtml(patient.dni)}</option>`).join("")
-    : `<option value="">Sin pacientes pendientes de atencion en esta fecha</option>`;
+    : `<option value="">Sin pacientes pendientes de atención en esta fecha</option>`;
   if (selected && patients.some((patient) => patient.id === selected)) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
   syncAssignedDoctor();
@@ -3122,7 +3140,7 @@ function quitarFondoAlSelloGuardado() {
   const form = $("#userForm");
   const actual = form?.sello?.value || "";
   if (!actual) {
-    alert("Este usuario todavía no tiene sello.");
+    uiAlert("Este usuario todavía no tiene sello.");
     return;
   }
   const imagen = new Image();
@@ -3132,26 +3150,26 @@ function quitarFondoAlSelloGuardado() {
     lienzo.height = imagen.height;
     lienzo.getContext("2d").drawImage(imagen, 0, 0);
     if (!quitarFondoDelSello(lienzo)) {
-      alert("Este sello ya no tiene fondo.");
+      uiAlert("Este sello ya no tiene fondo.");
       return;
     }
     mostrarSelloDelUsuario(lienzo.toDataURL("image/png"));
   };
-  imagen.onerror = () => alert("No se pudo abrir el sello guardado.");
+  imagen.onerror = () => uiAlert("No se pudo abrir el sello guardado.");
   imagen.src = actual;
 }
 
 
 function ponerSelloDelUsuario(input) {
   if (!puedeConfigurar()) {
-    alert("Solo el administrador o el doctor pueden cambiar el sello.");
+    uiAlert("Solo el administrador o el doctor pueden cambiar el sello.");
     input.value = "";
     return;
   }
   const archivo = input.files?.[0];
   if (!archivo) return;
   if (!archivo.type.startsWith("image/")) {
-    alert("Selecciona una imagen válida para el sello.");
+    uiAlert("Selecciona una imagen válida para el sello.");
     input.value = "";
     return;
   }
@@ -3173,13 +3191,13 @@ function ponerSelloDelUsuario(input) {
       input.value = "";
     };
     imagen.onerror = () => {
-      alert("No se pudo procesar esa imagen (suele pasar con fotos HEIC de iPhone). Toma una captura de pantalla de la foto y sube esa captura.");
+      uiAlert("No se pudo procesar esa imagen (suele pasar con fotos HEIC de iPhone). Toma una captura de pantalla de la foto y sube esa captura.");
       input.value = "";
     };
     imagen.src = String(lector.result || "");
   };
   lector.onerror = () => {
-    alert("No se pudo leer esa imagen.");
+    uiAlert("No se pudo leer esa imagen.");
     input.value = "";
   };
   lector.readAsDataURL(archivo);
@@ -3603,7 +3621,7 @@ async function guardarDescuentoDeTratamiento({ form, data, restorePaymentButton 
   const tratamiento = tratamientoParaDescontar(patientId);
   const monto = Math.round(Number(data.amount || 0) * 100) / 100;
   const fallar = (mensaje) => {
-    alert(mensaje);
+    uiAlert(mensaje);
     restorePaymentButton();
     aplicarCuadroDeDescuento();
   };
@@ -3675,7 +3693,7 @@ async function guardarDescuentoDeTratamiento({ form, data, restorePaymentButton 
     }
     aplicarCuadroDeDescuento();
     updatePaymentChange();
-    alert(`Se descontaron ${money(monto)} del tratamiento. Falta cobrar ${money(resto)} como pago normal.`);
+    uiAlert(`Se descontaron ${money(monto)} del tratamiento. Falta cobrar ${money(resto)} como pago normal.`);
     return;
   }
   form.reset();
@@ -3854,7 +3872,7 @@ async function clearSelectedHistoryDebt() {
   const balance = historyBalance(history.id);
   if (balance <= 0) return;
   const patient = patientById(history.patientId);
-  if (!confirm(`Quitar la deuda pendiente de ${patient?.name || "paciente"} por ${money(balance)}? La atencion y la agenda quedaran registradas.`)) return;
+  if (!(await uiConfirm(`¿Quitar la deuda pendiente de ${patient?.name || "paciente"} por ${money(balance)}? La atención y la agenda quedarán registradas.`))) return;
   const updated = {
     ...history,
     agreedPrice: historyPaid(history.id),
@@ -3866,7 +3884,7 @@ async function clearSelectedHistoryDebt() {
   try {
     await saveClinicalHistoryApi(updated);
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
     return;
   }
   upsert(state.clinicalHistory, updated);
@@ -3933,7 +3951,7 @@ function applyMixedPaymentDialog() {
   const cashAmount = Number(dialogForm.cashAmount.value || 0);
   const walletAmount = Number(dialogForm.walletAmount.value || 0);
   if (cents(cashAmount + walletAmount) !== cents(amount)) {
-    alert("La suma del pago mixto debe coincidir con el monto que paga.");
+    uiAlert("La suma del pago mixto debe coincidir con el monto que paga.");
     updateMixedPaymentDialogSummary();
     return;
   }
@@ -4173,7 +4191,7 @@ function patientPaymentMissingFields(patient) {
   const missing = [];
   if (!String(patient?.name || "").trim()) missing.push("nombre completo");
   if (!String(patient?.dni || "").trim()) missing.push("DNI");
-  if (!String(patient?.phone || "").trim()) missing.push("numero de celular");
+  if (!String(patient?.phone || "").trim()) missing.push("número de celular");
   if (!String(patient?.birthDate || "").trim()) missing.push("fecha de nacimiento");
   return missing;
 }
@@ -4583,9 +4601,9 @@ const CAMPOS_CLINICOS = [
 async function guardarHistoriaClinica(patientId) {
   const patient = patientById(patientId);
   if (!patient || patient.historiaNumero || !canEditClinicalNote()) return;
-  if (!confirm(`Se abre la historia clínica de ${patient.name}.
+  if (!(await uiConfirm(`Se abre la historia clínica de ${patient.name}.
 
-Se le asigna su número, que queda fijo y no se puede cambiar. ¿Continuar?`)) return;
+Se le asigna su número, que queda fijo y no se puede cambiar. ¿Continuar?`))) return;
   try {
     if (API_ENABLED && apiToken) {
       const resultado = await apiFetch("/api/patients", { method: "POST", body: JSON.stringify({ id: patient.id, asignarHistoria: true }) });
@@ -4600,7 +4618,7 @@ Se le asigna su número, que queda fijo y no se puede cambiar. ¿Continuar?`)) r
       saveState();
     }
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
     return;
   }
   addLocalAuditEvent("HISTORIA_CLINICA_NUMERO", `Abrió la ${numeroDeHistoria(patient.historiaNumero)} de ${patient.name}`, patient.id);
@@ -4624,7 +4642,7 @@ function guardarCampoDeLaHoja(campo) {
     const paciente = patientById(registro);
     if (!paciente || String(paciente[nombre] || "") === valor) return;
     paciente[nombre] = valor;
-    savePatientApi(paciente).catch((error) => alert(error.message));
+    savePatientApi(paciente).catch((error) => uiAlert(error.message));
     if (!API_ENABLED) saveState();
     renderClinicalHistory();
     return;
@@ -4653,7 +4671,7 @@ function guardarCampoDeLaHoja(campo) {
       [nombre]: valor
     };
     state.clinicalHistory.push(nueva);
-    saveClinicalHistoryApi(nueva).catch((error) => alert(error.message));
+    saveClinicalHistoryApi(nueva).catch((error) => uiAlert(error.message));
     if (!API_ENABLED) saveState();
     renderClinicalHistory();
     return;
@@ -4664,7 +4682,7 @@ function guardarCampoDeLaHoja(campo) {
   /* Corregir la hoja no es atender a nadie: sin appointmentId el servidor
      volvia a marcar ATENDIDAS las citas del paciente de ese dia. Con "" no
      toca ninguna; la cita ya la marco el formulario cuando se guardo la nota. */
-  saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => alert(error.message));
+  saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => uiAlert(error.message));
   if (!API_ENABLED) saveState();
   renderClinicalHistory();
 }
@@ -4988,17 +5006,17 @@ function contenidoDeLaPestana(patientId) {
 async function imprimirHistoria(patientId) {
   const patient = patientById(patientId);
   if (!patient) {
-    alert("Elige primero un paciente.");
+    uiAlert("Elige primero un paciente.");
     return;
   }
   /* El numero lo da el boton Guardar de la hoja, no la impresion: se imprime
      tambien en blanco, o dos veces, y abrir un registro ahi es un mal momento. */
   if (!patient.historiaNumero
-    && !confirm(`La historia de ${patient.name} todavía no tiene número. Se imprimirá sin él. ¿Continuar?`)) return;
+    && !(await uiConfirm(`La historia de ${patient.name} todavía no tiene número. Se imprimirá sin él. ¿Continuar?`))) return;
   // la ventana se abre antes de cualquier espera: despues el navegador la bloquea
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
   }
   const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
@@ -5161,7 +5179,7 @@ async function odontogramFlush() {
     try {
       await saveOdontogramApi(record);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     if (previo) Object.assign(previo, record);
@@ -5397,17 +5415,17 @@ function hojaDelOdontograma(patientId, { pantalla = true } = {}) {
 function imprimirOdontogramas(patientId) {
   const patient = patientById(patientId);
   if (!patient) {
-    alert("Elige primero un paciente.");
+    uiAlert("Elige primero un paciente.");
     return;
   }
   if (!copiasDelOdontograma(patientId).length) {
-    alert("Todavía no hay ninguna copia guardada del odontograma. Se guarda desde la pantalla del Odontograma, con \"Guardar en la historia\".");
+    uiAlert("Todavía no hay ninguna copia guardada del odontograma. Se guarda desde la pantalla del Odontograma, con \"Guardar en la historia\".");
     return;
   }
   // la ventana se abre antes de cualquier espera: despues el navegador la bloquea
   const ventana = window.open("", "_blank", "width=1100,height=900");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
   }
   const config = state.config || {};
@@ -5441,10 +5459,10 @@ function imprimirOdontogramas(patientId) {
          centrado: sin esto el logo y el nombre del paciente quedaban pegados
          a los bordes del papel */
       .odo-impreso-cabecera { max-width: 186mm; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12mm 0 4mm; border-bottom: 1.5px solid #000; }
-      .odo-impreso-cabecera .hc-clinica { display: flex; align-items: center; gap: 12px; }
+      .odo-impreso-cabecera .hc-clínica { display: flex; align-items: center; gap: 12px; }
       .odo-impreso-cabecera .hc-logo { max-height: 18mm; max-width: 34mm; object-fit: contain; }
       .odo-impreso-cabecera h3 { margin: 0; font-size: 15px; }
-      .odo-impreso-cabecera .hc-clinica p { margin: 3px 0 0; font-size: 11px; }
+      .odo-impreso-cabecera .hc-clínica p { margin: 3px 0 0; font-size: 11px; }
       .odo-impreso-paciente { text-align: right; font-size: 11px; }
       .odo-impreso-paciente p { margin: 2px 0 0; }
       /* cada odontograma en su hoja, como las dos paginas del formato */
@@ -5470,7 +5488,7 @@ function imprimirOdontogramas(patientId) {
         }
         /* El dibujo se achica hasta que su bloque entre entero en la hoja, a lo
            ancho y a lo alto. Antes solo se miraba el ancho: el bloque salia mas
-           alto que el papel, el navegador lo empujaba a la pagina siguiente y
+           alto que el papel, el navegador lo empujaba a la página siguiente y
            dejaba la anterior en blanco. */
         function ajustar() {
           var hoja = altoDeLaHoja();
@@ -5738,11 +5756,11 @@ function guardarFirmaDelConsentimiento(patientId, tipo, firma) {
   const patient = patientById(patientId);
   if (!patient || !tipo || !firma) return false;
   if (!canManageClinical()) {
-    alert("Tu usuario no puede registrar consentimientos.");
+    uiAlert("Tu usuario no puede registrar consentimientos.");
     return false;
   }
   if (consentimientoFirmado(patientId, tipo)) {
-    alert("Este consentimiento ya está firmado.");
+    uiAlert("Este consentimiento ya está firmado.");
     return false;
   }
   const consentimiento = {
@@ -5763,7 +5781,7 @@ function guardarFirmaDelConsentimiento(patientId, tipo, firma) {
   saveConsentimientoApi(consentimiento).catch((error) => {
     state.consentimientos = state.consentimientos.filter((item) => item.id !== consentimiento.id);
     renderClinicalHistory();
-    alert("No se pudo guardar el consentimiento: " + (error?.message || "error de conexión"));
+    uiAlert("No se pudo guardar el consentimiento: " + (error?.message || "error de conexión"));
   });
   addLocalAuditEvent(
     "CONSENTIMIENTO_FIRMADO",
@@ -5849,7 +5867,7 @@ function imprimirConsentimiento(patientId, clave) {
   const config = state.config || {};
   const ventana = window.open("", "_blank");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes e inténtalo de nuevo.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes e inténtalo de nuevo.");
     return;
   }
   ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8" />
@@ -5858,7 +5876,7 @@ function imprimirConsentimiento(patientId, clave) {
     <link rel="stylesheet" href="../../assets/css/design-system.css" />
     <link rel="stylesheet" href="styles.css" />
     <style>
-      /* Sin margen de pagina el navegador no imprime su encabezado con el
+      /* Sin margen de página el navegador no imprime su encabezado con el
          titulo y la direccion -"about:blank"- encima de la hoja del paciente.
          El margen real lo pone el documento. */
       @page { size: A4; margin: 0; }
@@ -5888,7 +5906,7 @@ function imprimirConsentimiento(patientId, clave) {
 function abrirFirmaDelConsentimiento(patientId, tipo) {
   if (!patientId || !tipo) return;
   if (!canManageClinical()) {
-    alert("Tu usuario no puede registrar consentimientos.");
+    uiAlert("Tu usuario no puede registrar consentimientos.");
     return;
   }
   prepararLienzoDeFirma(
@@ -5903,14 +5921,14 @@ function abrirFirmaDelConsentimiento(patientId, tipo) {
    cuando. No se guarda una firma reutilizable: una imagen guardada dejaria que
    cualquiera con acceso al sistema sacara historias firmadas sin que el doctor
    se entere. */
-function abrirFirmaDelProfesional(historiaId) {
+async function abrirFirmaDelProfesional(historiaId) {
   if (!canManageClinical()) {
-    alert("Tu usuario no puede firmar historias clínicas.");
+    uiAlert("Tu usuario no puede firmar historias clínicas.");
     return;
   }
   const entrada = state.clinicalHistory.find((item) => item.id === historiaId);
   if (!entrada) return;
-  if (entrada.firma && !confirm(`Esta historia ya está firmada por ${entrada.firmadaPor || "el profesional"}. ¿Reemplazar la firma por la tuya?`)) return;
+  if (entrada.firma && !(await uiConfirm(`Esta historia ya está firmada por ${entrada.firmadaPor || "el profesional"}. ¿Reemplazar la firma por la tuya?`))) return;
   const quien = currentUser();
   prepararLienzoDeFirma(
     { destino: "historia", historiaId },
@@ -6032,7 +6050,7 @@ function bindFirmaDelConsentimiento() {
   $("#saveSignatureBtn")?.addEventListener("click", () => {
     if (!firmaEnCurso) return;
     if (!firmaEnCurso.trazos) {
-      alert("Todavía no hay ninguna firma dibujada.");
+      uiAlert("Todavía no hay ninguna firma dibujada.");
       return;
     }
     const imagen = firmaComprimida(lienzo);
@@ -6043,7 +6061,7 @@ function bindFirmaDelConsentimiento() {
       consentimiento.firmaDoctor = imagen;
       consentimiento.fechaDoctor = todayISO();
       consentimiento.doctorFirmante = currentUser()?.name || "";
-      saveConsentimientoApi(consentimiento).catch((error) => alert("No se pudo guardar la firma del dentista: " + (error?.message || "error de conexión")));
+      saveConsentimientoApi(consentimiento).catch((error) => uiAlert("No se pudo guardar la firma del dentista: " + (error?.message || "error de conexión")));
       addLocalAuditEvent(
         "CONSENTIMIENTO_FIRMADO_DENTISTA",
         `El cirujano dentista firmó el consentimiento de ${consentimiento.tipo}: ${patientById(consentimiento.patientId)?.name || "Paciente"}`,
@@ -6063,7 +6081,7 @@ function bindFirmaDelConsentimiento() {
       // la hora del consultorio, no la de Greenwich: toISOString restaba 5 horas
       const ahora = new Date();
       entrada.firmadaEl = `${todayISO()}T${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
-      saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => alert(error.message));
+      saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => uiAlert(error.message));
           addLocalAuditEvent("HISTORIA_CLINICA_FIRMADA", `Firmó la historia clínica de ${patientById(entrada.patientId)?.name || "un paciente"}`, entrada.patientId);
       firmaEnCurso = null;
       $("#signatureDialog")?.close("ok");
@@ -6216,7 +6234,7 @@ async function aceptarProforma(proformaId) {
   if (!patient) return;
   const suma = sumaDeLaProforma(proforma);
   const total = suma - Math.round(suma * Number(proforma.descuento || 0)) / 100;
-  if (!confirm(`${patient.name} acepta la proforma ${numeroDeProforma(proforma.numero)} por ${money(total)}.\n\nSe abre su tratamiento con ese monto: desde ahora se le cobra a cuenta en Pagos y caja y cada trabajo se descuenta de lo abonado. ¿Continuar?`)) return;
+  if (!(await uiConfirm(`${patient.name} acepta la proforma ${numeroDeProforma(proforma.numero)} por ${money(total)}.\n\nSe abre su tratamiento con ese monto: desde ahora se le cobra a cuenta en Pagos y caja y cada trabajo se descuenta de lo abonado. ¿Continuar?`))) return;
   const tratamiento = {
     id: uid("h"),
     patientId: proforma.patientId,
@@ -6244,7 +6262,7 @@ async function aceptarProforma(proformaId) {
     await saveClinicalHistoryApi(tratamiento);
     await saveProformaApi(proforma);
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
     return;
   }
   render();
@@ -6257,7 +6275,7 @@ function imprimirProforma(proformaId) {
   const patient = patientById(proforma.patientId);
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
   }
   const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
@@ -6532,7 +6550,7 @@ function guardarListaDePrecios() {
      servidor para que la vean todos los equipos. Solo el administrador puede
      tocarla, asi que a los demas se les queda en pantalla sin subirla. */
   if (!API_ENABLED || !isAdmin()) return;
-  saveConfigApi({ listaDePrecios: state.listaDePrecios }).catch((error) => alert(error.message));
+  saveConfigApi({ listaDePrecios: state.listaDePrecios }).catch((error) => uiAlert(error.message));
 }
 
 
@@ -6812,21 +6830,21 @@ function hojaLegible(sheet) {
 
 async function guardarCopiaDelOdontograma(nota) {
   if (!canEditOdontogram()) {
-    alert("Tu usuario no puede guardar copias del odontograma.");
+    uiAlert("Tu usuario no puede guardar copias del odontograma.");
     return false;
   }
   if (!odontogramPatientId || !odontogramView) {
-    alert("Elige primero un paciente.");
+    uiAlert("Elige primero un paciente.");
     return false;
   }
   if (odontogramSnapshotId) {
-    alert("Estás viendo una copia anterior. Vuelve al odontograma actual para guardar.");
+    uiAlert("Estás viendo una copia anterior. Vuelve al odontograma actual para guardar.");
     return false;
   }
   await odontogramFlush();
   const ficha = fichaCompacta(odontogramView.ficha());
   if (!Object.keys(ficha.dientes).length && !ficha.spans.length && !ficha.esp) {
-    alert("El odontograma está vacío: no hay nada que guardar.");
+    uiAlert("El odontograma está vacío: no hay nada que guardar.");
     return false;
   }
   /* Una copia por paciente, hoja y dia: guardar otra vez hoy reemplaza la
@@ -6847,7 +6865,7 @@ async function guardarCopiaDelOdontograma(nota) {
   try {
     await saveOdontogramSnapshotApi(copia);
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
     return false;
   }
   // el servidor devuelve el id de la copia del dia que actualizo
@@ -6867,7 +6885,7 @@ async function restaurarCopiaDelOdontograma(id) {
   const copia = copiaDelOdontograma(id);
   if (!copia) return false;
   if (!canEditOdontogram()) {
-    alert("Tu usuario no puede restaurar el odontograma.");
+    uiAlert("Tu usuario no puede restaurar el odontograma.");
     return false;
   }
   const ficha = Odontograma.normalizarFicha(parseFindings(copia.ficha));
@@ -6916,7 +6934,7 @@ async function restaurarCopiaDelOdontograma(id) {
       });
     }
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
     return false;
   }
 
@@ -7044,7 +7062,7 @@ function renderPayments() {
     paymentsHeader.innerHTML = `
       <th>Fecha</th>
       <th>Paciente</th>
-      <th>Metodo</th>
+      <th>Método</th>
       <th>Monto</th>
       <th>Notas</th>
       ${puedeEliminarPagos() ? "<th>Accion</th>" : ""}
@@ -7110,7 +7128,7 @@ function buildElectronicReceiptFromPayment(payment, formDataValues) {
     taxCondition: "EXONERADO",
     igv: 0,
     status: "BORRADOR",
-    notes: "Operacion exonerada de IGV"
+    notes: "Operación exonerada de IGV"
   };
 }
 
@@ -7137,7 +7155,7 @@ function receiptSunatBadge(receipt) {
   }
   const info = SUNAT_ESTADOS[estado] || { texto: estado, clase: "warn" };
   const detalle = [
-    receipt.sunatCodigo ? `Codigo ${receipt.sunatCodigo}` : "",
+    receipt.sunatCodigo ? `Código ${receipt.sunatCodigo}` : "",
     receipt.sunatDescripcion || ""
   ].filter(Boolean).join(" - ");
   return `<span class="status${info.clase ? ` ${info.clase}` : ""}">${escapeHtml(info.texto)}</span>${detalle ? `<br><span class="muted">${escapeHtml(detalle)}</span>` : ""}`;
@@ -7155,7 +7173,7 @@ function renderSunatPanel() {
   }
   if (!sunatStatus.configurado) {
     notice.className = "notice";
-    notice.textContent = "Registro interno exonerado de IGV. Todavia no envia a SUNAT: falta cargar el certificado y la Clave SOL en el servidor.";
+    notice.textContent = "Registro interno exonerado de IGV. Todavía no envía a SUNAT: falta cargar el certificado y la Clave SOL en el servidor.";
     if (bar) bar.hidden = true;
     return;
   }
@@ -7163,7 +7181,7 @@ function renderSunatPanel() {
   notice.className = enProduccion ? "notice subtle" : "notice";
   const cabecera = enProduccion
     ? `Emitiendo a SUNAT con el RUC ${sunatStatus.ruc}.`
-    : `MODO PRUEBAS: lo que se emita aqui no tiene valor legal. RUC ${sunatStatus.ruc}.`;
+    : `MODO PRUEBAS: lo que se emita aquí no tiene valor legal. RUC ${sunatStatus.ruc}.`;
   notice.textContent = `${cabecera} Boletas ${sunatStatus.serieBoleta}, facturas ${sunatStatus.serieFactura}. Todo exonerado de IGV por la Ley de la Amazonia.`;
   if (!bar) return;
   bar.hidden = false;
@@ -7218,7 +7236,7 @@ async function enviarComprobanteASunat(receipt, { avisar = false } = {}) {
     receipt.sunatDescripcion = result.descripcion || "";
     upsert(state.electronicReceipts, receipt);
     if (avisar && receipt.sunatEstado === "RECHAZADO") {
-      alert(`SUNAT rechazo ${receiptFullNumber(receipt)}:\n${receipt.sunatDescripcion || "sin detalle"}`);
+      uiAlert(`SUNAT rechazo ${receiptFullNumber(receipt)}:\n${receipt.sunatDescripcion || "sin detalle"}`);
     }
     return result;
   } catch (error) {
@@ -7227,7 +7245,7 @@ async function enviarComprobanteASunat(receipt, { avisar = false } = {}) {
     receipt.sunatEstado = "ERROR";
     receipt.sunatDescripcion = error.message || "No se pudo enviar a SUNAT.";
     upsert(state.electronicReceipts, receipt);
-    if (avisar) alert(`El pago quedo guardado, pero SUNAT no recibio el comprobante:\n${error.message}`);
+    if (avisar) uiAlert(`El pago quedo guardado, pero SUNAT no recibio el comprobante:\n${error.message}`);
     return null;
   }
 }
@@ -7241,8 +7259,8 @@ async function reintentarComprobanteSunat(id) {
     const result = await enviarComprobanteASunat(receipt, { avisar: true });
     if (result) {
       await refreshSunatStatus();
-      if (result.estado === "ACEPTADO") alert(`SUNAT acepto ${receiptFullNumber(receipt)}.`);
-      if (result.estado === "PENDIENTE") alert(`${receiptFullNumber(receipt)} quedo firmada. Se informa en el resumen diario.`);
+      if (result.estado === "ACEPTADO") uiAlert(`SUNAT aceptó ${receiptFullNumber(receipt)}.`);
+      if (result.estado === "PENDIENTE") uiAlert(`${receiptFullNumber(receipt)} quedo firmada. Se informa en el resumen diario.`);
     }
   } finally {
     sunatOcupado = false;
@@ -7254,19 +7272,19 @@ async function enviarResumenDiarioDeBoletas() {
   if (sunatOcupado) return;
   const fecha = $("#sunatSummaryDate")?.value || "";
   if (!fecha) {
-    alert("Elige la fecha de las boletas que vas a informar.");
+    uiAlert("Elige la fecha de las boletas que vas a informar.");
     return;
   }
-  if (!confirm(`Se informaran a SUNAT las boletas del ${formatDate(fecha)}. Continuar?`)) return;
+  if (!(await uiConfirm(`Se informarán a SUNAT las boletas del ${formatDate(fecha)}. ¿Continuar?`))) return;
   sunatOcupado = true;
   try {
     const result = await sendSunatSummaryApi(fecha);
-    if (!result.enviado) alert(result.motivo || "No habia boletas pendientes de esa fecha.");
-    else alert(`Resumen ${result.resumen} enviado con ${result.boletas} boleta(s). SUNAT responde en unos minutos: usa "Revisar respuesta".`);
+    if (!result.enviado) uiAlert(result.motivo || "No habia boletas pendientes de esa fecha.");
+    else uiAlert(`Resumen ${result.resumen} enviado con ${result.boletas} boleta(s). SUNAT responde en unos minutos: usa "Revisar respuesta".`);
     await refreshElectronicReceiptsApi();
     await refreshSunatStatus();
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
   } finally {
     sunatOcupado = false;
     renderElectronicReceipts();
@@ -7279,19 +7297,19 @@ async function revisarResumenesSunat() {
   try {
     const result = await checkSunatSummariesApi();
     const revisados = result.revisados || [];
-    if (!revisados.length) alert("No hay resumenes esperando respuesta.");
+    if (!revisados.length) uiAlert("No hay resumenes esperando respuesta.");
     else {
       const detalle = revisados.map((item) => {
         if (item.error) return `${item.ticket}: ${item.error}`;
-        if (!item.listo) return `${item.ticket}: SUNAT todavia lo esta procesando.`;
+        if (!item.listo) return `${item.ticket}: SUNAT todavía lo está procesando.`;
         return `${item.ticket}: ${item.estado}${item.descripcion ? ` - ${item.descripcion}` : ""}`;
       }).join("\n");
-      alert(detalle);
+      uiAlert(detalle);
     }
     await refreshElectronicReceiptsApi();
     await refreshSunatStatus();
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
   } finally {
     sunatOcupado = false;
     renderElectronicReceipts();
@@ -7415,7 +7433,7 @@ function printElectronicReceipt(id) {
       </div>`;
   /* La leyenda cambia segun lo que SUNAT ya respondio: mientras no se emita de
      verdad, el papel tiene que decir que es solo un registro interno. */
-  const nombreDocumento = isInvoice ? "Factura Electronica" : "Boleta de Venta Electronica";
+  const nombreDocumento = isInvoice ? "Factura Electrónica" : "Boleta de Venta Electrónica";
   const estadoSunat = receiptSunatState(receipt);
   let note = `Esta es una representacion interna con formato referencial de ${nombreDocumento}. Pendiente de envio y validacion real en SUNAT.`;
   if (estadoSunat === "ACEPTADO") {
@@ -7477,7 +7495,7 @@ function printElectronicReceipt(id) {
       <div class="meta ${isInvoice ? "invoice-meta" : "boleta-meta"}">
         <div>
           ${isInvoice ? "" : `<div class="label"><span>Fecha de Vencimiento</span><span>:</span><strong></strong></div>`}
-          <div class="label"><span>Fecha de Emision</span><span>:</span><strong>${receiptDateSlash(receipt.issueDate)}</strong></div>
+          <div class="label"><span>Fecha de Emisión</span><span>:</span><strong>${receiptDateSlash(receipt.issueDate)}</strong></div>
           <div class="label"><span>Señor(es)</span><span>:</span><strong>${escapeHtml(String(receipt.customerName || "").toUpperCase())}</strong></div>
           <div class="label"><span>${customerDocLabel}</span><span>:</span><strong>${escapeHtml(receipt.customerDoc || "")}</strong></div>
           ${isInvoice ? `<div class="label"><span>Establecimiento del Emisor</span><span>:</span><strong>${escapeHtml(issuer.issuerAddress || "")}<br>${escapeHtml(issuerPlace)}</strong></div>` : ""}
@@ -7869,7 +7887,7 @@ async function completePendingPayment(receiptValues = null) {
       if (!API_ENABLED) saveState();
       render();
     }
-    alert(error.message);
+    uiAlert(error.message);
     restorePaymentButton();
     return;
   }
@@ -7952,13 +7970,13 @@ function renderPatientsToCall() {
 
   table.innerHTML = patientsToCall.map((fila) => {
     const wa = whatsappPhone(fila.phone);
-    const mensaje = `Hola ${fila.name}, le saludamos de ${state.config.clinicName}. Queriamos saber como se encuentra y coordinar su proxima cita.`;
+    const mensaje = `Hola ${fila.name}, le saludamos de ${state.config.clinicName}. Queríamos saber cómo se encuentra y coordinar su próxima cita.`;
     const llamada = fila.contactDate
       ? `${formatDate(fila.contactDate)}<br><span class="muted">${escapeHtml(RESULTADOS_LLAMADA[fila.contactResult] || fila.contactResult || "")}</span>`
       : `<span class="muted">Sin registro</span>`;
     return `<tr>
       <td><span class="status ${CLASE_MOTIVO[fila.motivo] ?? ""}">${escapeHtml(fila.motivo)}</span>
-        <br><span class="muted">${fila.dias ?? "-"} dias</span></td>
+        <br><span class="muted">${fila.dias ?? "-"} días</span></td>
       <td><strong>${escapeHtml(fila.name)}</strong><br><span class="muted">${escapeHtml(fila.mainTreatment || "")}</span></td>
       <td>${escapeHtml(fila.phone || "-")}</td>
       <td>${fila.ultimaAtencion ? formatDate(fila.ultimaAtencion) : "<span class='muted'>Nunca</span>"}</td>
@@ -7977,25 +7995,25 @@ async function registrarLlamada(patientId) {
   const opciones = Object.entries(RESULTADOS_LLAMADA)
     .map(([clave, texto], indice) => `${indice + 1}. ${texto}`)
     .join("\n");
-  const eleccion = prompt(`Llamada a ${patient.name}\n\n${opciones}\n\nEscribe el numero:`, "1");
+  const eleccion = (await uiPrompt(`Llamada a ${patient.name}\n\n${opciones}\n\nEscribe el número:`, "1"));
   if (!eleccion) return;
   const claves = Object.keys(RESULTADOS_LLAMADA);
   const result = claves[Number(eleccion) - 1];
-  if (!result) return alert("Opcion no valida.");
+  if (!result) return uiAlert("Opción no válida.");
 
   const cuerpo = { patientId, result, note: "" };
   if (result === "VOLVERA") {
-    const fecha = prompt("Para cuando quedo? (AAAA-MM-DD)", addDaysISO(todayISO(), 14));
+    const fecha = (await uiPrompt("Para cuando quedo? (AAAA-MM-DD)", addDaysISO(todayISO(), 14)));
     if (!fecha) return;
-    if (!validISODate(fecha) || fecha <= todayISO()) return alert("Fecha no valida.");
+    if (!validISODate(fecha) || fecha <= todayISO()) return uiAlert("Fecha no válida.");
     cuerpo.snoozeUntil = fecha;
   }
-  cuerpo.note = prompt("Comentario (opcional):", "") || "";
+  cuerpo.note = (await uiPrompt("Comentario (opcional):", "")) || "";
 
   try {
     await apiFetch("/api/patient-contact", { method: "POST", body: JSON.stringify(cuerpo) });
   } catch (error) {
-    return alert(error.message);
+    return uiAlert(error.message);
   }
   await refreshPatientsToCall();
   renderPatientsToCall();
@@ -8070,7 +8088,7 @@ function renderExpenses(cashDate = cashViewDate()) {
   if (expensesHeader) {
     expensesHeader.innerHTML = `
       <th>Detalle</th>
-      <th>Metodo</th>
+      <th>Método</th>
       <th>Origen</th>
       <th>Monto</th>
       ${isAdmin() ? "<th>Accion</th>" : ""}
@@ -8081,7 +8099,7 @@ function renderExpenses(cashDate = cashViewDate()) {
     if (expense.source === "UTILIDAD") return "Utilidad";
     if (expense.source === "CAJA_GENERAL") return "Caja general";
     if (expense.source === "CAJA_CHICA") return "Caja chica";
-    if (expense.source === "INGRESO_DEL_DIA") return "Caja del dia";
+    if (expense.source === "INGRESO_DEL_DIA") return "Caja del día";
     return expense.source || "";
   };
   const rows = visibleExpensesForCashView(cashDate)
@@ -8254,7 +8272,7 @@ function agendaExportRow(appointment) {
 function exportAgendaDay() {
   const date = $("#agendaDate")?.value || todayISO();
   if (date < todayISO()) {
-    alert("Por seguridad solo se puede exportar agenda de hoy o fechas futuras.");
+    uiAlert("Por seguridad solo se puede exportar agenda de hoy o fechas futuras.");
     return;
   }
   const rows = state.appointments
@@ -8262,7 +8280,7 @@ function exportAgendaDay() {
     .sort((a, b) => `${a.time} ${a.unit}`.localeCompare(`${b.time} ${b.unit}`))
     .map(agendaExportRow);
   if (!rows.length) {
-    alert("No hay citas para exportar en esa fecha.");
+    uiAlert("No hay citas para exportar en esa fecha.");
     return;
   }
   exportCsv(`agenda-${date}.csv`, rows);
@@ -8275,7 +8293,7 @@ function exportFutureAgenda() {
     .sort((a, b) => `${a.date} ${a.time} ${a.unit}`.localeCompare(`${b.date} ${b.time} ${b.unit}`))
     .map(agendaExportRow);
   if (!rows.length) {
-    alert("No hay citas futuras para exportar.");
+    uiAlert("No hay citas futuras para exportar.");
     return;
   }
   exportCsv(`agenda-desde-${today}.csv`, rows);
@@ -8673,8 +8691,8 @@ function renderDailyAuditReport() {
       <td>${escapeHtml(evento.detail || "")}</td>
     </tr>`).join("");
   const vacio = bitacora.eventos.length
-    ? "Ningun movimiento coincide con lo que buscas."
-    : "Sin actividad registrada este dia.";
+    ? "Ningún movimiento coincide con lo que buscas."
+    : "Sin actividad registrada este día.";
   caja.innerHTML = `<table><thead><tr><th>Hora</th><th>Usuario</th><th>Rol</th><th>Movimiento</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="4">${vacio}</td></tr>`}</tbody></table>`;
 }
@@ -8684,7 +8702,7 @@ function renderDailyAuditReport() {
 function exportarBitacora() {
   const eventos = eventosDeLaBitacora();
   if (!eventos.length) {
-    alert("No hay movimientos para exportar en este dia.");
+    uiAlert("No hay movimientos para exportar en este día.");
     return;
   }
   const campo = (texto) => `"${String(texto ?? "").replace(/"/g, '""')}"`;
@@ -8883,6 +8901,7 @@ function renderConfig() {
     form.end.value = state.config.end;
     form.interval.value = state.config.interval;
     form.inactiveDays.value = state.config.inactiveDays;
+    if (form.lockAfterMinutes) form.lockAfterMinutes.value = String(state.config.lockAfterMinutes || 0);
     form.whatsapp.value = state.config.whatsapp;
     form.enableAgendaPayments.checked = state.config.enableAgendaPayments !== false;
     form.doctors.value = state.config.doctors.join(", ");
@@ -9058,7 +9077,7 @@ function openGeneralBalanceDetail(type, options = {}) {
     const totalPurchases = movements.filter(isUtilityPurchase).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     title.textContent = "Movimientos de utilidad";
     summary.innerHTML = `<span>Utilidad inicial: <strong>${money(balances.utilityOpening)}</strong></span><span>Aportes: <strong>${money(totalContributions)}</strong></span><span>Compras: <strong>${money(totalPurchases)}</strong></span><span>Saldo actual: <strong>${money(balances.utility)}</strong></span>`;
-    head.innerHTML = `<tr><th>Fecha</th><th>Movimiento</th><th>Metodo</th><th>Monto</th><th>Detalle</th></tr>`;
+    head.innerHTML = `<tr><th>Fecha</th><th>Movimiento</th><th>Método</th><th>Monto</th><th>Detalle</th></tr>`;
     body.innerHTML = movements.map((item) => {
       const isPurchase = isUtilityPurchase(item);
       return `<tr>
@@ -9369,7 +9388,7 @@ function renderGeneralCash() {
       <td>${money(utilityTransfer)}</td>
       <td><strong>${money(income - opExpenses - generalExpenses - utilityTransfer)}</strong>
         <details class="day-detail"><summary>Ver detalle</summary>
-          <table><thead><tr><th>Tipo</th><th>Detalle</th><th>Metodo</th><th>Origen</th><th>Monto</th></tr></thead><tbody>${detailRows}</tbody></table>
+          <table><thead><tr><th>Tipo</th><th>Detalle</th><th>Método</th><th>Origen</th><th>Monto</th></tr></thead><tbody>${detailRows}</tbody></table>
         </details>
       </td>
     </tr>`;
@@ -9537,7 +9556,7 @@ async function deletePatientRecord(id) {
   try {
     await deletePatientApi(id);
   } catch (error) {
-    alert(error.message);
+    uiAlert(error.message);
     return false;
   }
   state.patients = state.patients.filter((item) => item.id !== id);
@@ -9687,7 +9706,7 @@ function printDailyClose(date = todayISO()) {
     tr.egreso td{color:#9b1c1c}
     .amount{white-space:nowrap;font-weight:700}
     @media print{body{padding:12px} button{display:none}}
-  </style></head><body><h1>Cierre de caja ${formatDate(date)}</h1><p>${escapeHtml(state.config.clinicName)}</p><table><thead><tr><th>Tipo</th><th>Detalle</th><th>Metodo</th><th>Origen</th><th>Monto</th><th>Comprobante</th></tr></thead><tbody>${htmlRows}</tbody></table><script>window.print();</script></body></html>`);
+  </style></head><body><h1>Cierre de caja ${formatDate(date)}</h1><p>${escapeHtml(state.config.clinicName)}</p><table><thead><tr><th>Tipo</th><th>Detalle</th><th>Método</th><th>Origen</th><th>Monto</th><th>Comprobante</th></tr></thead><tbody>${htmlRows}</tbody></table><script>window.print();</script></body></html>`);
   w.document.close();
 }
 
@@ -9715,7 +9734,7 @@ function bindHojasExtra() {
     }
     const borrarFila = event.target.closest("[data-ev-borrar]");
     if (borrarFila) {
-      if (H.borrarFilaDeEvolucion(borrarFila.dataset.paciente, borrarFila.dataset.evBorrar)) renderClinicalHistory();
+      if (await H.borrarFilaDeEvolucion(borrarFila.dataset.paciente, borrarFila.dataset.evBorrar)) renderClinicalHistory();
       return;
     }
     const imprimirEstomatologica = event.target.closest("[data-imprimir-estomatologica]");
@@ -9729,7 +9748,7 @@ function bindHojasExtra() {
     if (siNo) {
       const paciente = H.marcarSiNoDeLaFicha(siNo.dataset.paciente, siNo.dataset.fdSino, siNo.dataset.fdRespuesta);
       if (paciente) {
-        savePatientApi(paciente).catch((error) => alert(error.message));
+        savePatientApi(paciente).catch((error) => uiAlert(error.message));
         if (!API_ENABLED) saveState();
         renderClinicalHistory();
       }
@@ -9739,7 +9758,7 @@ function bindHojasExtra() {
     if (marca) {
       const paciente = H.alternarMarcaEstomatologica(marca.dataset.paciente, marca.dataset.estMarca, marca.dataset.estValor);
       if (paciente) {
-        savePatientApi(paciente).catch((error) => alert(error.message));
+        savePatientApi(paciente).catch((error) => uiAlert(error.message));
         if (!API_ENABLED) saveState();
         renderClinicalHistory();
       }
@@ -9755,7 +9774,7 @@ function bindHojasExtra() {
     try {
       await H.quitarFoto(quitar.dataset.quitarFoto);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
     }
     renderClinicalHistory();
   });
@@ -9784,7 +9803,7 @@ function bindHojasExtra() {
     const casilla = event.target.closest("[data-odontograma-colegio]");
     if (casilla) {
       if (H.cambiarFormatoDelOdontograma(casilla.checked)) {
-        if (puedeConfigurar()) saveConfigApi({ fichaOdontogramaColegio: state.config.fichaOdontogramaColegio }).catch((error) => alert(error.message));
+        if (puedeConfigurar()) saveConfigApi({ fichaOdontogramaColegio: state.config.fichaOdontogramaColegio }).catch((error) => uiAlert(error.message));
         renderClinicalHistory();
       }
       return;
@@ -9799,7 +9818,7 @@ function bindHojasExtra() {
     try {
       await H.ponerFoto(campo.dataset.ponerFoto, campo.files[0]);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
     }
     renderClinicalHistory();
   });
@@ -9889,18 +9908,18 @@ function bindEvents() {
     const hideReceptionPatient = event.target.closest("[data-hide-reception-patient]");
     if (hideReceptionPatient) {
       if (!isAdmin()) {
-        alert("Solo el administrador puede ocultar pacientes de este registro.");
+        uiAlert("Solo el administrador puede ocultar pacientes de este registro.");
         return;
       }
       const patient = patientById(hideReceptionPatient.dataset.hideReceptionPatient);
-      if (!patient || !confirm(`Quitar a ${patient.name} solo de la lista de pacientes nuevos de recepción? No se eliminará su ficha, citas, historial, odontograma ni pagos.`)) return;
+      if (!patient || !(await uiConfirm(`¿Quitar a ${patient.name} solo de la lista de pacientes nuevos de recepción? No se eliminará su ficha, citas, historial, odontograma ni pagos.`))) return;
       try {
         await hideReceptionNewPatientApi(patient.id);
         patient.hideFromReceptionNew = true;
         addLocalAuditEvent("PATIENT_RECEPTION_NEW_HIDDEN", `Ocultó de nuevos recepción: ${patient.name} (${patient.dni})`, patient.id);
         if (!API_ENABLED) saveState();
       } catch (error) {
-        alert(error.message);
+        uiAlert(error.message);
         return;
       }
       renderReports();
@@ -9921,7 +9940,7 @@ function bindEvents() {
       try {
         await saveAppointmentApi(updated);
       } catch (error) {
-        alert(error.message);
+        uiAlert(error.message);
         reminderButton.disabled = false;
         reminderButton.textContent = "Enviar recordatorio";
         return;
@@ -9952,6 +9971,7 @@ function bindEvents() {
       apiFetch("/api/login", { method: "POST", body: JSON.stringify({ username: data.username, password: data.password, rememberDevice: data.rememberDevice === "on" }) })
         .then((payload) => {
           rememberApiSession(payload.token, payload.expiresAt, payload.user);
+          marcarUso();
           $("#loginMessage").textContent = "Cargando datos...";
           form.reset();
           return loadFromApi();
@@ -9974,11 +9994,12 @@ function bindEvents() {
       item.active && item.username.toLowerCase() === data.username.trim().toLowerCase() && item.password === data.password
     );
     if (!user) {
-      $("#loginMessage").textContent = "Usuario o contrasena incorrectos.";
+      $("#loginMessage").textContent = "Usuario o contraseña incorrectos.";
       return;
     }
     currentUserId = user.id;
     localStorage.setItem(`${STORAGE_KEY}-current-user`, currentUserId);
+    marcarUso();
     $("#loginMessage").textContent = "";
     event.currentTarget.reset();
     render();
@@ -9990,6 +10011,7 @@ function bindEvents() {
     clearApiSession();
     currentUserId = "";
     localStorage.removeItem(`${STORAGE_KEY}-current-user`);
+    try { localStorage.removeItem(CLAVE_ULTIMO_USO); } catch {}
     render();
   });
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -10097,7 +10119,7 @@ function bindEvents() {
     if (!campo || !puedeConfigurar()) return;
     const valor = Number(campo.value);
     if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
-      alert("El porcentaje debe estar entre 0 y 100.");
+      uiAlert("El porcentaje debe estar entre 0 y 100.");
       renderCommissions();
       return;
     }
@@ -10105,7 +10127,7 @@ function bindEvents() {
     try {
       await saveConfigApi({ commissions: state.config.commissions });
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
     }
     if (!API_ENABLED) saveState();
     renderCommissions();
@@ -10139,7 +10161,7 @@ function bindEvents() {
     if (!guardado) return;
     if (campo) campo.value = "";
     render();
-    alert("Copia guardada. Puedes verla en Historial clínico.");
+    uiAlert("Copia guardada. Puedes verla en Historial clínico.");
   });
 
   on("#odontogramViewingCopy", "click", (event) => {
@@ -10158,7 +10180,7 @@ function bindEvents() {
     }
     const restaurar = event.target.closest("[data-restaurar-copia-odontograma]");
     if (!restaurar) return;
-    if (!confirm("El odontograma actual de este paciente se reemplazará por esta copia. La copia no se borra y puedes volver a la que quieras. ¿Continuar?")) return;
+    if (!(await uiConfirm("El odontograma actual de este paciente se reemplazará por esta copia. La copia no se borra y puedes volver a la que quieras. ¿Continuar?"))) return;
     if (!(await restaurarCopiaDelOdontograma(restaurar.dataset.restaurarCopiaOdontograma))) return;
     setView("odontograma");
     render();
@@ -10189,11 +10211,11 @@ function bindEvents() {
   });
   on("#openExpenseBtn", "click", () => {
     if (!canManageExpenses()) {
-      alert("Tu usuario no tiene permiso para registrar egresos.");
+      uiAlert("Tu usuario no tiene permiso para registrar egresos.");
       return;
     }
     if (!cashSessionToday()) {
-      alert("Primero abre la caja del dia para registrar egresos.");
+      uiAlert("Primero abre la caja del día para registrar egresos.");
       return;
     }
     const form = $("#expenseForm");
@@ -10275,7 +10297,7 @@ function bindEvents() {
         cita.confirmada = antes;
         pintar(antes);
         confirmar.disabled = false;
-        alert(error.message || "No se pudo guardar la confirmacion.");
+        uiAlert(error.message || "No se pudo guardar la confirmacion.");
         return;
       }
       confirmar.disabled = false;
@@ -10307,7 +10329,7 @@ function bindEvents() {
         const appointment = state.appointments.find((item) => item.id === close.dataset.followupClose);
         if (!appointment) return;
         const patient = patientById(appointment.patientId);
-        if (!confirm("Cerrar este seguimiento? El paciente quedara como INACTIVO para recuperarlo luego en campanas.")) return;
+        if (!(await uiConfirm("¿Cerrar este seguimiento? El paciente quedará como INACTIVO para recuperarlo luego en campañas."))) return;
         const updated = {
           ...appointment,
           followUpStatus: "CERRADO",
@@ -10318,7 +10340,7 @@ function bindEvents() {
           await saveAppointmentApi(updated);
           if (inactivePatient) await savePatientApi(inactivePatient);
         } catch (error) {
-          alert(error.message);
+          uiAlert(error.message);
           return;
         }
         upsert(state.appointments, updated);
@@ -10331,12 +10353,12 @@ function bindEvents() {
 
   $("#saveAppointmentBtn").addEventListener("click", async () => {
     if (!canManageAppointments()) {
-      alert("Tu usuario solo puede visualizar la agenda.");
+      uiAlert("Tu usuario solo puede visualizar la agenda.");
       return;
     }
     const data = formData($("#appointmentForm"));
     if (!data.patientId) {
-      alert("Selecciona el paciente antes de guardar la cita.");
+      uiAlert("Selecciona el paciente antes de guardar la cita.");
       return;
     }
     const service = serviceByName(data.service);
@@ -10371,19 +10393,19 @@ function bindEvents() {
     if (isSlotBlockingAppointment(appointment)) {
       const availabilityError = appointmentAvailabilityError(appointment);
       if (availabilityError) {
-        alert(availabilityError);
+        uiAlert(availabilityError);
         return;
       }
       const conflict = findAppointmentConflict(appointment);
       if (conflict) {
-        alert(conflict.message);
+        uiAlert(conflict.message);
         return;
       }
     }
     try {
       await saveAppointmentApi(appointment);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     upsert(state.appointments, appointment);
@@ -10410,7 +10432,7 @@ function bindEvents() {
       button.textContent = "Guardando...";
     }
     if (!canManageAppointments()) {
-      alert("Tu usuario no tiene permiso para reprogramar citas.");
+      uiAlert("Tu usuario no tiene permiso para reprogramar citas.");
       restoreRescheduleButton();
       return;
     }
@@ -10421,7 +10443,7 @@ function bindEvents() {
       return;
     }
     if (!data.comment.trim()) {
-      alert("Agrega un comentario para registrar el seguimiento de la reprogramacion.");
+      uiAlert("Agrega un comentario para registrar el seguimiento de la reprogramacion.");
       restoreRescheduleButton();
       return;
     }
@@ -10457,7 +10479,7 @@ function bindEvents() {
       original.followUpStatus = previousFollowUpStatus;
       original.followUpComment = previousFollowUpComment;
       original.newAppointmentId = previousNewAppointmentId;
-      alert(availabilityError);
+      uiAlert(availabilityError);
       restoreRescheduleButton();
       return;
     }
@@ -10468,7 +10490,7 @@ function bindEvents() {
       original.followUpStatus = previousFollowUpStatus;
       original.followUpComment = previousFollowUpComment;
       original.newAppointmentId = previousNewAppointmentId;
-      alert(conflict.message);
+      uiAlert(conflict.message);
       restoreRescheduleButton();
       return;
     }
@@ -10481,7 +10503,7 @@ function bindEvents() {
       original.followUpStatus = previousFollowUpStatus;
       original.followUpComment = previousFollowUpComment;
       original.newAppointmentId = previousNewAppointmentId;
-      alert(error.message);
+      uiAlert(error.message);
       restoreRescheduleButton();
       return;
     }
@@ -10513,7 +10535,7 @@ function bindEvents() {
     const editingId = form.elements.namedItem("id")?.value || "";
     const validation = validatePatientData(data);
     if (validation.errors.length) {
-      alert(validation.errors.join("\n"));
+      uiAlert(validation.errors.join("\n"));
       patientSaving = false;
       if (submitButton) {
         submitButton.disabled = false;
@@ -10523,7 +10545,7 @@ function bindEvents() {
     }
     const duplicateDni = state.patients.find((patient) => patient.id !== editingId && String(patient.dni || "") === validation.values.dni);
     if (duplicateDni) {
-      alert(`Ya existe otro paciente registrado con ese DNI: ${duplicateDni.name}.`);
+      uiAlert(`Ya existe otro paciente registrado con ese DNI: ${duplicateDni.name}.`);
       patientSaving = false;
       if (submitButton) {
         submitButton.disabled = false;
@@ -10613,7 +10635,7 @@ function bindEvents() {
         if (field) field.value = value;
       });
       if (editingId) patientEditingId = editingId;
-      alert(error.message);
+      uiAlert(error.message);
       patientSaving = false;
       if (submitButton) {
         submitButton.disabled = false;
@@ -10686,11 +10708,11 @@ function bindEvents() {
     }
     if (del) {
       if (!canDeletePatients()) {
-        alert("Tu usuario no tiene permiso para eliminar pacientes.");
+        uiAlert("Tu usuario no tiene permiso para eliminar pacientes.");
         return;
       }
       const patient = patientById(del.dataset.deletePatient);
-      if (!patient || !confirm(`Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`)) return;
+      if (!patient || !(await uiConfirm(`¿Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`))) return;
       await deletePatientRecord(patient.id);
     }
   });
@@ -10701,11 +10723,11 @@ function bindEvents() {
     const payment = state.payments.find((item) => item.id === del.dataset.deletePayment);
     if (!payment) return;
     const patient = patientById(payment.patientId);
-    if (!confirm(`Eliminar este pago de ${patient?.name || "paciente"} por ${money(payment.amount)}? La caja se recalculara automaticamente.`)) return;
+    if (!(await uiConfirm(`¿Eliminar este pago de ${patient?.name || "paciente"} por ${money(payment.amount)}? La caja se recalculará automáticamente.`))) return;
     try {
       await deletePaymentApi(payment.id);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.payments = state.payments.filter((item) => item.id !== payment.id);
@@ -10718,11 +10740,11 @@ function bindEvents() {
     if (!del || !isAdmin()) return;
     const expense = state.expenses.find((item) => item.id === del.dataset.deleteExpense);
     if (!expense) return;
-    if (!confirm(`Eliminar este egreso por ${money(expense.amount)}? La caja se recalculara automaticamente.`)) return;
+    if (!(await uiConfirm(`¿Eliminar este egreso por ${money(expense.amount)}? La caja se recalculará automáticamente.`))) return;
     try {
       await deleteExpenseApi(expense.id);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.expenses = state.expenses.filter((item) => item.id !== expense.id);
@@ -10735,11 +10757,11 @@ function bindEvents() {
     if (del && isAdmin()) {
       const expense = state.expenses.find((item) => item.id === del.dataset.deleteUtilityMovement && (isUtilityContribution(item) || isUtilityPurchase(item)));
       if (!expense) return;
-      if (!confirm(`Eliminar este movimiento de utilidad por ${money(expense.amount)}? Los saldos se recalcularan automaticamente.`)) return;
+      if (!(await uiConfirm(`¿Eliminar este movimiento de utilidad por ${money(expense.amount)}? Los saldos se recalcularán automáticamente.`))) return;
       try {
         await deleteExpenseApi(expense.id);
       } catch (error) {
-        alert(error.message);
+        uiAlert(error.message);
         return;
       }
       state.expenses = state.expenses.filter((item) => item.id !== expense.id);
@@ -10751,7 +10773,7 @@ function bindEvents() {
     if (!convert || !isAdmin()) return;
     const expense = state.expenses.find((item) => item.id === convert.dataset.utilityToContribution);
     if (!expense || !isUtilityPurchase(expense)) return;
-    if (!confirm(`Cambiar ${money(expense.amount)} de compra a aporte de utilidad? Esto sumara utilidad y descontara caja general segun su metodo.`)) return;
+    if (!(await uiConfirm(`¿Cambiar ${money(expense.amount)} de compra a aporte de utilidad? Esto sumará utilidad y descontará caja general según su método.`))) return;
     const updated = {
       ...expense,
       source: "CAJA_GENERAL",
@@ -10761,7 +10783,7 @@ function bindEvents() {
     try {
       await saveExpenseApi(updated);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     upsert(state.expenses, updated);
@@ -10812,7 +10834,7 @@ function bindEvents() {
       const expense = state.expenses.find((item) => item.id === editar.dataset.editStaffPayment && item.category === "PERSONAL_TERCERO");
       if (!expense) return;
       if (!sePuedeEditarPagoDePersonal(expense)) {
-        alert(`Ese pago ya tiene más de ${DIAS_PARA_EDITAR_PAGO} días registrado y solo el administrador puede corregirlo.`);
+        uiAlert(`Ese pago ya tiene más de ${DIAS_PARA_EDITAR_PAGO} días registrado y solo el administrador puede corregirlo.`);
         return;
       }
       entrarEnLaEdicionDelPago(expense);
@@ -10822,11 +10844,11 @@ function bindEvents() {
     if (!del || !isAdmin()) return;
     const expense = state.expenses.find((item) => item.id === del.dataset.deleteStaffPayment && item.category === "PERSONAL_TERCERO");
     if (!expense) return;
-    if (!confirm(`Eliminar este pago de ${expense.person || "personal/tercero"} por ${money(expense.amount)}? La caja general se recalculara automaticamente.`)) return;
+    if (!(await uiConfirm(`¿Eliminar este pago de ${expense.person || "personal/tercero"} por ${money(expense.amount)}? La caja general se recalculará automáticamente.`))) return;
     try {
       await deleteExpenseApi(expense.id);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.expenses = state.expenses.filter((item) => item.id !== expense.id);
@@ -10834,38 +10856,38 @@ function bindEvents() {
     render();
   });
 
-  $("#receivablesTable")?.addEventListener("click", (event) => {
+  $("#receivablesTable")?.addEventListener("click", async (event) => {
     const edit = event.target.closest("[data-edit-receivable]");
     if (edit) {
       if (!canEditReceivableAmount()) {
-        alert("Solo doctores y administrador pueden editar el monto.");
+        uiAlert("Solo doctores y administrador pueden editar el monto.");
         return;
       }
       const entry = historyById(edit.dataset.editReceivable);
       if (!entry) return;
       const currentBalance = historyBalance(entry.id);
       const currentPaid = historyPaid(entry.id);
-      const value = prompt("Nuevo saldo pendiente S/", String(currentBalance));
+      const value = (await uiPrompt("Nuevo saldo pendiente S/", String(currentBalance)));
       if (value === null) return;
       const amount = Number(value);
       if (!amount || amount <= 0) {
-        alert("Ingresa un monto valido.");
+        uiAlert("Ingresa un monto válido.");
         return;
       }
       const newAgreedPrice = currentPaid + amount;
-      updateReceivableAmount(entry, newAgreedPrice).catch((error) => alert(error.message));
+      updateReceivableAmount(entry, newAgreedPrice).catch((error) => uiAlert(error.message));
       return;
     }
     const voidBtn = event.target.closest("[data-void-receivable]");
     if (voidBtn) {
       if (!canEditReceivableAmount()) {
-        alert("Solo doctores y administrador pueden anular una deuda.");
+        uiAlert("Solo doctores y administrador pueden anular una deuda.");
         return;
       }
       const entry = historyById(voidBtn.dataset.voidReceivable);
       if (!entry) return;
-      if (!confirm("¿Anular esta deuda? El paciente dejará de aparecer en cuentas por cobrar.")) return;
-      voidReceivable(entry).catch((error) => alert(error.message));
+      if (!(await uiConfirm("¿Anular esta deuda? El paciente dejará de aparecer en cuentas por cobrar."))) return;
+      voidReceivable(entry).catch((error) => uiAlert(error.message));
       return;
     }
     const pay = event.target.closest("[data-pay-history]");
@@ -10887,12 +10909,12 @@ function bindEvents() {
       }
     }
     if (!patient) {
-      alert("Busca y selecciona un paciente de la lista.");
+      uiAlert("Busca y selecciona un paciente de la lista.");
       return;
     }
     const amount = Number(data.creditAmount || 0);
     if (!amount || amount <= 0) {
-      alert("Ingresa el monto de deuda.");
+      uiAlert("Ingresa el monto de deuda.");
       return;
     }
     const entry = receivableEntryFromForm(data);
@@ -10902,7 +10924,7 @@ function bindEvents() {
     try {
       await saveReceivableApi(entry);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     upsert(state.clinicalHistory, entry);
@@ -10942,7 +10964,7 @@ function bindEvents() {
     event.preventDefault();
     if (historySaving) return;
     if (!canEditClinicalNote()) {
-      alert("Tu usuario no tiene permiso para guardar historial clínico.");
+      uiAlert("Tu usuario no tiene permiso para guardar historial clínico.");
       return;
     }
     const form = event.currentTarget;
@@ -10954,7 +10976,7 @@ function bindEvents() {
     }
     const data = formData(event.currentTarget);
     if (!data.attended) {
-      alert("Marca la opcion Atendido para poder guardar el historial.");
+      uiAlert("Marca la opción Atendido para poder guardar el historial.");
       historySaving = false;
       if (submitButton) {
         submitButton.disabled = false;
@@ -10965,7 +10987,7 @@ function bindEvents() {
     const creditPending = data.creditPending === "on";
     const creditAmount = Number(data.creditAmount || data.agreedPrice || 0);
     if (creditPending && !data.creditDueDate) {
-      alert("Completa la fecha compromiso del pago pendiente.");
+      uiAlert("Completa la fecha compromiso del pago pendiente.");
       historySaving = false;
       if (submitButton) {
         submitButton.disabled = false;
@@ -11011,7 +11033,7 @@ function bindEvents() {
       await saveClinicalHistoryApi(entry);
       if (activePatient) await savePatientApi(activePatient);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       historySaving = false;
       if (submitButton) {
         submitButton.disabled = false;
@@ -11083,7 +11105,7 @@ function bindEvents() {
     if (!entrada || entrada.professional === select.value) return;
     entrada.professional = select.value;
     // firmar o elegir quien firma no atiende a nadie: no se tocan las citas
-    saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => alert(error.message));
+    saveClinicalHistoryApi({ ...entrada, appointmentId: "" }).catch((error) => uiAlert(error.message));
     if (!API_ENABLED) saveState();
     renderClinicalHistory();
   });
@@ -11121,7 +11143,7 @@ function bindEvents() {
     const firmarDentista = event.target.closest("[data-firmar-dentista]");
     if (firmarDentista) {
       if (!canManageClinical()) {
-        alert("Tu usuario no puede firmar consentimientos.");
+        uiAlert("Tu usuario no puede firmar consentimientos.");
         return;
       }
       prepararLienzoDeFirma(
@@ -11163,7 +11185,7 @@ function bindEvents() {
     try {
       await savePatientApi(paciente);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
     }
     renderPlanDeTratamiento();
   };
@@ -11316,19 +11338,19 @@ function bindEvents() {
       if (!canManageClinical()) return;
       const faltan = piezasSinPrecio(guardarProf.dataset.guardarProforma);
       if (faltan.length) {
-        alert(`Falta ponerle precio a ${faltan.length === 1 ? "la pieza" : "las piezas"} ${faltan.join(", ")}. Escríbelo o quita esa línea antes de entregar la proforma.`);
+        uiAlert(`Falta ponerle precio a ${faltan.length === 1 ? "la pieza" : "las piezas"} ${faltan.join(", ")}. Escríbelo o quita esa línea antes de entregar la proforma.`);
         return;
       }
       const proforma = proformaDelPresupuesto(guardarProf.dataset.guardarProforma);
       if (!proforma) {
-        alert("No hay nada en el presupuesto para entregar.");
+        uiAlert("No hay nada en el presupuesto para entregar.");
         return;
       }
       upsert(state.proformas, proforma);
       try {
         await saveProformaApi(proforma);
       } catch (error) {
-        alert(error.message);
+        uiAlert(error.message);
         return;
       }
       renderPlanDeTratamiento();
@@ -11349,12 +11371,12 @@ function bindEvents() {
       if (!canManageClinical()) return;
       const proforma = (state.proformas || []).find((item) => item.id === borrarProf.dataset.borrarProforma);
       if (!proforma) return;
-      if (!confirm("¿Borrar la proforma " + numeroDeProforma(proforma.numero) + "? Si el paciente ya se la llevó, quedará sin respaldo en el sistema.")) return;
+      if (!(await uiConfirm("¿Borrar la proforma " + numeroDeProforma(proforma.numero) + "? Si el paciente ya se la llevó, quedará sin respaldo en el sistema."))) return;
       state.proformas = state.proformas.filter((item) => item.id !== proforma.id);
       try {
         await deleteProformaApi(proforma.id, proforma.patientId);
       } catch (error) {
-        alert(error.message);
+        uiAlert(error.message);
         return;
       }
       renderPlanDeTratamiento();
@@ -11486,11 +11508,11 @@ function bindEvents() {
     const form = event.currentTarget;
     const values = formData(form);
     if (values.type === "FACTURA" && !/^\d{11}$/.test(String(values.customerDoc || ""))) {
-      alert("Para factura ingresa RUC de 11 digitos.");
+      uiAlert("Para factura ingresa RUC de 11 digitos.");
       return;
     }
     if (!String(values.customerName || "").trim()) {
-      alert("Ingresa el nombre o razon social.");
+      uiAlert("Ingresa el nombre o razón social.");
       return;
     }
     await completePendingPayment(values);
@@ -11530,12 +11552,12 @@ function bindEvents() {
       submitButton.textContent = "Guardando...";
     }
     if (!cashSessionToday()) {
-      alert("Primero abre la caja del dia para registrar pagos.");
+      uiAlert("Primero abre la caja del día para registrar pagos.");
       restorePaymentButton();
       return;
     }
     if (!canManagePayments()) {
-      alert("Tu usuario no tiene permiso para registrar pagos.");
+      uiAlert("Tu usuario no tiene permiso para registrar pagos.");
       restorePaymentButton();
       return;
     }
@@ -11557,26 +11579,26 @@ function bindEvents() {
       .map((item) => ({ texto: String(item.texto || "").replace(/\s+/g, " ").trim(), monto: cents(Number(item.monto || 0)) / 100 }))
       .filter((item) => item.texto || item.monto > 0);
     if (extrasDelPago.some((item) => !item.texto || item.monto <= 0)) {
-      alert("A cada servicio agregado ponle su nombre y su precio, o quitalo.");
+      uiAlert("A cada servicio agregado ponle su nombre y su precio, o quitalo.");
       restorePaymentButton();
       return;
     }
     const extrasTotal = extrasDelPago.reduce((suma, item) => suma + item.monto, 0);
     if (amount < productsTotal + extrasTotal) {
-      alert(`El monto que paga no cubre los servicios y productos agregados (${money(productsTotal + extrasTotal)}).`);
+      uiAlert(`El monto que paga no cubre los servicios y productos agregados (${money(productsTotal + extrasTotal)}).`);
       restorePaymentButton();
       return;
     }
     const careAmount = Math.max(0, amount - productsTotal - extrasTotal);
     if (!appointment && !data.historyId && !hasProducts) {
-      alert("Selecciona una atencion pendiente, una cita del dia o agrega un producto.");
+      uiAlert("Selecciona una atención pendiente, una cita del día o agrega un producto.");
       restorePaymentButton();
       return;
     }
     const paymentPatient = patientById(paymentPatientId);
     const missingPatientFields = patientPaymentMissingFields(paymentPatient);
     if (missingPatientFields.length) {
-      alert(`Antes de registrar el pago, completa los datos del paciente: ${missingPatientFields.join(", ")}.`);
+      uiAlert(`Antes de registrar el pago, completa los datos del paciente: ${missingPatientFields.join(", ")}.`);
       restorePaymentButton();
       setView("pacientes");
       const patientForm = $("#patientForm");
@@ -11592,13 +11614,13 @@ function bindEvents() {
       return;
     }
     if (amount <= 0 || ((tratamientoCobrado || (!appointment && data.historyId)) && (careAmount <= 0 || careAmount > due))) {
-      alert(appointment ? "El monto debe ser mayor a cero." : "El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
+      uiAlert(appointment ? "El monto debe ser mayor a cero." : "El monto debe ser mayor a cero y no puede superar el saldo pendiente.");
       restorePaymentButton();
       return;
     }
     const splitResult = paymentSplitFromForm(data, amount);
     if (splitResult.error) {
-      alert(splitResult.error);
+      uiAlert(splitResult.error);
       restorePaymentButton();
       return;
     }
@@ -11721,7 +11743,7 @@ function bindEvents() {
       active: true
     };
     if (!product.name || product.price < 0 || product.stock < 0) {
-      alert("Completa nombre, precio y stock del producto.");
+      uiAlert("Completa nombre, precio y stock del producto.");
       return;
     }
     if (submitButton) {
@@ -11731,7 +11753,7 @@ function bindEvents() {
     try {
       await saveInventoryProductApi(product);
     } catch (error) {
-      alert(error.message || "No se pudo guardar el producto.");
+      uiAlert(error.message || "No se pudo guardar el producto.");
       return;
     } finally {
       if (submitButton) {
@@ -11766,7 +11788,7 @@ function bindEvents() {
     const product = inventoryProductById(data.productId);
     const quantity = Number(data.quantity || 0);
     if (!product || quantity <= 0) {
-      alert("Selecciona producto y cantidad.");
+      uiAlert("Selecciona producto y cantidad.");
       return;
     }
     const movement = {
@@ -11780,13 +11802,13 @@ function bindEvents() {
       detail: String(data.detail || "").trim()
     };
     if (["SALIDA", "VENTA"].includes(movement.type) && quantity > Number(product.stock || 0)) {
-      alert("No hay stock suficiente para registrar la salida.");
+      uiAlert("No hay stock suficiente para registrar la salida.");
       return;
     }
     try {
       await saveInventoryMovementApi(movement);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     if (!API_ENABLED) {
@@ -11815,18 +11837,18 @@ function bindEvents() {
 
   $("#openCashBtn").addEventListener("click", async () => {
     if (!canManageCash()) {
-      alert("Tu usuario no tiene permiso para abrir caja.");
+      uiAlert("Tu usuario no tiene permiso para abrir caja.");
       return;
     }
     const existing = cashSessionToday();
     if (existing) {
-      alert(`La caja de ${formatDate(existing.date)} sigue abierta. Primero debes cerrar esa caja antes de abrir otra.`);
+      uiAlert(`La caja de ${formatDate(existing.date)} sigue abierta. Primero debes cerrar esa caja antes de abrir otra.`);
       return;
     }
     const cashDate = todayISO();
     const sessionForDate = state.cashSessions.find((session) => session.date === cashDate);
     if (sessionForDate) {
-      alert(`La caja de ${formatDate(cashDate)} ya fue registrada. Para revisar sus pagos, selecciona esa fecha en Fecha de caja.`);
+      uiAlert(`La caja de ${formatDate(cashDate)} ya fue registrada. Para revisar sus pagos, selecciona esa fecha en Fecha de caja.`);
       selectedCashViewDate = cashDate;
       render();
       return;
@@ -11835,14 +11857,14 @@ function bindEvents() {
     // en centimos enteros: el saldo acumulado arrastra fracciones invisibles y
     // entregar justo lo que hay en caja se rechazaba por una millonesima
     if (Math.round(openingCash * 100) > Math.round(Number(generalCashBalances().cash || 0) * 100)) {
-      alert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
+      uiAlert("La caja general no tiene suficiente efectivo para entregar esa caja chica.");
       return;
     }
     const session = { id: uid("cash"), date: cashDate, openingCash, openedAt: new Date().toISOString(), closedAt: "", closingCash: 0, difference: 0 };
     try {
       await openCashApi(session);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.cashSessions.push(session);
@@ -11852,13 +11874,13 @@ function bindEvents() {
 
   $("#closeCashBtn").addEventListener("click", async () => {
     if (!canManageCash()) {
-      alert("Tu usuario no tiene permiso para cerrar caja.");
+      uiAlert("Tu usuario no tiene permiso para cerrar caja.");
       return;
     }
     const session = activeOpenCashSession();
     const cashDate = session?.date || cashViewDate();
     if (!session) {
-      alert("Primero abre la caja del dia.");
+      uiAlert("Primero abre la caja del día.");
       return;
     }
     const unresolved = state.appointments.filter(
@@ -11866,17 +11888,17 @@ function bindEvents() {
     );
     if (unresolved.length) {
       const names = unresolved.map((appointment) => patientById(appointment.patientId)?.name || "Paciente").join(", ");
-      alert(`No puedes cerrar caja. Debes atender o reprogramar con comentario a: ${names}`);
+      uiAlert(`No puedes cerrar caja. Debes atender o reprogramar con comentario a: ${names}`);
       return;
     }
     const pendingFollowUps = appointmentFollowUps().filter((appointment) => appointment.date === cashDate);
     if (pendingFollowUps.length) {
       const names = pendingFollowUps.map((appointment) => patientById(appointment.patientId)?.name || "Paciente").join(", ");
-      if (!confirm(`Hay citas en seguimiento pendientes: ${names}. Puedes cerrar caja, pero recuerda gestionarlas. ¿Continuar?`)) return;
+      if (!(await uiConfirm(`Hay citas en seguimiento pendientes: ${names}. Puedes cerrar caja, pero recuerda gestionarlas. ¿Continuar?`))) return;
     }
     if ($("#closingCash").value === "") {
-      alert("Ingresa el efectivo contado al cierre antes de cerrar caja.");
-      $("#closingCash").focus();
+      uiAlert("Ingresa el efectivo contado al cierre antes de cerrar caja.").then(() => $("#closingCash").focus());
+      
       return;
     }
     const incomeTotal = incomeForCashView(cashDate);
@@ -11890,7 +11912,7 @@ function bindEvents() {
     }
     const difference = closing - expected;
     if (Math.abs(difference) > 0.009) {
-      alert(`No puedes cerrar caja con diferencia. Esperado: ${money(expected)}. Contado: ${money(closing)}. Diferencia: ${money(difference)}. Corrige el efectivo contado hasta que la diferencia sea S/ 0.00.`);
+      uiAlert(`No puedes cerrar caja con diferencia. Esperado: ${money(expected)}. Contado: ${money(closing)}. Diferencia: ${money(difference)}. Corrige el efectivo contado hasta que la diferencia sea S/ 0.00.`);
       $("#closingCash").focus();
       renderCashBox(cashDate);
       return;
@@ -11906,7 +11928,7 @@ function bindEvents() {
     try {
       await closeCashApi({ date: cashDate, includedDates: cashDates, closingCash: closing, closedAt: session.closedAt });
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.payments.forEach((payment) => {
@@ -11924,7 +11946,7 @@ function bindEvents() {
     if (!API_ENABLED) saveState();
     render();
     printDailyClose(cashDate);
-    alert(reviewOnlyClose
+    uiAlert(reviewOnlyClose
       ? `Caja cerrada sin volver a sumar movimientos ya registrados. Diferencia: ${money(session.difference)}`
       : `Caja cerrada. Diferencia: ${money(session.difference)}`);
   });
@@ -11939,16 +11961,16 @@ function bindEvents() {
 
   $("#saveExpenseBtn").addEventListener("click", async () => {
     if (!canManageExpenses()) {
-      alert("Tu usuario no tiene permiso para registrar egresos.");
+      uiAlert("Tu usuario no tiene permiso para registrar egresos.");
       return;
     }
     if (!cashSessionToday()) {
-      alert("Primero abre la caja del dia para registrar egresos.");
+      uiAlert("Primero abre la caja del día para registrar egresos.");
       return;
     }
     const data = formData($("#expenseForm"));
     if (!data.detail.trim() || Number(data.amount || 0) <= 0) {
-      alert("Completa el detalle y el monto del egreso.");
+      uiAlert("Completa el detalle y el monto del egreso.");
       return;
     }
     const expense = {
@@ -11963,7 +11985,7 @@ function bindEvents() {
     try {
       await saveExpenseApi(expense);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.expenses.push(expense);
@@ -11989,7 +12011,7 @@ function bindEvents() {
   $("#configForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!puedeConfigurar()) {
-      alert("Solo el administrador o el doctor pueden cambiar la configuracion.");
+      uiAlert("Solo el administrador o el doctor pueden cambiar la configuración.");
       return;
     }
     const data = formData(event.currentTarget);
@@ -12023,6 +12045,8 @@ function bindEvents() {
       end: data.end,
       interval: Number(data.interval),
       inactiveDays: Number(data.inactiveDays),
+      lockAfterMinutes: Number(data.lockAfterMinutes) || 0,
+      lockElegido: true,
       enableAgendaPayments: data.enableAgendaPayments === "on",
       whatsapp: data.whatsapp,
       doctors: doctors.length ? doctors : seedData.config.doctors,
@@ -12039,6 +12063,8 @@ function bindEvents() {
         end: state.config.end,
         interval: state.config.interval,
         inactiveDays: state.config.inactiveDays,
+        lockAfterMinutes: state.config.lockAfterMinutes,
+        lockElegido: state.config.lockElegido,
         enableAgendaPayments: state.config.enableAgendaPayments,
         whatsapp: state.config.whatsapp,
         doctors: state.config.doctors,
@@ -12047,7 +12073,7 @@ function bindEvents() {
         servicesCustomized: state.config.servicesCustomized
       });
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     olvidarCambiosDeConfig();
@@ -12055,20 +12081,20 @@ function bindEvents() {
     render();
   });
 
-  $("#resetDataBtn").addEventListener("click", () => {
+  $("#resetDataBtn").addEventListener("click", async () => {
     if (!isAdmin()) return;
-    if (!confirm("Se reemplazaran los datos guardados por los datos iniciales. Deseas continuar?")) return;
+    if (!(await uiConfirm("Se reemplazarán los datos guardados por los datos iniciales. ¿Deseas continuar?"))) return;
     state = structuredClone(seedData);
     saveState();
     render();
   });
   $("#blankDataBtn").addEventListener("click", async () => {
     if (!isAdmin()) return;
-    if (!confirm("Esto dejara el sistema en cero: sin pacientes, citas, pagos, historiales, caja ni saldos iniciales. Se conservaran configuracion, servicios y usuarios. Deseas continuar?")) return;
+    if (!(await uiConfirm("Esto dejará el sistema en cero: sin pacientes, citas, pagos, historiales, caja ni saldos iniciales. Se conservarán configuración, servicios y usuarios. Deseas continuar?"))) return;
     try {
       await resetOperationalApi();
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state = blankStateFromCurrent();
@@ -12152,7 +12178,7 @@ function bindEvents() {
       resultado: "",
     }));
     if (!filas.length) {
-      alert("No hay pacientes pendientes de llamar.");
+      uiAlert("No hay pacientes pendientes de llamar.");
       return;
     }
     exportCsv(`pacientes-por-llamar-${todayISO()}.csv`, filas);
@@ -12232,7 +12258,7 @@ function bindEvents() {
       if (session) session.openingCash = previousSessionOpening;
       if (!API_ENABLED) saveState();
       render();
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
   });
@@ -12261,7 +12287,7 @@ function bindEvents() {
     ].filter((bolsa) => bolsa.saldo > 0.009);
 
     if (!bolsas.length) {
-      alert("No queda saldo del mes para pasar a utilidad.");
+      uiAlert("No queda saldo del mes para pasar a utilidad.");
       return;
     }
     const elegida = bolsas[0];
@@ -12272,7 +12298,7 @@ function bindEvents() {
     renderGeneralCash();
 
     if (bolsas.length > 1) {
-      alert(
+      uiAlert(
         `Queda saldo en ${bolsas.length} medios distintos y cada uno se pasa por separado:\n\n` +
         bolsas.map((b) => `  ${b.nombre}: ${money(b.saldo)}`).join("\n") +
         `\n\nSe cargo el de ${elegida.nombre}. Guarda ese movimiento y vuelve a ` +
@@ -12290,7 +12316,7 @@ function bindEvents() {
   $("#utilityForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!isAdmin()) {
-      alert("Solo el administrador puede registrar movimientos de utilidad.");
+      uiAlert("Solo el administrador puede registrar movimientos de utilidad.");
       return;
     }
     const form = event.currentTarget;
@@ -12298,7 +12324,7 @@ function bindEvents() {
     const amount = Number(data.amount || 0);
     const isPurchase = data.type === "COMPRA";
     if (!data.detail.trim() || amount <= 0) {
-      alert("Completa el detalle y un monto mayor a cero.");
+      uiAlert("Completa el detalle y un monto mayor a cero.");
       return;
     }
     /* Los saldos se acumulan sumando importe por importe, y esas sumas dejan
@@ -12309,7 +12335,7 @@ function bindEvents() {
     const centimos = (valor) => Math.round(Number(valor || 0) * 100);
 
     if (isPurchase && centimos(amount) > centimos(generalCashBalances().utility)) {
-      alert("La compra supera la utilidad disponible.");
+      uiAlert("La compra supera la utilidad disponible.");
       return;
     }
 
@@ -12328,7 +12354,7 @@ function bindEvents() {
       balancesDelMes.cash + balancesDelMes.bank,
     );
     if (!isPurchase && centimos(amount) > centimos(disponible)) {
-      alert(
+      uiAlert(
         `El aporte de ${money(amount)} supera lo disponible.\n\n` +
         `Hoy: ${money(balances.cash + balances.bank)}\n` +
         `Al ${formatDate(fechaMovimiento)}: ${money(balancesDelMes.cash + balancesDelMes.bank)}`
@@ -12348,7 +12374,7 @@ function bindEvents() {
     try {
       await saveExpenseApi(expense);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.expenses.push(expense);
@@ -12360,19 +12386,19 @@ function bindEvents() {
   $("#userForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!isAdmin()) {
-      alert("Solo el administrador puede crear usuarios.");
+      uiAlert("Solo el administrador puede crear usuarios.");
       return;
     }
     const data = formData(event.currentTarget);
     const username = data.username.trim();
     const duplicate = state.users.find((user) => user.username.toLowerCase() === username.toLowerCase() && user.id !== data.id);
     if (duplicate) {
-      alert("Ese nombre de usuario ya existe.");
+      uiAlert("Ese nombre de usuario ya existe.");
       return;
     }
     const existing = state.users.find((user) => user.id === data.id);
     if (!existing && !data.password) {
-      alert("Ingresa una contrasena para crear el usuario.");
+      uiAlert("Ingresa una contraseña para crear el usuario.");
       return;
     }
     const user = {
@@ -12390,7 +12416,7 @@ function bindEvents() {
     try {
       await saveUserApi(user);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     user.password = "";
@@ -12421,7 +12447,7 @@ function bindEvents() {
     mostrarSelloDelUsuario("");
   });
 
-  $("#usersTable").addEventListener("click", (event) => {
+  $("#usersTable").addEventListener("click", async (event) => {
     if (!isAdmin()) return;
     /* Eliminar deja al consultorio sin esa cuenta: no se puede volver atras y
        no hace falta para cerrarle el paso -un usuario desactivado ya no entra-.
@@ -12430,18 +12456,18 @@ function bindEvents() {
     if (borrar) {
       const user = state.users.find((item) => item.id === borrar.dataset.deleteUser);
       if (!user || user.id === "u-admin" || user.id === currentUserId) return;
-      if (!confirm(`Se elimina la cuenta de ${user.name}.
+      if (!(await uiConfirm(`Se elimina la cuenta de ${user.name}.
 
 No podrá volver a entrar y la cuenta no se puede recuperar. Lo que atendió y firmó se queda en las historias, con su nombre.
 
 Si solo quieres cerrarle el paso, usa Desactivar.
 
-¿Eliminar la cuenta?`)) return;
+¿Eliminar la cuenta?`))) return;
       const antes = [...state.users];
       state.users = state.users.filter((item) => item.id !== user.id);
       deleteUserApi(user.id).catch((error) => {
         state.users = antes;
-        alert(error.message);
+        uiAlert(error.message);
         render();
       });
       addLocalAuditEvent("USUARIO_ELIMINADO", `Eliminó la cuenta de ${user.name}`, "");
@@ -12470,7 +12496,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
       user.active = !user.active;
       saveUserApi(user).catch((error) => {
         user.active = previous;
-        alert(error.message);
+        uiAlert(error.message);
         render();
       });
       if (!API_ENABLED) saveState();
@@ -12491,7 +12517,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
     const data = formData(form);
     const amount = Number(data.amount || 0);
     if (!data.person.trim() || !data.detail.trim() || amount <= 0) {
-      alert("Completa la persona, el detalle y un monto mayor a cero.");
+      uiAlert("Completa la persona, el detalle y un monto mayor a cero.");
       delete form.dataset.saving;
       if (submitButton) {
         submitButton.disabled = false;
@@ -12504,7 +12530,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
     const editandoId = String(data.id || "").trim();
     const anterior = editandoId ? state.expenses.find((item) => item.id === editandoId) : null;
     if (editandoId && (!anterior || !sePuedeEditarPagoDePersonal(anterior))) {
-      alert(anterior
+      uiAlert(anterior
         ? `Ese pago ya tiene más de ${DIAS_PARA_EDITAR_PAGO} días registrado y solo el administrador puede corregirlo.`
         : "Ese pago ya no está en la lista.");
       delete form.dataset.saving;
@@ -12526,7 +12552,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
       String(expense.method || "").toUpperCase() === String(data.method || "").toUpperCase() &&
       cents(expense.amount) === cents(amount)
     );
-    if (duplicate && !confirm("Ya existe un pago igual registrado en esa fecha. Deseas guardarlo nuevamente?")) {
+    if (duplicate && !(await uiConfirm("Ya existe un pago igual registrado en esa fecha. ¿Deseas guardarlo nuevamente?"))) {
       delete form.dataset.saving;
       if (submitButton) {
         submitButton.disabled = false;
@@ -12550,7 +12576,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
     try {
       await saveExpenseApi(expense);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       delete form.dataset.saving;
       if (submitButton) {
         submitButton.disabled = false;
@@ -12626,35 +12652,35 @@ Si solo quieres cerrarle el paso, usa Desactivar.
   $("#cardFeeForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!isAdmin()) {
-      alert("Solo el administrador puede registrar comisiones de tarjeta.");
+      uiAlert("Solo el administrador puede registrar comisiones de tarjeta.");
       return;
     }
     const form = event.currentTarget;
     const month = form.month.value || "";
     if (!month) {
-      alert("Elige el mes que quieres cuadrar.");
+      uiAlert("Elige el mes que quieres cuadrar.");
       return;
     }
     const comision = Number(form.fee.value || 0);
     if (comision <= 0) {
-      alert("Pon lo que depositó el banco, o la comisión directamente, para calcular la diferencia.");
+      uiAlert("Pon lo que depositó el banco, o la comisión directamente, para calcular la diferencia.");
       return;
     }
     const cobrado = cardChargedForMonth(month);
     const neto = cobrado - cardFeeTotalForMonth(month);
     const centimos = (valor) => Math.round(Number(valor || 0) * 100);
     if (centimos(comision) > centimos(neto)) {
-      alert(`La comisión de ${money(comision)} supera lo que queda por cuadrar de ${monthLabel(month)}, que es ${money(neto)}.`);
+      uiAlert(`La comisión de ${money(comision)} supera lo que queda por cuadrar de ${monthLabel(month)}, que es ${money(neto)}.`);
       return;
     }
     const depositado = neto - comision;
-    if (!confirm(
+    if (!(await uiConfirm(
       `Cuadrar ${monthLabel(month)}:\n\n` +
       `  Cobrado con tarjeta: ${money(cobrado)}\n` +
       `  Comisión del banco: ${money(comision)}\n` +
       `  Queda en tarjeta: ${money(depositado)}\n\n` +
       `Se registra la comisión como egreso del ${formatDate(cardFeeDateForMonth(month))}.`
-    )) return;
+    ))) return;
 
     const expense = {
       id: uid("exp"),
@@ -12669,7 +12695,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
     try {
       await saveExpenseApi(expense);
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
       return;
     }
     state.expenses.push(expense);
@@ -12685,12 +12711,12 @@ Si solo quieres cerrarle el paso, usa Desactivar.
     const mes = boton.dataset.deleteCardFee;
     const comisiones = cardFeesForMonth(mes);
     if (!comisiones.length) return;
-    if (!confirm(`¿Eliminar la comisión de ${monthLabel(mes)} por ${money(cardFeeTotalForMonth(mes))}? El saldo de tarjeta vuelve a subir.`)) return;
+    if (!(await uiConfirm(`¿Eliminar la comisión de ${monthLabel(mes)} por ${money(cardFeeTotalForMonth(mes))}? El saldo de tarjeta vuelve a subir.`))) return;
     for (const expense of comisiones) {
       try {
         await deleteExpenseApi(expense.id);
       } catch (error) {
-        alert(error.message);
+        uiAlert(error.message);
         return;
       }
       state.expenses = state.expenses.filter((item) => item.id !== expense.id);
@@ -12752,7 +12778,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
       await refreshElectronicReceiptsApi();
       await refreshSunatStatus();
     } catch (error) {
-      alert(error.message);
+      uiAlert(error.message);
     }
     renderElectronicReceipts();
   });
@@ -12792,7 +12818,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
     try {
       promociones = (await apiFetch("/api/patients-to-call")).promotions || [];
     } catch (error) {
-      return alert(error.message);
+      return uiAlert(error.message);
     }
     const filas = promociones.map((fila) => ({
       segmento: fila.segmento,
@@ -12807,7 +12833,7 @@ Si solo quieres cerrarle el paso, usa Desactivar.
       tiene_deuda: patientDebt(fila.id) > 0 ? "SI" : "NO",
     }));
     if (!filas.length) {
-      alert("No hay pacientes inactivos para promocionar.");
+      uiAlert("No hay pacientes inactivos para promocionar.");
       return;
     }
     exportCsv(`promociones-inactivos-${todayISO()}.csv`, filas);
@@ -12935,5 +12961,68 @@ try {
   console.error(error);
   document.body.classList.add("locked");
   const message = $("#loginMessage");
-  if (message) message.textContent = "No se pudo cargar la pantalla. Actualiza la pagina o borra cache si el problema continua.";
+  if (message) message.textContent = "No se pudo cargar la pantalla. Actualiza la página o borra cache si el problema continua.";
 }
+
+/* ---- Bloqueo por inactividad ---------------------------------------------
+   Igual que en el dental de EmpresaFacil: se apunta la hora del ultimo uso
+   real y, pasados los minutos de Configuracion, se pide usuario y clave otra
+   vez. La marca vive en localStorage para sobrevivir recargas y compartirse
+   entre pestanas abiertas. */
+const CLAVE_ULTIMO_USO = `${STORAGE_KEY}-ultimo-uso`;
+
+function minutosDeBloqueo() {
+  const minutos = Number(state?.config?.lockAfterMinutes || 0);
+  return Number.isFinite(minutos) && minutos > 0 ? minutos : 0;
+}
+
+function marcarUso() {
+  if (!currentUserId) return;
+  try { localStorage.setItem(CLAVE_ULTIMO_USO, String(Date.now())); } catch {}
+}
+
+function ultimoUso() {
+  const marca = Number(localStorage.getItem(CLAVE_ULTIMO_USO));
+  return Number.isFinite(marca) && marca > 0 ? marca : 0;
+}
+
+function sesionVencidaPorInactividad() {
+  const minutos = minutosDeBloqueo();
+  if (!minutos || !currentUserId) return false;
+  const marca = ultimoUso();
+  // sin marca previa no se cierra: cerrar aqui sacaria a quien esta trabajando
+  if (!marca) return false;
+  return Date.now() - marca > minutos * 60000;
+}
+
+function bloquearPorInactividad() {
+  const minutos = minutosDeBloqueo();
+  if (API_ENABLED && apiToken) {
+    apiFetch("/api/logout", { method: "POST", body: "{}" }).catch(() => {});
+  }
+  clearApiSession();
+  currentUserId = "";
+  localStorage.removeItem(`${STORAGE_KEY}-current-user`);
+  try { localStorage.removeItem(CLAVE_ULTIMO_USO); } catch {}
+  render();
+  const aviso = $("#loginMessage");
+  // se dice el motivo: si no, la pantalla de ingreso aparece de la nada
+  if (aviso) aviso.textContent = `Se cerró la sesión tras ${minutos >= 60 ? `${minutos / 60} h` : `${minutos} min`} sin uso. Ingresa de nuevo.`;
+}
+
+function revisarInactividad() {
+  if (sesionVencidaPorInactividad()) bloquearPorInactividad();
+}
+
+(function vigilarInactividad() {
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach((senal) => {
+    document.addEventListener(senal, marcarUso, { passive: true, capture: true });
+  });
+  // al volver a la pestana se revisa de inmediato: con el equipo suspendido
+  // el temporizador no corre
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") revisarInactividad();
+  });
+  setInterval(revisarInactividad, 30000);
+  setTimeout(revisarInactividad, 1500);
+})();

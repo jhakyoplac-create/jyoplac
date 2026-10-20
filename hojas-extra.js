@@ -104,7 +104,7 @@ async function ponerFotoDelDni(patientId, dataUri) {
 
 async function quitarFoto(patientId) {
   if (!canManageClinical()) return;
-  if (!confirm("¿Quitar la foto de este paciente?")) return;
+  if (!(await uiConfirm("¿Quitar la foto de este paciente?"))) return;
   await guardarFoto(patientId, "");
 }
 
@@ -324,7 +324,7 @@ async function imprimirFichaDeDatos(patientId) {
   // la ventana se abre antes de cualquier espera: despues el navegador la bloquea
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
   }
   const foto = await cargarFoto(patientId);
@@ -386,7 +386,7 @@ function doctorPorDefecto(patient) {
 }
 
 function guardarEvolucion(patient) {
-  savePatientApi(patient).catch((error) => alert(error.message));
+  savePatientApi(patient).catch((error) => uiAlert(error.message));
   if (!API_ENABLED) saveState();
 }
 
@@ -431,7 +431,7 @@ function cambiarDoctorDeEvolucion(lista) {
   if (nota) {
     // en una fila que viene de una nota, el doctor es el "atendido por" de la nota
     nota.attendedBy = lista.value;
-    saveClinicalHistoryApi({ ...nota, appointmentId: "" }).catch((error) => alert(error.message));
+    saveClinicalHistoryApi({ ...nota, appointmentId: "" }).catch((error) => uiAlert(error.message));
     if (!API_ENABLED) saveState();
     return true;
   }
@@ -442,10 +442,10 @@ function cambiarDoctorDeEvolucion(lista) {
   return true;
 }
 
-function borrarFilaDeEvolucion(patientId, filaId) {
+async function borrarFilaDeEvolucion(patientId, filaId) {
   const patient = patientById(patientId);
   if (!patient || !canManageClinical()) return false;
-  if (!confirm("¿Borrar esta fila de la hoja de evolución?")) return false;
+  if (!(await uiConfirm("¿Borrar esta fila de la hoja de evolución?"))) return false;
   patient.evolucion = filasEscritas(patient).filter((item) => item.id !== filaId);
   guardarEvolucion(patient);
   return true;
@@ -565,7 +565,7 @@ function imprimirHojaDeEvolucion(patientId) {
   const horizontal = true;
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
   }
   const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
@@ -657,7 +657,7 @@ function fichaDeLaProforma(proforma, patient) {
     try {
       return window.Odontograma.normalizarFicha(JSON.parse(copia.ficha));
     } catch (error) {
-      console.warn("No se pudo leer la copia del odontograma de ese dia.", error);
+      console.warn("No se pudo leer la copia del odontograma de ese día.", error);
     }
   }
   return odontogramFichaFor(patient.id, "inicial");
@@ -756,7 +756,7 @@ function imprimirPresupuesto(proformaId, paraImagen = false) {
   if (!proforma) return;
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
   }
   const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
@@ -1106,7 +1106,7 @@ function imprimirFichaEstomatologica(patientId) {
   if (!patient) return;
   const ventana = window.open("", "_blank", "width=900,height=1100");
   if (!ventana) {
-    alert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
     return;
   }
   const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]

@@ -641,6 +641,8 @@ ETIQUETAS_DE_CONFIG = {
     "end": "hora de cierre",
     "interval": "duracion de la cita",
     "inactiveDays": "dias sin atender",
+    "lockAfterMinutes": "bloqueo por inactividad",
+    "lockElegido": "bloqueo elegido",
     "enableAgendaPayments": "cobro desde la agenda",
     "whatsapp": "WhatsApp",
     "doctors": "doctores",
@@ -3402,7 +3404,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 values["clinicName"] = data["clinicName"]
             # La direccion y la ciudad del consultorio: salen en el membrete de
             # las hojas que se entregan y en el cierre del consentimiento.
-            for key in ["issuerRuc", "fichaOdontogramaColegio", "issuerAddress", "issuerDistrict", "start", "end", "interval", "inactiveDays", "enableAgendaPayments", "whatsapp", "doctors", "units"]:
+            for key in ["issuerRuc", "fichaOdontogramaColegio", "issuerAddress", "issuerDistrict", "start", "end", "interval", "inactiveDays", "lockAfterMinutes", "lockElegido", "enableAgendaPayments", "whatsapp", "doctors", "units"]:
                 if key in data:
                     values[key] = data[key]
             if "services" in data:

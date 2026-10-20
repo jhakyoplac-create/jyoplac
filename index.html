@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261014-caja-en-el-celular" />
+    <link rel="stylesheet" href="styles.css?v=20261019-ventanas" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -23,8 +23,8 @@
         </div>
         <h1>Ingreso al sistema</h1>
         <label>Usuario<input name="username" autocomplete="username" required /></label>
-        <label>Contrasena<input name="password" type="password" autocomplete="current-password" required /></label>
-        <label class="remember-session"><input name="rememberDevice" type="checkbox" checked /> Mantener sesion en este equipo</label>
+        <label>Contraseña<input name="password" type="password" autocomplete="current-password" required /></label>
+        <label class="remember-session"><input name="rememberDevice" type="checkbox" checked /> Mantener sesión en este equipo</label>
         <button class="primary" type="submit">Ingresar</button>
         <p class="muted" id="loginMessage"></p>
       </form>
@@ -90,7 +90,7 @@
           <strong id="sessionUser">Sin usuario</strong>
           <small id="sessionRole"></small>
         </div>
-        <button class="ghost full" id="logoutBtn">Cerrar sesion</button>
+        <button class="ghost full" id="logoutBtn">Cerrar sesión</button>
         <button class="ghost full" id="backupBtn">Exportar respaldo</button>
         <label class="ghost full file-label">
           Importar respaldo
@@ -111,7 +111,7 @@
             <strong id="kpiActive">0</strong>
           </article>
           <article class="kpi" data-kpi-dinero>
-            <span>Caja del dia</span>
+            <span>Caja del día</span>
             <strong id="kpiCash">S/ 0</strong>
           </article>
           <article class="kpi" data-kpi-dinero>
@@ -143,7 +143,7 @@
           <input id="agendaDate" type="date" />
           <select id="doctorFilter"></select>
           <select id="unitFilter"></select>
-          <button class="ghost" id="exportAgendaDayBtn">CSV dia</button>
+          <button class="ghost" id="exportAgendaDayBtn">CSV día</button>
           <button class="ghost" id="exportAgendaFutureBtn">CSV futuras</button>
           <button class="primary" id="newAppointmentBtn">Registrar cita</button>
         </div>
@@ -259,14 +259,14 @@
               <h2>Pacientes</h2>
               <span class="status" id="patientCount">0 pacientes</span>
               <button class="ghost" id="exportPatientsBtn">CSV</button>
-              <button class="ghost" id="exportFollowUpBtn" title="Pacientes sin proxima cita, sin reprogramar o con control vencido">Por llamar</button>
+              <button class="ghost" id="exportFollowUpBtn" title="Pacientes sin próxima cita, sin reprogramar o con control vencido">Por llamar</button>
             </div>
             <div class="table-wrap patients-scroll">
               <table>
                 <thead>
                   <tr>
                     <th>Paciente</th>
-                    <th>Telefono</th>
+                    <th>Teléfono</th>
                     <th>Doctor</th>
                     <th>Estado</th>
                     <th>Saldo</th>
@@ -370,7 +370,7 @@
                 <button type="reset" class="ghost">Limpiar</button>
               </div>
             </div>
-            <p class="notice" id="cashLockedMessage">Primero abre la caja del dia para registrar pagos o egresos.</p>
+            <p class="notice" id="cashLockedMessage">Primero abre la caja del día para registrar pagos o egresos.</p>
             <input type="hidden" name="id" />
             <p class="pago-seccion">Paciente y atención</p>
             <div class="payment-patient-row">
@@ -379,7 +379,7 @@
             </div>
             <div id="paymentProductSummary" class="product-sale-summary" hidden></div>
             <div class="payment-attention-row">
-              <label>Atencion pendiente<select name="historyId"></select></label>
+              <label>Atención pendiente<select name="historyId"></select></label>
               <label class="treatment-discount" id="treatmentDiscountBox" hidden title="Descuenta del dinero que el paciente ya pagó por su tratamiento. No entra a caja ni genera boleta."><input type="checkbox" name="descontarTratamiento" />Descontar del tratamiento</label>
               <button type="button" class="servicio-extra-btn" id="agregarServicioExtraBtn" title="Agregar un servicio con su precio: se suma al saldo">+ Servicio</button>
             </div>
@@ -392,7 +392,7 @@
             <input name="date" type="hidden" />
             <div class="pago-pareja">
               <label>Monto que paga S/<input name="amount" type="number" min="0" step="0.01" readonly required /></label>
-              <label>Metodo<select name="method"></select></label>
+              <label>Método<select name="method"></select></label>
             </div>
             <div class="pago-pareja">
               <label>Monto recibido S/<input name="cashReceived" type="number" min="0" step="0.01" /></label>
@@ -442,7 +442,7 @@
               <div class="summary-row">
                 <span>Inicial <strong id="cashOpeningLabel">S/ 0</strong></span>
                 <span>Total ingresos <strong id="cashIncomeLabel">S/ 0</strong></span>
-                <span>Egresos dia <strong id="cashExpenseLabel">S/ 0</strong></span>
+                <span>Egresos día <strong id="cashExpenseLabel">S/ 0</strong></span>
                 <span>Esperado <strong id="cashExpectedLabel">S/ 0</strong></span>
               </div>
               <div class="cash-breakdown">
@@ -456,21 +456,21 @@
                 <label>Diferencia S/<input id="cashDifference" type="number" readonly /></label>
               </div>
               <div class="top-actions">
-                <button class="ghost" id="openCashBtn" type="button">Abrir caja del dia</button>
+                <button class="ghost" id="openCashBtn" type="button">Abrir caja del día</button>
                 <button class="primary" id="closeCashBtn" type="button">Cerrar y cuadrar caja</button>
                 <button class="ghost" id="printCloseBtn" type="button">Imprimir cierre</button>
                 <button class="ghost" id="exportCloseBtn" type="button">Excel cierre</button>
               </div>
             </div>
             <div class="panel-head compact-section-head">
-              <h2>Egresos del dia</h2>
+              <h2>Egresos del día</h2>
             </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Detalle</th>
-                    <th>Metodo</th>
+                    <th>Método</th>
                     <th>Origen</th>
                     <th>Monto</th>
                     <th>Accion</th>
@@ -488,7 +488,7 @@
                   <tr>
                     <th>Fecha</th>
                     <th>Paciente</th>
-                    <th>Metodo</th>
+                    <th>Método</th>
                     <th>Monto</th>
                     <th>Notas</th>
                   </tr>
@@ -577,7 +577,7 @@
             <label>Efectivo general S/<input name="cash" type="number" min="0" step="0.01" /></label>
             <label>Yape/Plin/Tarjeta/Transferencia S/<input name="bank" type="number" min="0" step="0.01" /></label>
             <label>Utilidad inicial general S/<input name="utility" type="number" min="0" step="0.01" /></label>
-            <label>Salida caja chica del dia S/<input name="pettyCash" type="number" min="0" step="0.01" /></label>
+            <label>Salida caja chica del día S/<input name="pettyCash" type="number" min="0" step="0.01" /></label>
             <button class="primary" type="submit">Guardar saldos</button>
           </form>
           <section class="panel">
@@ -618,7 +618,7 @@
             <label>Tipo<select name="type"></select></label>
             <label>Detalle<textarea name="detail" rows="3" required></textarea></label>
             <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
-            <label>Metodo<select name="method"></select></label>
+            <label>Método<select name="method"></select></label>
             <button class="primary" type="submit">Guardar pago</button>
           </form>
           <section class="panel">
@@ -660,7 +660,7 @@
                 <option value="COMPRA">Compra desde utilidad</option>
               </select>
             </label>
-            <label>Metodo<select name="method"></select></label>
+            <label>Método<select name="method"></select></label>
             <label>Detalle<textarea name="detail" rows="3" required placeholder="Cierre del mes, compra de equipo, maquina o articulo"></textarea></label>
             <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
             <div class="top-actions">
@@ -679,7 +679,7 @@
                   <tr>
                     <th>Fecha</th>
                     <th>Movimiento</th>
-                    <th>Metodo</th>
+                    <th>Método</th>
                     <th>Monto</th>
                     <th>Detalle</th>
                     <th>Accion</th>
@@ -803,7 +803,7 @@
                   <th>Paciente</th>
                   <th>Celular</th>
                   <th>Estado</th>
-                  <th>Proxima cita</th>
+                  <th>Próxima cita</th>
                   <th>Comentario</th>
                   <th>Accion</th>
                 </tr>
@@ -817,7 +817,7 @@
           <div class="panel-head">
             <div>
               <h2>Pacientes por llamar</h2>
-              <p class="muted">Sin proxima cita, sin reprogramar o con control vencido. Al registrar la llamada dejan de aparecer hasta la fecha que corresponda.</p>
+              <p class="muted">Sin próxima cita, sin reprogramar o con control vencido. Al registrar la llamada dejan de aparecer hasta la fecha que corresponda.</p>
             </div>
             <div class="panel-head-actions">
               <span class="status warn" id="toCallCount">0 pendientes</span>
@@ -831,8 +831,8 @@
                   <th>Motivo</th>
                   <th>Paciente</th>
                   <th>Celular</th>
-                  <th>Ultima atencion</th>
-                  <th>Ultima llamada</th>
+                  <th>Última atención</th>
+                  <th>Última llamada</th>
                   <th>Accion</th>
                 </tr>
               </thead>
@@ -849,7 +849,7 @@
             <strong id="panelWaiting">0</strong>
           </article>
           <article class="kpi">
-            <span>En atencion</span>
+            <span>En atención</span>
             <strong id="panelAttention">0</strong>
           </article>
           <article class="kpi">
@@ -939,7 +939,7 @@
             <div class="panel-head">
               <h2>Registro de actividad</h2>
               <div class="audit-controles">
-                <select id="auditDay" aria-label="Dia del registro"></select>
+                <select id="auditDay" aria-label="Día del registro"></select>
                 <input id="auditSearch" type="search" placeholder="Buscar usuario o movimiento" aria-label="Buscar en el registro" />
                 <button id="auditExport" class="small-btn" type="button">Exportar</button>
               </div>
@@ -956,7 +956,7 @@
           </section>
           <section class="panel income-breakdown-panel">
             <div class="panel-head">
-              <h2>Ingresos por dia y metodo</h2>
+              <h2>Ingresos por día y método</h2>
               <button class="ghost" id="exportDailyIncomeBreakdownBtn">CSV</button>
             </div>
             <div id="dailyIncomeBreakdownReport" class="table-wrap"></div>
@@ -964,7 +964,7 @@
           <section class="panel doctor-summary-panel">
             <div class="panel-head">
               <h2>Resumen por doctor</h2>
-              <div class="commission-range" title="Total: lo que ya se cobro de los pacientes que atendio cada doctor entre estas fechas. Lo que el paciente debe cuenta el dia que paga.">
+              <div class="commission-range" title="Total: lo que ya se cobró de los pacientes que atendió cada doctor entre estas fechas. Lo que el paciente debe cuenta el día que paga.">
                 <input id="commissionFrom" type="date" aria-label="Comision desde" />
                 <span class="muted">a</span>
                 <input id="commissionTo" type="date" aria-label="Comision hasta" />
@@ -1007,7 +1007,7 @@
             <div class="settings-grid">
               <label>Precio venta S/<input name="price" type="number" min="0" step="0.01" required /></label>
               <label>Stock inicial<input name="stock" type="number" min="0" step="1" required /></label>
-              <label>Stock minimo<input name="minStock" type="number" min="0" step="1" /></label>
+              <label>Stock mínimo<input name="minStock" type="number" min="0" step="1" /></label>
               <label>Unidad<input name="unit" placeholder="Unidad" /></label>
             </div>
             <button class="primary" type="submit">Guardar producto</button>
@@ -1025,7 +1025,7 @@
                     <th>Producto</th>
                     <th>Stock</th>
                     <th>Precio</th>
-                    <th>Minimo</th>
+                    <th>Mínimo</th>
                     <th>Accion</th>
                   </tr>
                 </thead>
@@ -1093,9 +1093,16 @@
             <label>Inicio<input name="start" type="time" /></label>
             <label>Fin<input name="end" type="time" /></label>
             <label>Intervalo minutos<input name="interval" type="number" min="10" step="5" /></label>
-            <label>Dias para inactivo<input name="inactiveDays" type="number" min="1" /></label>
+            <label>Días para inactivo<input name="inactiveDays" type="number" min="1" /></label>
+            <label>Pedir la clave tras<select name="lockAfterMinutes">
+              <option value="0">Nunca</option>
+              <option value="30">30 minutos sin uso</option>
+              <option value="60">1 hora sin uso (recomendado)</option>
+              <option value="120">2 horas sin uso</option>
+              <option value="240">4 horas sin uso</option>
+            </select></label>
             <label>WhatsApp Business<input name="whatsapp" /></label>
-            <label class="check"><input name="enableAgendaPayments" type="checkbox" /> Cobrar citas del dia en pagos y caja</label>
+            <label class="check"><input name="enableAgendaPayments" type="checkbox" /> Cobrar citas del día en pagos y caja</label>
           </div>
           <label>Doctores separados por coma<input name="doctors" /></label>
           <label>Unidades separadas por coma<input name="units" /></label>
@@ -1105,7 +1112,7 @@
             <p class="muted">Cada consultorio pone lo que cobra. Este precio entra solo en el presupuesto y en la agenda.</p>
             <div id="configPreciosLista"></div>
           </details>
-          <button class="primary" type="submit">Guardar configuracion</button>
+          <button class="primary" type="submit">Guardar configuración</button>
         </form>
         <div class="content-grid form-and-list user-admin-grid" id="userAdminPanel">
           <form class="panel form" id="userForm">
@@ -1116,7 +1123,7 @@
             <input type="hidden" name="id" />
             <label>Nombre completo<input name="name" required /></label>
             <label>Usuario<input name="username" required /></label>
-            <label>Contrasena<input name="password" type="password" placeholder="Obligatoria al crear" /></label>
+            <label>Contraseña<input name="password" type="password" placeholder="Obligatoria al crear" /></label>
             <label>Rol
               <select name="role" required>
                 <option value="DOCTOR">Doctor</option>
@@ -1233,7 +1240,7 @@
         <label>Fecha<input name="date" type="date" required /></label>
         <label>Detalle<textarea name="detail" rows="3" required placeholder="Compra de productos, implementos, movilidad, etc."></textarea></label>
         <label>Monto S/<input name="amount" type="number" min="0" step="0.01" required /></label>
-        <label>Metodo<select name="method"></select></label>
+        <label>Método<select name="method"></select></label>
         <label>Origen del dinero<select name="source"></select></label>
         <label>Comprobante / nota<input name="receipt" placeholder="Boleta, factura o referencia" /></label>
         <menu>
@@ -1251,7 +1258,7 @@
         </div>
         <label>Monto pendiente S/<input name="creditAmount" type="number" min="0" step="0.01" readonly required /></label>
         <label>Fecha compromiso de pago<input name="creditDueDate" type="date" required /></label>
-        <label>Comentario<textarea name="creditNote" rows="3" placeholder="Ej. Pagara en dos dias por Yape"></textarea></label>
+        <label>Comentario<textarea name="creditNote" rows="3" placeholder="Ej. Pagará en dos días por Yape"></textarea></label>
         <menu>
           <button class="ghost" id="cancelCreditBtn" type="button">Cancelar</button>
           <button class="primary" id="saveCreditBtn" type="button">Guardar compromiso</button>
@@ -1265,7 +1272,7 @@
           <h2>Pago mixto</h2>
           <button class="icon" data-close-dialog="mixedPaymentDialog" type="button" aria-label="Cerrar">x</button>
         </div>
-        <p class="muted">Ingresa cuanto paga en efectivo y cuanto paga por Yape, Plin o transferencia.</p>
+        <p class="muted">Ingresa cuánto paga en efectivo y cuánto paga por Yape, Plin o transferencia.</p>
         <label>Efectivo S/<input name="cashAmount" type="number" min="0" step="0.01" /></label>
         <label>Yape / Plin / Transferencia S/<input name="walletAmount" type="number" min="0" step="0.01" /></label>
         <p class="mixed-payment-summary" id="mixedPaymentDialogSummary">Falta S/ 0</p>
@@ -1373,10 +1380,11 @@
       </form>
     </dialog>
 
-    <script src="odontograma.js?v=20261013-siglas-de-cara"></script>
+    <script src="odontograma.js?v=20261019-ventanas"></script>
     <!-- El ojito para ver lo que se escribe en los campos de contrasena. -->
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
-    <script src="hojas-extra.js?v=20261015-presupuesto-como-imagen"></script>
-    <script src="app.js?v=20261018-ver-citas"></script>
+    <script src="hojas-extra.js?v=20261019-ventanas"></script>
+    <script src="dialogos.js?v=20261019-ventanas"></script>
+    <script src="app.js?v=20261019-ventanas"></script>
   </body>
 </html>
