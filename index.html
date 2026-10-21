@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261020-sello-consentimiento" />
+    <link rel="stylesheet" href="styles.css?v=20261021-inventario-tacho-mes" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -1056,7 +1056,11 @@
           <section class="panel">
             <div class="panel-head">
               <h2>Movimientos de inventario</h2>
+              <div class="staff-payment-tools">
+                <select id="inventoryMovementMonth" aria-label="Mes de los movimientos"></select>
+              </div>
             </div>
+            <p class="muted staff-payment-total" id="inventoryMovementTotal"></p>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -1385,6 +1389,6 @@
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
     <script src="hojas-extra.js?v=20261020-evolucion-sin-sello"></script>
     <script src="dialogos.js?v=20261019-ventanas"></script>
-    <script src="app.js?v=20261020-historia-sin-odontograma"></script>
+    <script src="app.js?v=20261021-inventario-tacho-mes"></script>
   </body>
 </html>

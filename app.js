@@ -3057,6 +3057,13 @@ function canDeletePatients() {
   return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
 }
 
+/* Eliminar un producto del inventario lo saca de las ventas y de la lista;
+   recepcion puede registrarlos y moverlos, pero quitarlos queda para el
+   doctor o el administrador, igual que eliminar un paciente. */
+function canDeleteInventoryProducts() {
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+}
+
 function applyAuthState() {
   const user = currentUser();
   document.body.classList.toggle("locked", !user);
@@ -3714,6 +3721,31 @@ async function guardarDescuentoDeTratamiento({ form, data, restorePaymentButton 
   render();
 }
 
+function mesesConMovimientos() {
+  return [...new Set(state.inventoryMovements.map((movement) => String(movement.date || "").slice(0, 7)))]
+    .filter(Boolean)
+    .sort()
+    .reverse();
+}
+
+function mesElegidoDeMovimientos() {
+  return $("#inventoryMovementMonth")?.value || "";
+}
+
+function renderMesesDeMovimientos() {
+  const select = $("#inventoryMovementMonth");
+  if (!select) return;
+  const meses = mesesConMovimientos();
+  const elegido = select.value;
+  select.innerHTML = `<option value="">Todos los meses</option>` +
+    meses.map((mes) => `<option value="${escapeHtml(mes)}">${escapeHtml(monthLabel(mes))}</option>`).join("");
+  /* Al entrar se muestra el mes mas reciente; despues manda lo que haya
+     elegido, aunque sea "todos". */
+  if (meses.includes(elegido)) select.value = elegido;
+  else if (select.dataset.tocado) select.value = "";
+  else if (meses.length) select.value = meses[0];
+}
+
 function renderInventory() {
   fillInventoryProductSelects();
   const productRows = $("#inventoryProductsTable");
@@ -3727,12 +3759,24 @@ function renderInventory() {
       <td><span class="status ${lowStock ? "danger" : ""}">${Number(product.stock || 0)}</span></td>
       <td>${money(product.price)}</td>
       <td>${Number(product.minStock || 0)}</td>
-      <td class="row-actions"><button class="small-btn" data-edit-product="${product.id}">Editar</button></td>
+      <td class="row-actions"><button class="small-btn" data-edit-product="${product.id}">Editar</button>${canDeleteInventoryProducts() ? `<button class="small-btn danger-btn icon-btn" type="button" data-delete-product="${product.id}" title="Eliminar producto" aria-label="Eliminar ${escapeHtml(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>` : ""}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="5">Aun no hay productos registrados.</td></tr>`;
 
-  const movements = state.inventoryMovements.slice().sort((a, b) => `${b.date || ""}${b.createdAt || ""}`.localeCompare(`${a.date || ""}${a.createdAt || ""}`));
-  movementRows.innerHTML = movements.slice(0, 80).map((movement) => {
+  renderMesesDeMovimientos();
+  const mes = mesElegidoDeMovimientos();
+  const movements = state.inventoryMovements
+    .filter((movement) => !mes || String(movement.date || "").slice(0, 7) === mes)
+    .sort((a, b) => `${b.date || ""}${b.createdAt || ""}`.localeCompare(`${a.date || ""}${a.createdAt || ""}`));
+  const resumen = $("#inventoryMovementTotal");
+  if (resumen) {
+    const ventas = movements.filter((movement) => movement.type === "VENTA").reduce((suma, movement) => suma + Number(movement.total || 0), 0);
+    resumen.textContent = movements.length
+      ? `${movements.length} movimiento${movements.length === 1 ? "" : "s"} en ${mes ? monthLabel(mes) : "todos los meses"} · ventas ${money(ventas)}`
+      : "";
+  }
+  // con un mes elegido se ve el mes entero; "todos" se corta para no colgar la pantalla
+  movementRows.innerHTML = movements.slice(0, mes ? movements.length : 300).map((movement) => {
     const product = inventoryProductById(movement.productId);
     return `<tr>
       <td>${formatDate(movement.date)}</td>
@@ -3742,7 +3786,7 @@ function renderInventory() {
       <td>${money(movement.total)}</td>
       <td>${escapeHtml(movement.detail || "")}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="6">Sin movimientos de inventario.</td></tr>`;
+  }).join("") || `<tr><td colspan="6">${state.inventoryMovements.length ? "Sin movimientos en el mes elegido." : "Sin movimientos de inventario."}</td></tr>`;
 }
 
 function applyProductTotalToPaymentForm() {
@@ -12053,7 +12097,44 @@ function bindEvents() {
     form.reset();
     render();
   });
-  $("#inventoryProductsTable")?.addEventListener("click", (event) => {
+  $("#inventoryMovementMonth")?.addEventListener("change", (event) => {
+    // marcar que la eleccion es suya: sin esto cada refresco volveria al mes mas reciente
+    event.currentTarget.dataset.tocado = "1";
+    render();
+  });
+
+  $("#inventoryProductsTable")?.addEventListener("click", async (event) => {
+    const borrar = event.target.closest("[data-delete-product]");
+    if (borrar) {
+      if (!canDeleteInventoryProducts()) {
+        uiAlert("Solo el doctor o el administrador pueden eliminar productos.");
+        return;
+      }
+      const product = inventoryProductById(borrar.dataset.deleteProduct);
+      if (!product) return;
+      const stock = Number(product.stock || 0);
+      /* No se borra la ficha: se apaga. Los movimientos y las ventas donde
+         aparecio siguen mostrando su nombre, y si hiciera falta se podria
+         volver a encender. Lo que si deja es de salir en la lista y en el
+         cobro. */
+      if (!confirm(`¿Eliminar ${product.name}${stock > 0 ? ` (tiene ${stock} en stock)` : ""}? Deja de aparecer en el inventario y en las ventas. Sus movimientos anteriores se conservan.`)) return;
+      const apagado = { ...product, active: false };
+      try {
+        await saveInventoryProductApi(apagado);
+      } catch (error) {
+        uiAlert(error.message || "No se pudo eliminar el producto.");
+        return;
+      }
+      upsert(state.inventoryProducts, apagado);
+      const form = $("#inventoryProductForm");
+      if (form && form.id.value === product.id) {
+        form.reset();
+        form.id.value = "";
+      }
+      if (!API_ENABLED) saveState();
+      render();
+      return;
+    }
     const edit = event.target.closest("[data-edit-product]");
     if (!edit) return;
     const product = inventoryProductById(edit.dataset.editProduct);

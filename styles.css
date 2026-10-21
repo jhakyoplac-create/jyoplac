@@ -2768,6 +2768,26 @@ menu {
   overflow: auto;
 }
 
+/* ---- Botones con solo un icono ----
+   El tacho de eliminar un producto. Va con el mismo recuadro que los demas
+   botones chicos y el trazo toma el color del boton (coral si es danger). */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .staff-payment-tools {
   display: flex;
   align-items: center;
