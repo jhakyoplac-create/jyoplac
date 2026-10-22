@@ -10,13 +10,13 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/assets/app-icon-cm-sinfondo-192.png",
+      "src": "/assets/app-icon-cm-loseta-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/assets/app-icon-cm-sinfondo-512.png",
+      "src": "/assets/app-icon-cm-loseta-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
