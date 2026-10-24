@@ -8062,6 +8062,9 @@ async function buscarNombreDelRepresentante() {
     const encontrado = await lookupExternalDni(dni);
     if (encontrado?.name && !String(nameField.value || "").trim()) {
       nameField.value = encontrado.name;
+      // el domicilio del representante tambien sale de la consulta, solo si esta vacio (2026-10-23)
+      const domicilio = form.elements.guardianAddress;
+      if (domicilio && encontrado.address && !String(domicilio.value || "").trim()) domicilio.value = encontrado.address;
       if (hint) hint.textContent = "Nombre encontrado por DNI. Revísalo antes de guardar.";
       avisarDelRepresentante(nameField);
     } else if (hint) {
