@@ -8751,7 +8751,7 @@ function renderCommissions() {
         : `${comision.porcentaje}`;
     return `<tr><td>${escapeHtml(doctor)}</td><td>${assignedPatients}</td><td>${newAssigned}</td><td>${count}</td><td>${attended}</td><td>${soles(comision.cobrado)}</td><td class="commission-pct-cell">${porcentaje}</td><td><strong>${soles(comision.comision)}</strong></td></tr>`;
   }).join("");
-  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th title="Pacientes asignados">Pac.</th><th title="Nuevos del mes">Nuevos</th><th>Citas</th><th title="Atendidas">Atend.</th><th title="Cobrado entre las fechas">Total</th><th>%</th><th>Comision</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="5"><strong>Total</strong></td><td><strong>${soles(totalCobrado)}</strong></td><td></td><td><strong>${soles(totalComision)}</strong></td></tr><tr class="doctor-report-productos"><td colspan="8">Venta de productos en el periodo: <strong>${soles(productos)}</strong> · no entra en las comisiones</td></tr></tfoot></table>`;
+  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th title="Pacientes asignados">Pac.</th><th title="Nuevos del mes">Nuevos</th><th>Citas</th><th title="Atendidas">Atend.</th><th title="Cobrado entre las fechas">Total</th><th>%</th><th>Comision</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="5"><strong>Total</strong></td><td><strong>${soles(totalCobrado)}</strong></td><td></td><td><strong>${soles(totalComision)}</strong></td></tr><tr class="doctor-report-productos"><td colspan="8">Venta de productos en el periodo: <strong>${soles(productos)}</strong></td></tr></tfoot></table>`;
 }
 
 /* CM trae los pagos por rango: si las fechas salen de lo que el reporte ya
