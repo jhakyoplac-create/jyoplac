@@ -8936,6 +8936,11 @@ function renderMiniLineChart(container, data) {
    tabla, CSV baja los tres numeros de cada mes. */
 const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
 
+/* CM trae las citas por rango de fechas (solo lo que la pantalla necesita),
+   asi que antes de dibujar el ano hay que pedirselo entero al servidor una
+   vez; despues queda en memoria mientras la pagina siga abierta. */
+const aniosCargadosParaElGrafico = new Set();
+
 function renderYearChart(year) {
   const dialogo = $("#yearChartDialog");
   const cuerpo = $("#yearChartBody");
@@ -8946,6 +8951,17 @@ function renderYearChart(year) {
   if (titulo) titulo.textContent = `Atenciones mensuales | ${anio}`;
   const anioTexto = $("#yearChartYear");
   if (anioTexto) anioTexto.textContent = String(anio);
+  if (API_ENABLED && apiToken && !aniosCargadosParaElGrafico.has(anio)) {
+    cuerpo.innerHTML = `<p class="muted">Cargando el año ${anio}…</p>`;
+    Promise.resolve(refreshOperationalRangeApi(`${anio}-01-01`, `${anio}-12-31`, { rerender: false, esperarTurno: true }))
+      .catch(() => {})
+      .then(() => {
+        aniosCargadosParaElGrafico.add(anio);
+        // si mientras cargaba se paso a otro ano, ese ya se esta dibujando
+        if (dialogo.dataset.anio === String(anio)) renderYearChart(anio);
+      });
+    return;
+  }
   const data = yearlyCareData(anio);
   const hoy = new Date();
   const mesEnCurso = hoy.getFullYear() === anio ? hoy.getMonth() : (hoy.getFullYear() > anio ? 11 : -1);
