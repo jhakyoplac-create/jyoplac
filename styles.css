@@ -7555,3 +7555,75 @@ dialog.ui-dialogo {
   color: var(--ink);
   font-weight: 700;
 }
+
+/* la ventana del grafico anual (icono del panel Atenciones mensuales) */
+#yearChartDialog {
+  width: min(1040px, calc(100vw - 40px));
+}
+.year-chart-modal {
+  width: auto;
+  max-width: none;
+  max-height: min(88vh, 860px);
+  overflow: auto;
+  box-sizing: border-box;
+}
+.year-chart-head {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.year-chart-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.year-chart-year {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+}
+.year-chart-year strong {
+  min-width: 44px;
+  text-align: center;
+}
+.year-chart-year .ghost {
+  padding: 4px 10px;
+}
+.chart-summary strong.chart-recurrentes {
+  color: #5f6a71;
+  font-size: 22px;
+  margin-left: 6px;
+}
+.year-chart-lienzo .report-line-chart {
+  max-width: 100%;
+}
+.year-chart-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+.year-chart-table th,
+.year-chart-table td {
+  padding: 5px 6px;
+  font-size: 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.year-chart-table th {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.year-chart-table th:first-child,
+.year-chart-table td:first-child {
+  text-align: left;
+}
+.year-chart-table td.nuevos {
+  color: #0b6e76;
+  font-weight: 700;
+}
+.year-chart-table td.recurrentes {
+  color: #5f6a71;
+}

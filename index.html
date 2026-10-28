@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" href="assets/app-icon-cm-apple-180.png" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261028-productos-resumen" />
+    <link rel="stylesheet" href="styles.css?v=20261028-grafico-anual" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -954,7 +954,7 @@
             <div id="dailyAuditReport" class="table-wrap"></div>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>Atenciones mensuales</h2></div>
+            <div class="panel-head"><h2>Atenciones mensuales</h2><button class="open-mini-modal" id="openYearChartBtn" type="button" aria-label="Ver el año completo" title="Ver el año completo">↗</button></div>
             <div id="monthlyCareChart" class="mini-chart"></div>
           </section>
           <section class="panel">
@@ -1294,6 +1294,26 @@
       </form>
     </dialog>
 
+    <dialog id="yearChartDialog">
+      <div class="form modal-form wide-modal year-chart-modal">
+        <div class="panel-head year-chart-head">
+          <h2 id="yearChartTitle">Atenciones mensuales</h2>
+          <div class="year-chart-actions">
+            <span class="year-chart-year">
+              <button class="ghost" type="button" data-year-chart-prev aria-label="Año anterior">‹</button>
+              <strong id="yearChartYear"></strong>
+              <button class="ghost" type="button" data-year-chart-next aria-label="Año siguiente">›</button>
+            </span>
+            <button class="ghost" id="yearChartDownloadBtn" type="button">Descargar imagen</button>
+            <button class="ghost" id="yearChartPrintBtn" type="button">Imprimir</button>
+            <button class="ghost" id="yearChartCsvBtn" type="button">CSV</button>
+            <button class="icon" data-close-dialog="yearChartDialog" type="button" aria-label="Cerrar">x</button>
+          </div>
+        </div>
+        <div id="yearChartBody"></div>
+      </div>
+    </dialog>
+
     <dialog id="receptionPatientsDialog">
       <div class="form modal-form wide-modal">
         <div class="panel-head">
@@ -1396,6 +1416,6 @@
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
     <script src="hojas-extra.js?v=20261028-ccdp"></script>
     <script src="dialogos.js?v=20261019-ventanas"></script>
-    <script src="app.js?v=20261028-productos-resumen-c"></script>
+    <script src="app.js?v=20261028-grafico-anual"></script>
   </body>
 </html>

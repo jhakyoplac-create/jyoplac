@@ -8777,22 +8777,22 @@ async function refreshReportsRange() {
   await refreshRangeThenRender(range.from, range.to, renderReports);
 }
 
-function monthlyCareData(referenceMonth) {
-  /* Por mes: las atenciones (visitas), y las personas detras de ellas en dos
-     grupos. Nuevo: el que tuvo su primera atencion en el consultorio ese
-     mes. Recurrente: el que ya habia sido atendido en un mes anterior y
-     volvio (control, siguiente sesion, otro tratamiento). Una persona que
-     vino tres veces en el mes cuenta una sola vez en su grupo; por eso las
-     atenciones son mas que las personas. Comprobado con Aurea el
-     2026-10-28: setiembre 105 atenciones = 43 personas (39 nuevas + 4 que
-     venian de agosto). */
+/* Por mes: las atenciones (visitas), y las personas detras de ellas en dos
+   grupos. Nuevo: el que tuvo su primera atencion en el consultorio ese
+   mes. Recurrente: el que ya habia sido atendido en un mes anterior y
+   volvio (control, siguiente sesion, otro tratamiento). Una persona que
+   vino tres veces en el mes cuenta una sola vez en su grupo; por eso las
+   atenciones son mas que las personas. Comprobado con Aurea el
+   2026-10-28: setiembre 105 atenciones = 43 personas (39 nuevas + 4 que
+   venian de agosto). */
+function careDataForMonths(months) {
   const primeraAtencion = new Map();
   state.appointments.forEach((appointment) => {
     if (appointment.status !== "ATENDIDA" || !appointment.patientId || !appointment.date) return;
     const previa = primeraAtencion.get(appointment.patientId);
     if (!previa || appointment.date < previa) primeraAtencion.set(appointment.patientId, appointment.date);
   });
-  return monthRangeForReports(referenceMonth).map((month) => {
+  return months.map((month) => {
     const delMes = state.appointments.filter((appointment) => appointment.date.startsWith(month) && appointment.status === "ATENDIDA");
     const personas = [...new Set(delMes.map((appointment) => appointment.patientId).filter(Boolean))];
     const nuevos = personas.filter((id) => String(primeraAtencion.get(id) || "").startsWith(month)).length;
@@ -8806,16 +8806,24 @@ function monthlyCareData(referenceMonth) {
   });
 }
 
-function renderMiniLineChart(container, data) {
-  if (!container) return;
-  /* Tres lineas: atenciones del mes (visitas), pacientes nuevos y pacientes
-     recurrentes (personas, cada una contada una vez por mes). Eje con
-     numeros a la izquierda, leyenda, y curvas suaves que pasan por los puntos
-     sin pasarse de ellos (el cero se queda en cero). Pedido del 2026-10-28:
-     eligio las lineas entre dos muestras, y la de recurrentes se sumo al ver
-     los numeros reales de Aurea. */
-  const width = 580;
-  const height = 210;
+function monthlyCareData(referenceMonth) {
+  return careDataForMonths(monthRangeForReports(referenceMonth));
+}
+
+// el ano entero, de enero a diciembre, para la ventana del grafico anual
+function yearlyCareData(year) {
+  const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+  return careDataForMonths(months);
+}
+
+/* El dibujo de las tres lineas: atenciones del mes (visitas), pacientes
+   nuevos y pacientes recurrentes (personas, cada una contada una vez por
+   mes). Eje con numeros a la izquierda y curvas suaves que pasan por los
+   puntos sin pasarse de ellos (el cero se queda en cero). Lo usan el panel
+   de Reportes (6 meses) y la ventana del ano completo. */
+function graficoDeAtenciones(data, opciones = {}) {
+  const width = opciones.width || 580;
+  const height = opciones.height || 210;
   const padL = 40;
   const padR = 18;
   const padTop = 26;
@@ -8853,44 +8861,26 @@ function renderMiniLineChart(container, data) {
   const paso = pasos.find((valor) => valor >= tope / 4) || pasos[pasos.length - 1];
   const rayas = [];
   for (let valor = 0; valor <= tope; valor += paso) rayas.push(valor);
-  const total = atenciones.reduce((sum, valor) => sum + valor, 0);
-  const totalNuevos = nuevos.reduce((sum, valor) => sum + valor, 0);
-  const current = atenciones[atenciones.length - 1] || 0;
-  const previous = atenciones[atenciones.length - 2] || 0;
-  const variation = current - previous;
   const ultimo = data.length - 1;
   const gridLines = rayas.map((valor) =>
     `<line x1="${padL}" y1="${y(valor)}" x2="${width - padR}" y2="${y(valor)}" class="chart-grid"></line>
      <text x="${padL - 8}" y="${y(valor) + 4}" text-anchor="end" class="chart-eje">${valor}</text>`).join("");
   const area = data.length ? `${curva(atenciones)} L${x(ultimo)},${y(0)} L${padL},${y(0)} Z` : "";
   /* Los numeros de nuevos y recurrentes van debajo de su punto. Si los dos
-     puntos quedan casi a la misma altura, el de abajo se corre un poco mas
-     para que no se pisen. Un cero no se escribe: ya se ve en la linea. */
+     puntos quedan casi a la misma altura, el mayor lleva el suyo arriba y
+     el menor abajo. Un cero no se escribe: ya se ve en la linea. */
   const etiquetasDePersonas = data.map((item, index) => {
     const lista = [
       { valor: nuevos[index], clase: "chart-value-nuevos" },
       { valor: recurrentes[index], clase: "chart-value-recurrentes" }
     ].filter((etiqueta) => etiqueta.valor > 0).sort((a, b) => b.valor - a.valor);
-    // si los dos puntos quedan casi juntos, el mayor lleva su numero arriba y el menor abajo
     const juntos = lista.length === 2 && Math.abs(y(lista[0].valor) - y(lista[1].valor)) < 18;
     return lista.map((etiqueta, orden) => {
       const yEtiqueta = juntos && orden === 0 ? y(etiqueta.valor) - 9 : y(etiqueta.valor) + 16;
       return `<text x="${x(index)}" y="${yEtiqueta}" text-anchor="middle" class="${etiqueta.clase}">${etiqueta.valor}</text>`;
     }).join("");
   }).join("");
-  container.innerHTML = `
-    <div class="chart-summary">
-      <span>Últimos 6 meses</span>
-      <strong>${total}</strong><span class="chart-unidad">atenciones</span>
-      <strong class="chart-nuevos">${totalNuevos}</strong><span class="chart-unidad">pacientes nuevos</span>
-      <small>${variation >= 0 ? "+" : ""}${variation} atenciones vs mes anterior</small>
-    </div>
-    <div class="chart-leyenda">
-      <span class="chart-leyenda-atenciones">Atenciones del mes</span>
-      <span class="chart-leyenda-nuevos">Pacientes nuevos</span>
-      <span class="chart-leyenda-recurrentes">Pacientes recurrentes</span>
-    </div>
-    <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales, pacientes nuevos y recurrentes">
+  const svg = `<svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales, pacientes nuevos y recurrentes">
       <defs>
         <linearGradient id="careAreaGradient" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stop-color="currentColor" stop-opacity="0.20"></stop>
@@ -8908,8 +8898,172 @@ function renderMiniLineChart(container, data) {
       ${data.map((item, index) => `<text x="${x(index)}" y="${height - 10}" text-anchor="middle">${escapeHtml(String(item.label || "").split(" ")[0])}</text>`).join("")}
       ${data.map((item, index) => `<text x="${x(index)}" y="${Math.max(16, y(atenciones[index]) - 10)}" text-anchor="middle" class="chart-value">${atenciones[index]}</text>`).join("")}
       ${etiquetasDePersonas}
-    </svg>
+    </svg>`;
+  const suma = (lista) => lista.reduce((total, valor) => total + valor, 0);
+  return { svg, total: suma(atenciones), totalNuevos: suma(nuevos), totalRecurrentes: suma(recurrentes) };
+}
+
+const LEYENDA_DEL_GRAFICO = `<div class="chart-leyenda">
+      <span class="chart-leyenda-atenciones">Atenciones del mes</span>
+      <span class="chart-leyenda-nuevos">Pacientes nuevos</span>
+      <span class="chart-leyenda-recurrentes">Pacientes recurrentes</span>
+    </div>`;
+
+function renderMiniLineChart(container, data) {
+  if (!container) return;
+  const atenciones = data.map((item) => Number(item.count || 0));
+  const current = atenciones[atenciones.length - 1] || 0;
+  const previous = atenciones[atenciones.length - 2] || 0;
+  const variation = current - previous;
+  const grafico = graficoDeAtenciones(data);
+  container.innerHTML = `
+    <div class="chart-summary">
+      <span>Últimos 6 meses</span>
+      <strong>${grafico.total}</strong><span class="chart-unidad">atenciones</span>
+      <strong class="chart-nuevos">${grafico.totalNuevos}</strong><span class="chart-unidad">pacientes nuevos</span>
+      <small>${variation >= 0 ? "+" : ""}${variation} atenciones vs mes anterior</small>
+    </div>
+    ${LEYENDA_DEL_GRAFICO}
+    ${grafico.svg}
   `;
+}
+
+/* ---------- La ventana del ano completo ----------
+   Se abre con el icono del panel. Trae el ano de enero a diciembre: la
+   curva llega hasta el ultimo mes con atenciones (o el mes en curso), los
+   meses que faltan salen con raya en la tabla. Descargar imagen guarda el
+   grafico como PNG, Imprimir abre la vista de impresion con grafico y
+   tabla, CSV baja los tres numeros de cada mes. */
+const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
+
+function renderYearChart(year) {
+  const dialogo = $("#yearChartDialog");
+  const cuerpo = $("#yearChartBody");
+  if (!dialogo || !cuerpo) return;
+  const anio = Number(year) || new Date().getFullYear();
+  dialogo.dataset.anio = String(anio);
+  const titulo = $("#yearChartTitle");
+  if (titulo) titulo.textContent = `Atenciones mensuales | ${anio}`;
+  const anioTexto = $("#yearChartYear");
+  if (anioTexto) anioTexto.textContent = String(anio);
+  const data = yearlyCareData(anio);
+  const hoy = new Date();
+  const mesEnCurso = hoy.getFullYear() === anio ? hoy.getMonth() : (hoy.getFullYear() > anio ? 11 : -1);
+  let ultimoConDatos = -1;
+  data.forEach((item, index) => { if (item.count > 0) ultimoConDatos = index; });
+  const hasta = Math.max(ultimoConDatos, mesEnCurso);
+  const dibujados = hasta >= 1 ? data.slice(0, hasta + 1) : data.slice(0, 2);
+  const grafico = graficoDeAtenciones(dibujados, { width: 900, height: 260 });
+  const periodo = hasta >= 0 ? `Enero a ${MESES_CORTOS[hasta].toLowerCase()}` : "Sin atenciones";
+  const celda = (valor, index, clase = "") => `<td class="${clase}">${index > hasta ? "—" : valor}</td>`;
+  cuerpo.innerHTML = `
+    <div class="chart-summary">
+      <span>${periodo}</span>
+      <strong>${grafico.total}</strong><span class="chart-unidad">atenciones</span>
+      <strong class="chart-nuevos">${grafico.totalNuevos}</strong><span class="chart-unidad">pacientes nuevos</span>
+      <strong class="chart-recurrentes">${grafico.totalRecurrentes}</strong><span class="chart-unidad">recurrentes</span>
+    </div>
+    ${LEYENDA_DEL_GRAFICO}
+    <div class="year-chart-lienzo">${grafico.svg}</div>
+    <div class="table-wrap"><table class="year-chart-table">
+      <thead><tr><th>Mes</th>${MESES_CORTOS.map((mes) => `<th>${mes}</th>`).join("")}</tr></thead>
+      <tbody>
+        <tr><td>Atenciones</td>${data.map((item, index) => celda(item.count, index)).join("")}</tr>
+        <tr><td>Pacientes nuevos</td>${data.map((item, index) => celda(item.nuevos, index, "nuevos")).join("")}</tr>
+        <tr><td>Pacientes recurrentes</td>${data.map((item, index) => celda(item.recurrentes, index, "recurrentes")).join("")}</tr>
+      </tbody>
+    </table></div>
+  `;
+}
+
+/* El SVG lleva sus colores en la hoja de estilos; para guardarlo como imagen
+   hay que copiarselos adentro, porque fuera de la pagina no hay CSS. */
+function svgConEstilosAdentro(svg) {
+  const copia = svg.cloneNode(true);
+  const originales = svg.querySelectorAll("*");
+  const copiados = copia.querySelectorAll("*");
+  const propiedades = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "font-size", "font-weight", "font-family", "stop-color", "stop-opacity", "color"];
+  originales.forEach((original, index) => {
+    const estilo = getComputedStyle(original);
+    const destino = copiados[index];
+    propiedades.forEach((propiedad) => {
+      const valor = estilo.getPropertyValue(propiedad);
+      if (valor) destino.style.setProperty(propiedad, valor);
+    });
+  });
+  copia.style.color = getComputedStyle(svg).color;
+  copia.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  return copia;
+}
+
+function descargarGraficoAnual() {
+  const svg = $("#yearChartBody svg");
+  if (!svg) return;
+  const anio = $("#yearChartDialog")?.dataset.anio || new Date().getFullYear();
+  const copia = svgConEstilosAdentro(svg);
+  const [, , ancho, alto] = (copia.getAttribute("viewBox") || "0 0 900 260").split(" ").map(Number);
+  copia.setAttribute("width", ancho);
+  copia.setAttribute("height", alto);
+  const escala = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = ancho * escala;
+  canvas.height = alto * escala;
+  const ctx = canvas.getContext("2d");
+  const imagen = new Image();
+  const fuente = new XMLSerializer().serializeToString(copia);
+  imagen.onload = () => {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(escala, escala);
+    ctx.drawImage(imagen, 0, 0, ancho, alto);
+    const enlace = document.createElement("a");
+    enlace.download = `atenciones-${anio}.png`;
+    enlace.href = canvas.toDataURL("image/png");
+    enlace.click();
+  };
+  imagen.onerror = () => uiAlert("No se pudo armar la imagen del gráfico.");
+  imagen.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fuente)}`;
+}
+
+function imprimirGraficoAnual() {
+  const cuerpo = $("#yearChartBody");
+  const titulo = $("#yearChartTitle")?.textContent || "Atenciones mensuales";
+  if (!cuerpo) return;
+  const ventana = window.open("", "_blank", "width=1000,height=800");
+  if (!ventana) {
+    uiAlert("El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes de esta página.");
+    return;
+  }
+  const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
+    .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
+    .join("");
+  const tema = document.documentElement.getAttribute("data-tema");
+  ventana.document.write(`<!doctype html><html lang="es"${tema ? ` data-tema="${escapeHtml(tema)}"` : ""}><head><meta charset="utf-8">
+    <base href="${escapeHtml(location.href)}">
+    <title>${escapeHtml(titulo)}</title>
+    ${hojasDeEstilo}
+    <style>
+      @page { size: A4 landscape; margin: 12mm; }
+      html, body { background: #fff !important; }
+      body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; color: #1d2327; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      .report-line-chart { max-width: 100%; }
+      .year-chart-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+      .year-chart-table th, .year-chart-table td { padding: 4px 6px; border-bottom: 1px solid #d5dde1; text-align: right; }
+      .year-chart-table th:first-child, .year-chart-table td:first-child { text-align: left; }
+    </style></head><body>
+    <h1>${escapeHtml(titulo)}</h1>
+    ${cuerpo.innerHTML}
+    <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });<\/script>
+    </body></html>`);
+  ventana.document.close();
+}
+
+function csvDelGraficoAnual() {
+  const anio = Number($("#yearChartDialog")?.dataset.anio) || new Date().getFullYear();
+  exportCsv(`atenciones-${anio}.csv`, yearlyCareData(anio).map((item) => ({
+    mes: item.month, atenciones: item.count, pacientes_nuevos: item.nuevos, pacientes_recurrentes: item.recurrentes
+  })));
 }
 
 function receptionNewPatientsForMonth(month) {
@@ -10498,6 +10652,20 @@ function bindEvents() {
     }
     if (!API_ENABLED) saveState();
     renderCommissions();
+  });
+  // la ventana del grafico anual: abrir, cambiar de ano, descargar, imprimir y CSV
+  $("#openYearChartBtn")?.addEventListener("click", () => {
+    renderYearChart(new Date().getFullYear());
+    $("#yearChartDialog")?.showModal();
+  });
+  $("#yearChartDialog")?.addEventListener("click", (event) => {
+    const anio = Number($("#yearChartDialog").dataset.anio) || new Date().getFullYear();
+    if (event.target.closest("[data-year-chart-prev]")) return renderYearChart(anio - 1);
+    if (event.target.closest("[data-year-chart-next]")) return renderYearChart(anio + 1);
+    if (event.target.closest("#yearChartDownloadBtn")) return descargarGraficoAnual();
+    if (event.target.closest("#yearChartPrintBtn")) return imprimirGraficoAnual();
+    if (event.target.closest("#yearChartCsvBtn")) return csvDelGraficoAnual();
+    return undefined;
   });
   on("#exportCommissionsBtn", "click", () => {
     const desde = $("#commissionFrom").value;
