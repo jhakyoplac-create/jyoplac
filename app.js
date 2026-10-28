@@ -8767,31 +8767,42 @@ async function refreshReportsRange() {
 }
 
 function monthlyCareData(referenceMonth) {
-  /* Paciente nuevo atendido: el que tuvo su primera atencion en el
-     consultorio ese mes. Si vino en agosto y volvio en setiembre al control,
-     en agosto cuenta como nuevo y en setiembre ya no. (En el primer mes con
-     el sistema casi todos cuentan como nuevos: no hay historia anterior.) */
+  /* Por mes: las atenciones (visitas), y las personas detras de ellas en dos
+     grupos. Nuevo: el que tuvo su primera atencion en el consultorio ese
+     mes. Recurrente: el que ya habia sido atendido en un mes anterior y
+     volvio (control, siguiente sesion, otro tratamiento). Una persona que
+     vino tres veces en el mes cuenta una sola vez en su grupo; por eso las
+     atenciones son mas que las personas. Comprobado con Aurea el
+     2026-10-28: setiembre 105 atenciones = 43 personas (39 nuevas + 4 que
+     venian de agosto). */
   const primeraAtencion = new Map();
   state.appointments.forEach((appointment) => {
     if (appointment.status !== "ATENDIDA" || !appointment.patientId || !appointment.date) return;
     const previa = primeraAtencion.get(appointment.patientId);
     if (!previa || appointment.date < previa) primeraAtencion.set(appointment.patientId, appointment.date);
   });
-  const primeras = [...primeraAtencion.values()];
-  return monthRangeForReports(referenceMonth).map((month) => ({
-    month,
-    label: monthLabel(month).replace(".", ""),
-    count: state.appointments.filter((appointment) => appointment.date.startsWith(month) && appointment.status === "ATENDIDA").length,
-    nuevos: primeras.filter((fecha) => String(fecha).startsWith(month)).length
-  }));
+  return monthRangeForReports(referenceMonth).map((month) => {
+    const delMes = state.appointments.filter((appointment) => appointment.date.startsWith(month) && appointment.status === "ATENDIDA");
+    const personas = [...new Set(delMes.map((appointment) => appointment.patientId).filter(Boolean))];
+    const nuevos = personas.filter((id) => String(primeraAtencion.get(id) || "").startsWith(month)).length;
+    return {
+      month,
+      label: monthLabel(month).replace(".", ""),
+      count: delMes.length,
+      nuevos,
+      recurrentes: personas.length - nuevos
+    };
+  });
 }
 
 function renderMiniLineChart(container, data) {
   if (!container) return;
-  /* Dos lineas: atenciones del mes (nuevos y antiguos) y pacientes nuevos
-     atendidos. Eje con numeros a la izquierda, leyenda, y curvas suaves que
-     pasan por los puntos sin pasarse de ellos (el cero se queda en cero).
-     Pedido del 2026-10-28; eligio esta forma entre dos muestras. */
+  /* Tres lineas: atenciones del mes (visitas), pacientes nuevos y pacientes
+     recurrentes (personas, cada una contada una vez por mes). Eje con
+     numeros a la izquierda, leyenda, y curvas suaves que pasan por los puntos
+     sin pasarse de ellos (el cero se queda en cero). Pedido del 2026-10-28:
+     eligio las lineas entre dos muestras, y la de recurrentes se sumo al ver
+     los numeros reales de Aurea. */
   const width = 580;
   const height = 210;
   const padL = 40;
@@ -8800,6 +8811,7 @@ function renderMiniLineChart(container, data) {
   const padBottom = 34;
   const atenciones = data.map((item) => Number(item.count || 0));
   const nuevos = data.map((item) => Number(item.nuevos || 0));
+  const recurrentes = data.map((item) => Number(item.recurrentes || 0));
   const tope = Math.max(1, ...atenciones);
   const max = tope * 1.08;
   const x = (index) => padL + (index * (width - padL - padR)) / Math.max(1, data.length - 1);
@@ -8840,18 +8852,34 @@ function renderMiniLineChart(container, data) {
     `<line x1="${padL}" y1="${y(valor)}" x2="${width - padR}" y2="${y(valor)}" class="chart-grid"></line>
      <text x="${padL - 8}" y="${y(valor) + 4}" text-anchor="end" class="chart-eje">${valor}</text>`).join("");
   const area = data.length ? `${curva(atenciones)} L${x(ultimo)},${y(0)} L${padL},${y(0)} Z` : "";
+  /* Los numeros de nuevos y recurrentes van debajo de su punto. Si los dos
+     puntos quedan casi a la misma altura, el de abajo se corre un poco mas
+     para que no se pisen. Un cero no se escribe: ya se ve en la linea. */
+  const etiquetasDePersonas = data.map((item, index) => {
+    const lista = [
+      { valor: nuevos[index], clase: "chart-value-nuevos" },
+      { valor: recurrentes[index], clase: "chart-value-recurrentes" }
+    ].filter((etiqueta) => etiqueta.valor > 0).sort((a, b) => b.valor - a.valor);
+    // si los dos puntos quedan casi juntos, el mayor lleva su numero arriba y el menor abajo
+    const juntos = lista.length === 2 && Math.abs(y(lista[0].valor) - y(lista[1].valor)) < 18;
+    return lista.map((etiqueta, orden) => {
+      const yEtiqueta = juntos && orden === 0 ? y(etiqueta.valor) - 9 : y(etiqueta.valor) + 16;
+      return `<text x="${x(index)}" y="${yEtiqueta}" text-anchor="middle" class="${etiqueta.clase}">${etiqueta.valor}</text>`;
+    }).join("");
+  }).join("");
   container.innerHTML = `
     <div class="chart-summary">
       <span>Últimos 6 meses</span>
       <strong>${total}</strong><span class="chart-unidad">atenciones</span>
-      <strong class="chart-nuevos">${totalNuevos}</strong><span class="chart-unidad">pacientes nuevos atendidos</span>
-      <small>${variation >= 0 ? "+" : ""}${variation} vs mes anterior</small>
+      <strong class="chart-nuevos">${totalNuevos}</strong><span class="chart-unidad">pacientes nuevos</span>
+      <small>${variation >= 0 ? "+" : ""}${variation} atenciones vs mes anterior</small>
     </div>
     <div class="chart-leyenda">
-      <span class="chart-leyenda-atenciones">Atenciones (nuevos y antiguos)</span>
-      <span class="chart-leyenda-nuevos">Pacientes nuevos atendidos</span>
+      <span class="chart-leyenda-atenciones">Atenciones del mes</span>
+      <span class="chart-leyenda-nuevos">Pacientes nuevos</span>
+      <span class="chart-leyenda-recurrentes">Pacientes recurrentes (ya venían)</span>
     </div>
-    <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales y pacientes nuevos atendidos">
+    <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales, pacientes nuevos y recurrentes">
       <defs>
         <linearGradient id="careAreaGradient" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stop-color="currentColor" stop-opacity="0.20"></stop>
@@ -8861,14 +8889,14 @@ function renderMiniLineChart(container, data) {
       ${gridLines}
       <path d="${area}" class="chart-area"></path>
       <path d="${curva(atenciones)}" class="chart-line" fill="none"></path>
+      <path d="${curva(recurrentes)}" class="chart-line-recurrentes" fill="none"></path>
       <path d="${curva(nuevos)}" class="chart-line-nuevos" fill="none"></path>
       ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(atenciones[index])}" r="4.5"></circle>`).join("")}
+      ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(recurrentes[index])}" r="3.5" class="chart-punto-recurrentes"></circle>`).join("")}
       ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(nuevos[index])}" r="3.5" class="chart-punto-nuevos"></circle>`).join("")}
       ${data.map((item, index) => `<text x="${x(index)}" y="${height - 10}" text-anchor="middle">${escapeHtml(String(item.label || "").split(" ")[0])}</text>`).join("")}
       ${data.map((item, index) => `<text x="${x(index)}" y="${Math.max(16, y(atenciones[index]) - 10)}" text-anchor="middle" class="chart-value">${atenciones[index]}</text>`).join("")}
-      ${data.map((item, index) => (nuevos[index] && nuevos[index] !== atenciones[index]
-        ? `<text x="${x(index)}" y="${y(nuevos[index]) + 16}" text-anchor="middle" class="chart-value-nuevos">${nuevos[index]}</text>`
-        : "")).join("")}
+      ${etiquetasDePersonas}
     </svg>
   `;
 }
