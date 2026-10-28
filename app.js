@@ -8828,9 +8828,14 @@ function graficoDeAtenciones(data, opciones = {}) {
   const padR = 18;
   const padTop = 26;
   const padBottom = 34;
-  const atenciones = data.map((item) => Number(item.count || 0));
-  const nuevos = data.map((item) => Number(item.nuevos || 0));
-  const recurrentes = data.map((item) => Number(item.recurrentes || 0));
+  /* dibujarHasta: el eje reparte todos los meses de data, pero las curvas y
+     los numeros llegan solo hasta ese indice (el ano completo con los meses
+     que faltan vacios, sin que la curva caiga a cero). */
+  const hastaIndice = Number.isInteger(opciones.dibujarHasta) ? Math.min(opciones.dibujarHasta, data.length - 1) : data.length - 1;
+  const dibujados = data.slice(0, hastaIndice + 1);
+  const atenciones = dibujados.map((item) => Number(item.count || 0));
+  const nuevos = dibujados.map((item) => Number(item.nuevos || 0));
+  const recurrentes = dibujados.map((item) => Number(item.recurrentes || 0));
   const tope = Math.max(1, ...atenciones);
   const max = tope * 1.08;
   const x = (index) => padL + (index * (width - padL - padR)) / Math.max(1, data.length - 1);
@@ -8861,15 +8866,15 @@ function graficoDeAtenciones(data, opciones = {}) {
   const paso = pasos.find((valor) => valor >= tope / 4) || pasos[pasos.length - 1];
   const rayas = [];
   for (let valor = 0; valor <= tope; valor += paso) rayas.push(valor);
-  const ultimo = data.length - 1;
+  const ultimo = dibujados.length - 1;
   const gridLines = rayas.map((valor) =>
     `<line x1="${padL}" y1="${y(valor)}" x2="${width - padR}" y2="${y(valor)}" class="chart-grid"></line>
      <text x="${padL - 8}" y="${y(valor) + 4}" text-anchor="end" class="chart-eje">${valor}</text>`).join("");
-  const area = data.length ? `${curva(atenciones)} L${x(ultimo)},${y(0)} L${padL},${y(0)} Z` : "";
+  const area = dibujados.length ? `${curva(atenciones)} L${x(ultimo)},${y(0)} L${padL},${y(0)} Z` : "";
   /* Los numeros de nuevos y recurrentes van debajo de su punto. Si los dos
      puntos quedan casi a la misma altura, el mayor lleva el suyo arriba y
      el menor abajo. Un cero no se escribe: ya se ve en la linea. */
-  const etiquetasDePersonas = data.map((item, index) => {
+  const etiquetasDePersonas = dibujados.map((item, index) => {
     const lista = [
       { valor: nuevos[index], clase: "chart-value-nuevos" },
       { valor: recurrentes[index], clase: "chart-value-recurrentes" }
@@ -8892,11 +8897,11 @@ function graficoDeAtenciones(data, opciones = {}) {
       <path d="${curva(atenciones)}" class="chart-line" fill="none"></path>
       <path d="${curva(recurrentes)}" class="chart-line-recurrentes" fill="none"></path>
       <path d="${curva(nuevos)}" class="chart-line-nuevos" fill="none"></path>
-      ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(atenciones[index])}" r="4.5"></circle>`).join("")}
-      ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(recurrentes[index])}" r="3.5" class="chart-punto-recurrentes"></circle>`).join("")}
-      ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(nuevos[index])}" r="3.5" class="chart-punto-nuevos"></circle>`).join("")}
-      ${data.map((item, index) => `<text x="${x(index)}" y="${height - 10}" text-anchor="middle">${escapeHtml(String(item.label || "").split(" ")[0])}</text>`).join("")}
-      ${data.map((item, index) => `<text x="${x(index)}" y="${Math.max(16, y(atenciones[index]) - 10)}" text-anchor="middle" class="chart-value">${atenciones[index]}</text>`).join("")}
+      ${dibujados.map((item, index) => `<circle cx="${x(index)}" cy="${y(atenciones[index])}" r="4.5"></circle>`).join("")}
+      ${dibujados.map((item, index) => `<circle cx="${x(index)}" cy="${y(recurrentes[index])}" r="3.5" class="chart-punto-recurrentes"></circle>`).join("")}
+      ${dibujados.map((item, index) => `<circle cx="${x(index)}" cy="${y(nuevos[index])}" r="3.5" class="chart-punto-nuevos"></circle>`).join("")}
+      ${data.map((item, index) => `<text x="${x(index)}" y="${height - 10}" text-anchor="middle"${index > hastaIndice ? ` class="chart-mes-vacio"` : ""}>${escapeHtml(String(item.label || "").split(" ")[0])}</text>`).join("")}
+      ${dibujados.map((item, index) => `<text x="${x(index)}" y="${Math.max(16, y(atenciones[index]) - 10)}" text-anchor="middle" class="chart-value">${atenciones[index]}</text>`).join("")}
       ${etiquetasDePersonas}
     </svg>`;
   const suma = (lista) => lista.reduce((total, valor) => total + valor, 0);
@@ -8968,8 +8973,7 @@ function renderYearChart(year) {
   let ultimoConDatos = -1;
   data.forEach((item, index) => { if (item.count > 0) ultimoConDatos = index; });
   const hasta = Math.max(ultimoConDatos, mesEnCurso);
-  const dibujados = hasta >= 1 ? data.slice(0, hasta + 1) : data.slice(0, 2);
-  const grafico = graficoDeAtenciones(dibujados, { width: 900, height: 260 });
+  const grafico = graficoDeAtenciones(data, { width: 900, height: 200, dibujarHasta: Math.max(hasta, 1) });
   const periodo = hasta >= 0 ? `Enero a ${MESES_CORTOS[hasta].toLowerCase()}` : "Sin atenciones";
   const celda = (valor, index, clase = "") => `<td class="${clase}">${index > hasta ? "—" : valor}</td>`;
   cuerpo.innerHTML = `

@@ -7563,9 +7563,20 @@ dialog.ui-dialogo {
 .year-chart-modal {
   width: auto;
   max-width: none;
-  max-height: min(88vh, 860px);
+  max-height: min(92vh, 860px);
   overflow: auto;
   box-sizing: border-box;
+  padding: 14px 18px 12px;
+}
+.year-chart-modal .chart-summary strong {
+  font-size: 24px;
+}
+.year-chart-modal .chart-summary strong.chart-nuevos,
+.year-chart-modal .chart-summary strong.chart-recurrentes {
+  font-size: 19px;
+}
+.report-line-chart .chart-mes-vacio {
+  fill: #b5bec4;
 }
 .year-chart-head {
   flex-wrap: wrap;
@@ -7605,7 +7616,7 @@ dialog.ui-dialogo {
 }
 .year-chart-table th,
 .year-chart-table td {
-  padding: 5px 6px;
+  padding: 3px 6px;
   font-size: 12px;
   text-align: right;
   border-bottom: 1px solid var(--line);
