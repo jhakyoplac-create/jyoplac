@@ -2916,15 +2916,18 @@ menu {
 
 .report-line-chart {
   width: 100%;
-  max-width: 520px;
-  height: 178px;
+  max-width: 640px;
+  height: auto;
   display: block;
+  /* el color de la linea de atenciones; el area lo toma con currentColor */
+  color: #00a6d6;
 }
 
 .chart-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 4px 10px;
   color: var(--muted);
 }
 
@@ -2933,14 +2936,55 @@ menu {
   font-size: 28px;
 }
 
+/* los nuevos, en el verde de su linea y un poco mas chicos que el total */
+.chart-summary strong.chart-nuevos {
+  color: #0b6e76;
+  font-size: 22px;
+  margin-left: 6px;
+}
+
+.chart-summary .chart-unidad {
+  font-size: 13px;
+}
+
 .chart-summary small {
+  flex-basis: 100%;
   color: var(--green);
   font-weight: 800;
 }
 
+.chart-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 2px 0 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chart-leyenda span::before {
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 4px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: #00a6d6;
+}
+
+.chart-leyenda .chart-leyenda-nuevos::before {
+  background: #0b6e76;
+}
+
 .report-line-chart .chart-grid {
-  stroke: rgba(88, 111, 124, 0.16);
+  stroke: rgba(28, 31, 35, 0.1);
   stroke-width: 1;
+}
+
+.report-line-chart .chart-eje {
+  fill: #8a949b;
+  font-size: 11px;
 }
 
 .report-line-chart .chart-area {
@@ -2948,17 +2992,28 @@ menu {
 }
 
 .report-line-chart .chart-line {
-  stroke: #1479f6;
-  stroke-width: 4;
+  stroke: #00a6d6;
+  stroke-width: 3.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 5px 8px rgba(20, 121, 246, 0.16));
+  filter: drop-shadow(0 3px 6px rgba(28, 31, 35, 0.1));
+}
+
+.report-line-chart .chart-line-nuevos {
+  stroke: #0b6e76;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .report-line-chart circle {
-  fill: #18b89f;
+  fill: #00a6d6;
   stroke: #fff;
-  stroke-width: 3;
+  stroke-width: 2.5;
+}
+
+.report-line-chart circle.chart-punto-nuevos {
+  fill: #0b6e76;
 }
 
 .report-line-chart text {
@@ -2968,6 +3023,13 @@ menu {
 
 .report-line-chart .chart-value {
   fill: var(--ink);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.report-line-chart .chart-value-nuevos {
+  fill: #0b6e76;
+  font-size: 11.5px;
   font-weight: 800;
 }
 

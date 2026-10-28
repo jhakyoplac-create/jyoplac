@@ -8767,55 +8767,108 @@ async function refreshReportsRange() {
 }
 
 function monthlyCareData(referenceMonth) {
+  /* Paciente nuevo atendido: el que tuvo su primera atencion en el
+     consultorio ese mes. Si vino en agosto y volvio en setiembre al control,
+     en agosto cuenta como nuevo y en setiembre ya no. (En el primer mes con
+     el sistema casi todos cuentan como nuevos: no hay historia anterior.) */
+  const primeraAtencion = new Map();
+  state.appointments.forEach((appointment) => {
+    if (appointment.status !== "ATENDIDA" || !appointment.patientId || !appointment.date) return;
+    const previa = primeraAtencion.get(appointment.patientId);
+    if (!previa || appointment.date < previa) primeraAtencion.set(appointment.patientId, appointment.date);
+  });
+  const primeras = [...primeraAtencion.values()];
   return monthRangeForReports(referenceMonth).map((month) => ({
     month,
     label: monthLabel(month).replace(".", ""),
-    count: state.appointments.filter((appointment) => appointment.date.startsWith(month) && appointment.status === "ATENDIDA").length
+    count: state.appointments.filter((appointment) => appointment.date.startsWith(month) && appointment.status === "ATENDIDA").length,
+    nuevos: primeras.filter((fecha) => String(fecha).startsWith(month)).length
   }));
 }
 
 function renderMiniLineChart(container, data) {
   if (!container) return;
-  const width = 420;
-  const height = 170;
-  const padX = 34;
-  const padTop = 28;
-  const padBottom = 38;
-  const max = Math.max(1, ...data.map((item) => item.count));
-  const points = data.map((item, index) => {
-    const x = padX + (index * (width - padX * 2)) / Math.max(1, data.length - 1);
-    const y = height - padBottom - (item.count / max) * (height - padTop - padBottom);
-    return { ...item, x, y };
-  });
-  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
-  const area = `${padX},${height - padBottom} ${polyline} ${width - padX},${height - padBottom}`;
-  const total = data.reduce((sum, item) => sum + item.count, 0);
-  const current = data[data.length - 1]?.count || 0;
-  const previous = data[data.length - 2]?.count || 0;
+  /* Dos lineas: atenciones del mes (nuevos y antiguos) y pacientes nuevos
+     atendidos. Eje con numeros a la izquierda, leyenda, y curvas suaves que
+     pasan por los puntos sin pasarse de ellos (el cero se queda en cero).
+     Pedido del 2026-10-28; eligio esta forma entre dos muestras. */
+  const width = 580;
+  const height = 210;
+  const padL = 40;
+  const padR = 18;
+  const padTop = 26;
+  const padBottom = 34;
+  const atenciones = data.map((item) => Number(item.count || 0));
+  const nuevos = data.map((item) => Number(item.nuevos || 0));
+  const tope = Math.max(1, ...atenciones);
+  const max = tope * 1.08;
+  const x = (index) => padL + (index * (width - padL - padR)) / Math.max(1, data.length - 1);
+  const y = (valor) => height - padBottom - (valor / max) * (height - padTop - padBottom);
+  const curva = (valores) => {
+    const puntos = valores.map((valor, index) => [x(index), y(valor)]);
+    const n = puntos.length;
+    if (n < 2) return puntos.length ? `M${puntos[0][0]},${puntos[0][1]}` : "";
+    const d = puntos.slice(1).map((punto, i) => (punto[1] - puntos[i][1]) / (punto[0] - puntos[i][0]));
+    // pendiente en cada punto, limitada (Fritsch-Carlson) para que la curva no se pase
+    const m = puntos.map((_, i) => {
+      if (i === 0) return d[0];
+      if (i === n - 1) return d[n - 2];
+      if (d[i - 1] * d[i] <= 0) return 0;
+      const medio = (d[i - 1] + d[i]) / 2;
+      const limite = 3 * Math.min(Math.abs(d[i - 1]), Math.abs(d[i]));
+      return Math.sign(medio) * Math.min(Math.abs(medio), limite);
+    });
+    let ruta = `M${puntos[0][0]},${puntos[0][1]}`;
+    for (let i = 0; i < n - 1; i += 1) {
+      const dx = (puntos[i + 1][0] - puntos[i][0]) / 3;
+      ruta += ` C${puntos[i][0] + dx},${puntos[i][1] + m[i] * dx} ${puntos[i + 1][0] - dx},${puntos[i + 1][1] - m[i + 1] * dx} ${puntos[i + 1][0]},${puntos[i + 1][1]}`;
+    }
+    return ruta;
+  };
+  // las rayas del eje: cuatro divisiones en numeros redondos
+  const pasos = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+  const paso = pasos.find((valor) => valor >= tope / 4) || pasos[pasos.length - 1];
+  const rayas = [];
+  for (let valor = 0; valor <= tope; valor += paso) rayas.push(valor);
+  const total = atenciones.reduce((sum, valor) => sum + valor, 0);
+  const totalNuevos = nuevos.reduce((sum, valor) => sum + valor, 0);
+  const current = atenciones[atenciones.length - 1] || 0;
+  const previous = atenciones[atenciones.length - 2] || 0;
   const variation = current - previous;
-  const gridLines = [0, 0.5, 1].map((ratio) => {
-    const y = padTop + ratio * (height - padTop - padBottom);
-    return `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" class="chart-grid"></line>`;
-  }).join("");
+  const ultimo = data.length - 1;
+  const gridLines = rayas.map((valor) =>
+    `<line x1="${padL}" y1="${y(valor)}" x2="${width - padR}" y2="${y(valor)}" class="chart-grid"></line>
+     <text x="${padL - 8}" y="${y(valor) + 4}" text-anchor="end" class="chart-eje">${valor}</text>`).join("");
+  const area = data.length ? `${curva(atenciones)} L${x(ultimo)},${y(0)} L${padL},${y(0)} Z` : "";
   container.innerHTML = `
     <div class="chart-summary">
-      <span>Ultimos 6 meses</span>
-      <strong>${total}</strong>
+      <span>Últimos 6 meses</span>
+      <strong>${total}</strong><span class="chart-unidad">atenciones</span>
+      <strong class="chart-nuevos">${totalNuevos}</strong><span class="chart-unidad">pacientes nuevos atendidos</span>
       <small>${variation >= 0 ? "+" : ""}${variation} vs mes anterior</small>
     </div>
-    <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales">
+    <div class="chart-leyenda">
+      <span class="chart-leyenda-atenciones">Atenciones (nuevos y antiguos)</span>
+      <span class="chart-leyenda-nuevos">Pacientes nuevos atendidos</span>
+    </div>
+    <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales y pacientes nuevos atendidos">
       <defs>
         <linearGradient id="careAreaGradient" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stop-color="#18b89f" stop-opacity="0.22"></stop>
-          <stop offset="100%" stop-color="#18b89f" stop-opacity="0.02"></stop>
+          <stop offset="0%" stop-color="currentColor" stop-opacity="0.20"></stop>
+          <stop offset="100%" stop-color="currentColor" stop-opacity="0.02"></stop>
         </linearGradient>
       </defs>
       ${gridLines}
-      <polygon points="${area}" class="chart-area"></polygon>
-      <polyline points="${polyline}" class="chart-line" fill="none"></polyline>
-      ${points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="5"></circle>`).join("")}
-      ${points.map((point) => `<text x="${point.x}" y="${height - 12}" text-anchor="middle">${escapeHtml(point.label.split(" ")[0])}</text>`).join("")}
-      ${points.map((point) => `<text x="${point.x}" y="${Math.max(18, point.y - 11)}" text-anchor="middle" class="chart-value">${point.count}</text>`).join("")}
+      <path d="${area}" class="chart-area"></path>
+      <path d="${curva(atenciones)}" class="chart-line" fill="none"></path>
+      <path d="${curva(nuevos)}" class="chart-line-nuevos" fill="none"></path>
+      ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(atenciones[index])}" r="4.5"></circle>`).join("")}
+      ${data.map((item, index) => `<circle cx="${x(index)}" cy="${y(nuevos[index])}" r="3.5" class="chart-punto-nuevos"></circle>`).join("")}
+      ${data.map((item, index) => `<text x="${x(index)}" y="${height - 10}" text-anchor="middle">${escapeHtml(String(item.label || "").split(" ")[0])}</text>`).join("")}
+      ${data.map((item, index) => `<text x="${x(index)}" y="${Math.max(16, y(atenciones[index]) - 10)}" text-anchor="middle" class="chart-value">${atenciones[index]}</text>`).join("")}
+      ${data.map((item, index) => (nuevos[index] && nuevos[index] !== atenciones[index]
+        ? `<text x="${x(index)}" y="${y(nuevos[index]) + 16}" text-anchor="middle" class="chart-value-nuevos">${nuevos[index]}</text>`
+        : "")).join("")}
     </svg>
   `;
 }
