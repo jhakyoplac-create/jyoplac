@@ -1492,7 +1492,7 @@
         (f.map(function (x) { return "<li><b>" + esc(x.t) + "</b> &mdash; " + esc(x.txt) + "</li>"; }).join("") || "<li>Sin hallazgos.</li>") +
         "</ul></div><div><b>ESPECIFICACIONES</b>" +
         '<div class="esp">' + (esc(ficha.esp) || "&nbsp;") + "</div></div>" +
-        '<div class="firma"><div>Firma y sello del cirujano dentista</div><div>COP N.&deg;</div>' +
+        '<div class="firma"><div>Firma y sello del cirujano dentista</div><div>CCDP N.&deg;</div>' +
         "<div>Firma del paciente</div></div></body></html>"
       );
       w.document.close();

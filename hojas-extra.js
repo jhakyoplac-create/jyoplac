@@ -518,7 +518,7 @@ function hojaDeEvolucion(patientId, { pantalla = true } = {}) {
   const firma = (doctor, selector = "") => {
     const usuario = usuarioDelDoctor(doctor);
     return `${selector || (doctor ? `<span>${escapeHtml(doctor)}</span>` : "")}
-      ${usuario?.cop ? `<span>COP ${escapeHtml(usuario.cop)}</span>` : ""}`;
+      ${usuario?.cop ? `<span>CCDP ${escapeHtml(usuario.cop)}</span>` : ""}`;
   };
 
   const filas = todas.map((fila) => `<tr>
@@ -757,7 +757,7 @@ function presupuestoImpreso(proforma) {
         ${proforma.firmaDoctor ? `<img class="firma-virtual-img" src="${escapeHtml(proforma.firmaDoctor)}" alt="" />` : ""}
         <i></i>
         <span>Firma del odontólogo tratante</span>
-        ${proforma.doctor ? `<small>${escapeHtml(proforma.doctor)}${proforma.cop ? ` · COP ${escapeHtml(proforma.cop)}` : ""}</small>` : ""}
+        ${proforma.doctor ? `<small>${escapeHtml(proforma.doctor)}${proforma.cop ? ` · CCDP ${escapeHtml(proforma.cop)}` : ""}</small>` : ""}
       </div>
       <div class="fd-firma">${proforma.firma ? `<img class="firma-virtual-img" src="${escapeHtml(proforma.firma)}" alt="" />` : ""}<i></i><span>Firma del paciente / apoderado</span></div>
     </footer>
@@ -1125,7 +1125,7 @@ function fichaEstomatologica(patientId, { pantalla = true } = {}) {
         ${firmaDelDoctor.dibujo}
         <i></i>
         <span>Firma y sello del Dr. tratante</span>
-        ${doctor ? `<small>${escapeHtml(doctor)}${firmante?.cop ? ` · COP ${escapeHtml(firmante.cop)}` : ""}</small>` : ""}
+        ${doctor ? `<small>${escapeHtml(doctor)}${firmante?.cop ? ` · CCDP ${escapeHtml(firmante.cop)}` : ""}</small>` : ""}
         ${firmaDelDoctor.dato}${firmaDelDoctor.boton}
       </div>
     </footer>

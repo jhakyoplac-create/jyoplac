@@ -4940,7 +4940,7 @@ function hojaDeLaHistoria(patientId, { pantalla = false } = {}) {
   const firmada = Boolean(nota.firma);
   const cierre = `<div class="hcf-cierre">
       ${elegirProfesional}
-      ${cop ? `<p class="hcf-cop">COP N.° ${escapeHtml(cop)}</p>` : ""}
+      ${cop ? `<p class="hcf-cop">CCDP N.° ${escapeHtml(cop)}</p>` : ""}
       ${sello ? `<img class="hcf-sello-imagen" src="${escapeHtml(sello)}" alt="Sello de ${escapeHtml(profesional)}" />` : ""}
       ${firmada ? `<img class="hcf-firma" src="${escapeHtml(nota.firma)}" alt="Firma del profesional" />` : ""}
       <div class="hcf-sello">
@@ -5857,7 +5857,7 @@ function bloqueDeFirmas(patient, tipo, { pantalla = true } = {}) {
       : "";
   return `<div class="ci-firmas${sello ? " ci-firmas-con-sello" : ""}">
       <div>${firma}Paciente o Representante legal</div>
-      <div>${sello}${firmaDelDentista}Cirujano Dentista<br>COP N.º ${cop ? escapeHtml(cop) : RAYA}</div>
+      <div>${sello}${firmaDelDentista}Cirujano Dentista<br>CCDP N.º ${cop ? escapeHtml(cop) : RAYA}</div>
     </div>`;
 }
 
@@ -6318,7 +6318,7 @@ function hojaDeLaProforma(proforma, { pantalla = false } = {}) {
     </table></div>
     <p class="proforma-nota">Este presupuesto cubre los tratamientos detallados arriba. Los precios se mantienen 30 días desde la fecha de esta proforma. Si durante el tratamiento aparece algo que hoy no se ve, se conversa antes de hacerlo.</p>
     <footer class="hc-firma">
-      <div>${firmaDelDoctor.dibujo}<div class="hc-firma-linea">${escapeHtml(proforma.doctor || "")}<br>Cirujano dentista${proforma.cop ? ` · COP N.° ${escapeHtml(proforma.cop)}` : ""}</div>${firmaDelDoctor.dato}${firmaDelDoctor.boton}</div>
+      <div>${firmaDelDoctor.dibujo}<div class="hc-firma-linea">${escapeHtml(proforma.doctor || "")}<br>Cirujano dentista${proforma.cop ? ` · CCDP N.° ${escapeHtml(proforma.cop)}` : ""}</div>${firmaDelDoctor.dato}${firmaDelDoctor.boton}</div>
       <div>${firmaDelPaciente.dibujo}<div class="hc-firma-linea">Firma del paciente</div>${firmaDelPaciente.dato}${firmaDelPaciente.boton}</div>
     </footer>
   </article>`;
