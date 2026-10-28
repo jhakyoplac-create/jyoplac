@@ -8888,7 +8888,7 @@ function renderMiniLineChart(container, data) {
     <div class="chart-leyenda">
       <span class="chart-leyenda-atenciones">Atenciones del mes</span>
       <span class="chart-leyenda-nuevos">Pacientes nuevos</span>
-      <span class="chart-leyenda-recurrentes">Pacientes recurrentes (ya venían)</span>
+      <span class="chart-leyenda-recurrentes">Pacientes recurrentes</span>
     </div>
     <svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Atenciones mensuales, pacientes nuevos y recurrentes">
       <defs>
