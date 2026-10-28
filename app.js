@@ -13343,3 +13343,79 @@ function revisarInactividad() {
   setInterval(revisarInactividad, 30000);
   setTimeout(revisarInactividad, 1500);
 })();
+
+/* Cada equipo sigue con el codigo que cargo al abrir hasta que alguien
+   recargue, y un equipo que queda abierto todo el dia se pasaba semanas con
+   la version vieja. Lo guardado si viaja al momento; esto es solo para el
+   codigo. Cada cinco minutos se mira la etiqueta de version de app.js en la
+   pagina publicada: si cambio, se avisa con una pastilla abajo y, cuando nadie
+   ha tocado el equipo en tres minutos y no hay nada a medio escribir, se
+   recarga solo. Lo pidio el usuario el 2026-10-28. Igual que en el dental de
+   EmpresaFacil (js/version.js). */
+(function vigilarVersionNueva() {
+  if (location.protocol !== "https:") return;
+  const REVISION_MS = 5 * 60 * 1000;
+  const QUIETO_MS = 3 * 60 * 1000;
+  const PATRON = /app\.js\?v=([^"'&\s]+)/;
+  let ultimoToque = Date.now();
+  let pastilla = null;
+
+  function versionCargada() {
+    const script = [...document.scripts].find((item) => PATRON.test(item.src));
+    return script ? script.src.match(PATRON)[1] : "";
+  }
+
+  async function versionPublicada() {
+    const respuesta = await fetch(location.pathname, { cache: "no-store" });
+    if (!respuesta.ok) return "";
+    const encontrada = (await respuesta.text()).match(PATRON);
+    return encontrada ? encontrada[1] : "";
+  }
+
+  /* Un campo de texto a la vista con algo escrito, o una ventana abierta: hay
+     trabajo a medio hacer y recargar lo perderia. Se espera. */
+  function algoAMedioEscribir() {
+    if (document.querySelector("dialog[open]")) return true;
+    return [...document.querySelectorAll("input, textarea")].some((campo) => {
+      if (campo.disabled || campo.readOnly || !campo.offsetParent) return false;
+      if (campo.tagName === "INPUT" && !["text", "tel", "email", "search"].includes(campo.type)) return false;
+      return campo.value !== "" && campo.value !== campo.defaultValue;
+    });
+  }
+
+  function mostrarAviso() {
+    if (pastilla) return;
+    pastilla = document.createElement("div");
+    pastilla.className = "version-nueva";
+    pastilla.setAttribute("role", "status");
+    pastilla.innerHTML = '<span>Hay una versión nueva del sistema.</span><button type="button">Actualizar</button>';
+    pastilla.querySelector("button").addEventListener("click", () => location.reload());
+    document.body.appendChild(pastilla);
+  }
+
+  async function revisar() {
+    if (pastilla || document.visibilityState !== "visible") return;
+    const actual = versionCargada();
+    if (!actual) return;
+    let publicada = "";
+    try { publicada = await versionPublicada(); } catch { return; }
+    if (publicada && publicada !== actual) mostrarAviso();
+  }
+
+  function quizaRecargar() {
+    if (!pastilla) return;
+    if (Date.now() - ultimoToque < QUIETO_MS) return;
+    if (algoAMedioEscribir()) return;
+    location.reload();
+  }
+
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach((senal) => {
+    document.addEventListener(senal, () => { ultimoToque = Date.now(); }, { passive: true, capture: true });
+  });
+  setInterval(revisar, REVISION_MS);
+  setInterval(quizaRecargar, 30000);
+  // al volver a la pestana se revisa de inmediato: suspendido, el reloj no corre
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") revisar();
+  });
+})();
