@@ -8667,6 +8667,16 @@ function doctorDelPago(payment) {
   return patientById(payment.patientId)?.doctor || "";
 }
 
+/* Lo vendido en productos entre dos fechas (CM lo guarda como productAmount
+   en cada cobro). Entra a caja pero no comisiona: se muestra aparte, bajo el
+   Total del Resumen por doctor, para que el cuadro cierre contra la caja. */
+function ventaDeProductos(desde, hasta) {
+  const total = state.payments
+    .filter((payment) => payment.date >= desde && payment.date <= hasta)
+    .reduce((sum, payment) => sum + Number(payment.productAmount || 0), 0);
+  return Math.round(total * 100) / 100;
+}
+
 function comisionesPorDoctor(desde, hasta) {
   const filas = new Map();
   const fila = (doctor) => {
@@ -8721,6 +8731,7 @@ function renderCommissions() {
   const metrics = reportMetrics(month);
   const appointments = metrics.appointments;
   const comisiones = comisionesPorDoctor(desde.value, hasta.value);
+  const productos = ventaDeProductos(desde.value, hasta.value);
   const doctores = [...new Set([...state.config.doctors.filter(Boolean), ...comisiones.filter((fila) => fila.cobrado > 0).map((fila) => fila.doctor)])];
   const editable = puedeConfigurar();
   let totalCobrado = 0;
@@ -8740,7 +8751,7 @@ function renderCommissions() {
         : `${comision.porcentaje}`;
     return `<tr><td>${escapeHtml(doctor)}</td><td>${assignedPatients}</td><td>${newAssigned}</td><td>${count}</td><td>${attended}</td><td>${soles(comision.cobrado)}</td><td class="commission-pct-cell">${porcentaje}</td><td><strong>${soles(comision.comision)}</strong></td></tr>`;
   }).join("");
-  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th title="Pacientes asignados">Pac.</th><th title="Nuevos del mes">Nuevos</th><th>Citas</th><th title="Atendidas">Atend.</th><th title="Cobrado entre las fechas">Total</th><th>%</th><th>Comision</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="5"><strong>Total</strong></td><td><strong>${soles(totalCobrado)}</strong></td><td></td><td><strong>${soles(totalComision)}</strong></td></tr></tfoot></table>`;
+  $("#doctorReport").innerHTML = `<table><thead><tr><th>Doctor</th><th title="Pacientes asignados">Pac.</th><th title="Nuevos del mes">Nuevos</th><th>Citas</th><th title="Atendidas">Atend.</th><th title="Cobrado entre las fechas">Total</th><th>%</th><th>Comision</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="5"><strong>Total</strong></td><td><strong>${soles(totalCobrado)}</strong></td><td></td><td><strong>${soles(totalComision)}</strong></td></tr><tr class="doctor-report-productos"><td colspan="8">Venta de productos en el periodo: <strong>${soles(productos)}</strong> · no entra en las comisiones</td></tr></tfoot></table>`;
 }
 
 /* CM trae los pagos por rango: si las fechas salen de lo que el reporte ya
@@ -10491,9 +10502,13 @@ function bindEvents() {
   on("#exportCommissionsBtn", "click", () => {
     const desde = $("#commissionFrom").value;
     const hasta = $("#commissionTo").value;
-    exportCsv(`comisiones-${desde}-a-${hasta}.csv`, comisionesPorDoctor(desde, hasta).map((fila) => ({
-      desde, hasta, doctor: fila.doctor, cobrado: fila.cobrado, porcentaje: fila.porcentaje, comision: fila.comision
-    })));
+    exportCsv(`comisiones-${desde}-a-${hasta}.csv`, [
+      ...comisionesPorDoctor(desde, hasta).map((fila) => ({
+        desde, hasta, doctor: fila.doctor, cobrado: fila.cobrado, porcentaje: fila.porcentaje, comision: fila.comision
+      })),
+      // la venta de productos del periodo, aparte: entra a caja pero no comisiona
+      { desde, hasta, doctor: "Venta de productos (no comisiona)", cobrado: ventaDeProductos(desde, hasta), porcentaje: "", comision: "" }
+    ]);
   });
   on("#compareMonth", "change", () => {
     renderReports();

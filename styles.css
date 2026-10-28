@@ -7542,3 +7542,16 @@ dialog.ui-dialogo {
   background: #ffffff;
   color: var(--ink);
 }
+/* la venta de productos bajo el Total del Resumen por doctor: discreta, pero
+   a la vista, para que el cuadro cierre contra la caja */
+#doctorReport .doctor-report-productos td {
+  padding-top: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  border-top: 0;
+}
+#doctorReport .doctor-report-productos td strong {
+  color: var(--ink);
+  font-weight: 700;
+}
