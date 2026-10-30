@@ -458,7 +458,9 @@ const CAMPOS_DE_LAS_HOJAS = [
   // lo que se escribe sobre la Ficha de datos y no tiene columna propia
   "district", "email", "fdComoNosConocio", "fdDentistaAnterior", "fdMedicoConfianza", "fdAmbulancia",
   "fdNombreMedico", "fdFrecuencia", "fdTraumatica", "fdExtracciones", "fdAnestesia", "fdSangrado",
-  "fdProfilaxis", "fdUltimaAtencion", "fdChasquidos", "fdSiNo"
+  "fdProfilaxis", "fdUltimaAtencion", "fdChasquidos", "fdSiNo",
+  // las recetas medicas del paciente (recetas.js)
+  "recetas"
 ];
 
 function hojasDelPaciente(valor) {
@@ -5021,6 +5023,7 @@ function contenidoDeLaPestana(patientId) {
   if (hoja === "ficha") return window.HojasExtra.fichaDeDatos(patientId);
   if (hoja === "evolucion") return window.HojasExtra.hojaDeEvolucion(patientId);
   if (hoja === "estomatologica") return window.HojasExtra.fichaEstomatologica(patientId);
+  if (hoja === "receta") return window.Recetas.hojaDeRecetas(patientId);
   return hojaDeLaHistoria(patientId, { pantalla: true });
 }
 
@@ -10310,6 +10313,34 @@ function bindHojasExtra() {
       H.imprimirHojaDeEvolucion(imprimirEvolucion.dataset.imprimirEvolucion);
       return;
     }
+    // la receta medica: imprimir una guardada o borrarla, y agregar o quitar filas de medicamentos
+    const agregarRx = event.target.closest("[data-rx-agregar]");
+    if (agregarRx) {
+      const filas = agregarRx.closest(".rx-meds")?.querySelector(".rx-med-filas");
+      if (filas) {
+        filas.insertAdjacentHTML("beforeend", window.Recetas.filaDeMedicamento());
+        filas.lastElementChild?.querySelector("input")?.focus();
+      }
+      return;
+    }
+    const quitarRx = event.target.closest("[data-rx-quitar]");
+    if (quitarRx) {
+      const filas = quitarRx.closest(".rx-med-filas");
+      // la ultima fila no se quita: se vacia
+      if (filas && filas.children.length > 1) quitarRx.closest(".rx-med-fila").remove();
+      else quitarRx.closest(".rx-med-fila")?.querySelectorAll("input").forEach((campo) => { campo.value = ""; });
+      return;
+    }
+    const imprimirRx = event.target.closest("[data-imprimir-receta]");
+    if (imprimirRx) {
+      window.Recetas.imprimirReceta(imprimirRx.dataset.paciente, imprimirRx.dataset.imprimirReceta);
+      return;
+    }
+    const borrarRx = event.target.closest("[data-borrar-receta]");
+    if (borrarRx) {
+      if (await window.Recetas.borrarReceta(borrarRx.dataset.paciente, borrarRx.dataset.borrarReceta)) renderClinicalHistory();
+      return;
+    }
     const quitar = event.target.closest("[data-quitar-foto]");
     if (!quitar) return;
     try {
@@ -10318,6 +10349,118 @@ function bindHojasExtra() {
       uiAlert(error.message);
     }
     renderClinicalHistory();
+  });
+  /* Las cajas de la receta se escriben como una lista: cada Enter baja de
+     linea y pone el guion solo, y la primera letra en una caja vacia
+     tambien lo lleva (pedido 2026-10-29: «cirugia, enter, endodoncia»). */
+  $("#historyTimeline").addEventListener("keydown", (event) => {
+    const caja = event.target.closest(".rx-form textarea");
+    if (!caja) return;
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const inicio = caja.selectionStart;
+      const fin = caja.selectionEnd;
+      caja.setRangeText("\n- ", inicio, fin, "end");
+      caja.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    }
+  });
+  /* El buscador CIE-10 de la receta: al escribir salen las coincidencias por
+     nombre o codigo; al elegir una, el codigo se suma al campo de la derecha. */
+  $("#historyTimeline").addEventListener("input", (event) => {
+    const buscador = event.target.closest(".rx-form [name=\"cieBusqueda\"]");
+    if (!buscador) return;
+    const lista = buscador.parentElement.querySelector(".rx-sugerencias");
+    const sugerencias = window.Recetas.sugerenciasCie(buscador.value);
+    lista.innerHTML = sugerencias.map(([codigo, nombre]) =>
+      `<button type="button" data-cie="${escapeHtml(codigo)}"><b>${escapeHtml(codigo)}</b> ${escapeHtml(nombre)}</button>`).join("");
+    lista.hidden = !sugerencias.length;
+  });
+  $("#historyTimeline").addEventListener("keydown", (event) => {
+    const buscador = event.target.closest(".rx-form [name=\"cieBusqueda\"]");
+    if (!buscador || event.key !== "Enter") return;
+    event.preventDefault();
+    buscador.parentElement.querySelector(".rx-sugerencias button")?.click();
+  });
+  $("#historyTimeline").addEventListener("click", (event) => {
+    const elegido = event.target.closest(".rx-sugerencias [data-cie]");
+    if (!elegido) return;
+    const form = elegido.closest("form");
+    const campo = form.querySelector('[name="cie10"]');
+    const codigos = String(campo.value || "").split(/[,\s]+/).filter(Boolean);
+    if (!codigos.includes(elegido.dataset.cie)) codigos.push(elegido.dataset.cie);
+    campo.value = codigos.join(", ");
+    const buscador = form.querySelector('[name="cieBusqueda"]');
+    buscador.value = "";
+    const lista = elegido.closest(".rx-sugerencias");
+    lista.hidden = true;
+    lista.innerHTML = "";
+  });
+  $("#historyTimeline").addEventListener("focusout", (event) => {
+    const buscador = event.target.closest(".rx-form [name=\"cieBusqueda\"]");
+    if (!buscador) return;
+    // un momento, por si el clic fue sobre una sugerencia
+    setTimeout(() => { const lista = buscador.parentElement.querySelector(".rx-sugerencias"); if (lista) lista.hidden = true; }, 200);
+  });
+  // la dosis y la frecuencia son listas; «Otra…» las vuelve un campo para escribirlas a mano
+  $("#historyTimeline").addEventListener("change", (event) => {
+    const lista = event.target.closest('.rx-med-fila select[data-rx="dosis"], .rx-med-fila select[data-rx="frecuencia"]');
+    if (!lista || lista.value !== "__otra") return;
+    const nombre = lista.dataset.rx === "dosis" ? "Dosis" : "Frecuencia";
+    const campo = document.createElement("input");
+    campo.dataset.rx = lista.dataset.rx;
+    campo.maxLength = 30;
+    campo.placeholder = nombre;
+    campo.setAttribute("aria-label", nombre);
+    campo.title = `Escribe la ${nombre.toLowerCase()}. Si la dejas vacía, vuelve la lista.`;
+    /* Vuelve la lista si el campo se deja vacio: antes, una vez elegido
+       «Otra…», ya no habia como regresar a las dosis de la lista. */
+    campo.addEventListener("blur", () => {
+      if (campo.value.trim()) return;
+      lista.value = "";
+      campo.replaceWith(lista);
+    });
+    lista.replaceWith(campo);
+    campo.focus();
+  });
+  /* Dentro del cuadro de medicamentos, Enter pasa a la linea siguiente y la
+     crea si es la ultima, como en un cuadro de texto (pedido 2026-10-29). */
+  $("#historyTimeline").addEventListener("keydown", (event) => {
+    const campo = event.target.closest(".rx-med-fila input, .rx-med-fila select");
+    if (!campo || event.key !== "Enter") return;
+    event.preventDefault();
+    const fila = campo.closest(".rx-med-fila");
+    const filas = fila.parentElement;
+    if (!fila.querySelector('[data-rx="medicamento"]').value.trim()) return;
+    if (fila === filas.lastElementChild) filas.insertAdjacentHTML("beforeend", window.Recetas.filaDeMedicamento());
+    fila.nextElementSibling?.querySelector('[data-rx="medicamento"]')?.focus();
+  });
+  // las cajas crecen con lo escrito, sin barra vertical (pedido 2026-10-29)
+  $("#historyTimeline").addEventListener("input", (event) => {
+    const caja = event.target.closest(".rx-form textarea");
+    if (!caja) return;
+    caja.style.height = "auto";
+    caja.style.height = `${caja.scrollHeight + 2}px`;
+  });
+  // la primera linea tambien lleva su guion, se escriba como se escriba (teclado, dictado o pegado)
+  $("#historyTimeline").addEventListener("input", (event) => {
+    const caja = event.target.closest(".rx-form textarea");
+    if (!caja || !caja.value.trim() || /^\s*[-–•]/.test(caja.value)) return;
+    const posicion = caja.selectionStart + 2;
+    caja.value = `- ${caja.value}`;
+    caja.setSelectionRange(posicion, posicion);
+  });
+  /* Receta medica: al guardar queda en el paciente con su folio; con
+     «Guardar e imprimir» se abre ademas la hoja para imprimirla. */
+  $("#historyTimeline").addEventListener("submit", (event) => {
+    const form = event.target.closest("form.rx-form");
+    if (!form) return;
+    event.preventDefault();
+    const imprimir = Boolean(event.submitter?.hasAttribute("data-rx-imprimir"));
+    const receta = window.Recetas.guardarReceta(form);
+    if (!receta) return;
+    renderClinicalHistory();
+    if (imprimir) window.Recetas.imprimirReceta(form.dataset.paciente, receta.id);
   });
   /* Hoja de evolucion: lo escrito se guarda al salir de la celda. La fila nueva
      espera a que se salga de toda la fila, para poder pasar del procedimiento

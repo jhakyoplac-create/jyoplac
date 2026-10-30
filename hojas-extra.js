@@ -1221,5 +1221,5 @@ function cambiarFormatoDelOdontograma(marcado) {
   return true;
 }
 
-window.HojasExtra = { fichaDeDatos, marcarSiNoDeLaFicha, cargarFoto, ponerFotoDelDni, traerFotoDeLaFicha, imprimirFichaDeDatos, ponerFoto, quitarFoto, hojaDeEvolucion, imprimirHojaDeEvolucion, guardarCeldaDeEvolucion, cambiarDoctorDeEvolucion, borrarFilaDeEvolucion, presupuestoImpreso, imprimirPresupuesto, fichaEstomatologica, imprimirFichaEstomatologica, alternarMarcaEstomatologica, cambiarFormatoDelOdontograma };
+window.HojasExtra = { fecha, membrete, fichaDeDatos, marcarSiNoDeLaFicha, cargarFoto, ponerFotoDelDni, traerFotoDeLaFicha, imprimirFichaDeDatos, ponerFoto, quitarFoto, hojaDeEvolucion, imprimirHojaDeEvolucion, guardarCeldaDeEvolucion, cambiarDoctorDeEvolucion, borrarFilaDeEvolucion, presupuestoImpreso, imprimirPresupuesto, fichaEstomatologica, imprimirFichaEstomatologica, alternarMarcaEstomatologica, cambiarFormatoDelOdontograma };
 })();
