@@ -7515,32 +7515,45 @@ dialog.ui-dialogo {
    que no tapa nada y se va sola al recargar. */
 .version-nueva {
   position: fixed;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 999;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  max-width: calc(100vw - 32px);
-  padding: 8px 10px 8px 16px;
-  border-radius: 999px;
+  padding: 6px 12px;
   background: var(--ink);
   color: #ffffff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  animation: version-nueva-entra 0.25s ease-out;
+}
+
+.version-nueva.se-va {
+  animation: version-nueva-sale 0.35s ease-in forwards;
+}
+
+@keyframes version-nueva-entra {
+  from { transform: translateY(-100%); }
+  to { transform: none; }
+}
+
+@keyframes version-nueva-sale {
+  to { transform: translateY(-100%); opacity: 0; }
 }
 
 .version-nueva button {
   border: 0;
+  background: none;
   font: inherit;
   font-weight: 800;
+  color: #ffd778;
+  text-decoration: underline;
   cursor: pointer;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: #ffffff;
-  color: var(--ink);
+  padding: 0;
 }
 /* la venta de productos bajo el Total del Resumen por doctor: discreta, pero
    a la vista, para que el cuadro cierre contra la caja */

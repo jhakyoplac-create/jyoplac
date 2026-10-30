@@ -13667,18 +13667,36 @@ function revisarInactividad() {
     });
   }
 
+  /* Como una alerta: la linea sale arriba unos segundos y se va sola. Si no
+     se actualizo, vuelve a asomar en la siguiente revision. Lo pidio el
+     usuario el 2026-10-29: que no se quede ahi. */
+  const AVISO_MS = 10000;
+  let hayVersionNueva = false;
+  let temporizadorDelAviso = null;
+
+  function ocultarAviso() {
+    if (!pastilla) return;
+    const aviso = pastilla;
+    pastilla = null;
+    aviso.classList.add("se-va");
+    setTimeout(() => aviso.remove(), 350);
+  }
+
   function mostrarAviso() {
+    hayVersionNueva = true;
     if (pastilla) return;
     pastilla = document.createElement("div");
     pastilla.className = "version-nueva";
     pastilla.setAttribute("role", "status");
-    pastilla.innerHTML = '<span>Hay una versión nueva del sistema.</span><button type="button">Actualizar</button>';
+    pastilla.innerHTML = '<span>Versión nueva disponible</span><button type="button">Actualizar</button>';
     pastilla.querySelector("button").addEventListener("click", () => location.reload());
     document.body.appendChild(pastilla);
+    clearTimeout(temporizadorDelAviso);
+    temporizadorDelAviso = setTimeout(ocultarAviso, AVISO_MS);
   }
 
   async function revisar() {
-    if (pastilla || document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible") return;
     const actual = versionCargada();
     if (!actual) return;
     let publicada = "";
@@ -13687,7 +13705,7 @@ function revisarInactividad() {
   }
 
   function quizaRecargar() {
-    if (!pastilla) return;
+    if (!hayVersionNueva) return;
     if (Date.now() - ultimoToque < QUIETO_MS) return;
     if (algoAMedioEscribir()) return;
     location.reload();
