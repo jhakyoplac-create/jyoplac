@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" href="assets/app-icon-cm-apple-180.png" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261031-descuento-linea" />
+    <link rel="stylesheet" href="styles.css?v=20261031-lista-pagos-alto" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -629,7 +629,10 @@
             <label>Método<select name="method"></select></label>
             <button class="primary" type="submit">Guardar pago</button>
           </form>
-          <section class="panel">
+          <section class="panel staff-panel">
+            <!-- el cuerpo va absoluto para que el panel mida lo mismo que el
+                 formulario de al lado y la lista llene ese alto (2026-10-31) -->
+            <div class="staff-panel-cuerpo">
             <div class="panel-head">
               <h2>Pagos registrados</h2>
               <div class="staff-payment-tools">
@@ -653,6 +656,7 @@
                 </thead>
                 <tbody id="staffPaymentsTable"></tbody>
               </table>
+            </div>
             </div>
           </section>
         </div>
@@ -1418,6 +1422,6 @@
     <script src="hojas-extra.js?v=20261031-descuento-linea"></script>
     <script src="recetas.js?v=20261029-receta-medica"></script>
     <script src="dialogos.js?v=20261019-ventanas"></script>
-    <script src="app.js?v=20261031-descuento-linea"></script>
+    <script src="app.js?v=20261031-lista-pagos-alto"></script>
   </body>
 </html>
