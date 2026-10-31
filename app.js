@@ -6234,7 +6234,8 @@ function proformaDelPresupuesto(patientId) {
       detalle: linea.detalle,
       servicio: linea.servicio,
       cantidad: Math.max(1, Number(linea.cantidad || 1)),
-      precio: Number(linea.precio || 0)
+      precio: Number(linea.precio || 0),
+      descuento: Math.max(0, Number(linea.descuento || 0))
     }));
   if (!lineas.length) return null;
   const doctor = patient.doctor || "";
@@ -6277,7 +6278,7 @@ const numeroDeProforma = (numero) => `P-${String(numero || 0).padStart(4, "0")}`
    cantidad no la traen: valen por una, que es lo que decian cuando se
    imprimieron. */
 const sumaDeLaProforma = (proforma) => (proforma?.lineas || [])
-  .reduce((total, linea) => total + Number(linea.precio || 0) * Math.max(1, Number(linea.cantidad || 1)), 0);
+  .reduce((total, linea) => total + totalDeLaLinea(linea), 0);
 
 
 
@@ -6310,7 +6311,7 @@ function hojaDeLaProforma(proforma, { pantalla = false } = {}) {
     <h3 class="proforma-titulo">Presupuesto de tratamiento</h3>
     <p class="proforma-paciente"><span>Paciente</span> <strong>${escapeHtml(patient?.name || proforma.patientName || "")}</strong>${patient?.dni ? ` · DNI ${escapeHtml(patient.dni)}` : ""}</p>
     <div class="table-wrap"><table class="hc-tabla">
-      <thead><tr><th>Pieza</th><th>Tratamiento</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Total</th></tr></thead>
+      <thead><tr><th>Pieza</th><th>Tratamiento</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Descuento</th><th class="num">Total</th></tr></thead>
       <tbody>${(proforma.lineas || []).map((linea) => {
         const cantidad = Math.max(1, Number(linea.cantidad || 1));
         return `<tr>
@@ -6318,15 +6319,16 @@ function hojaDeLaProforma(proforma, { pantalla = false } = {}) {
         <td>${escapeHtml(linea.detalle || "")}</td>
         <td class="num">${cantidad}</td>
         <td class="num">${money(linea.precio || 0)}</td>
-        <td class="num">${money(Number(linea.precio || 0) * cantidad)}</td>
+        <td class="num">${Number(linea.descuento || 0) > 0 ? `− ${money(linea.descuento)}` : "—"}</td>
+        <td class="num">${money(totalDeLaLinea(linea))}</td>
       </tr>`;
       }).join("")}</tbody>
       <tfoot>
-        <tr><td colspan="4">Suma de los tratamientos</td><td class="num">${money(subtotal)}</td></tr>
+        <tr><td colspan="5">Suma de los tratamientos</td><td class="num">${money(subtotal)}</td></tr>
         ${Number(proforma.descuento || 0) > 0
-          ? `<tr><td colspan="4">Descuento ${escapeHtml(String(proforma.descuento))} %</td><td class="num">− ${money(rebaja)}</td></tr>`
+          ? `<tr><td colspan="5">Descuento ${escapeHtml(String(proforma.descuento))} %</td><td class="num">− ${money(rebaja)}</td></tr>`
           : ""}
-        <tr class="proforma-total"><td colspan="4"><strong>Total</strong></td><td class="num"><strong>${money(subtotal - rebaja)}</strong></td></tr>
+        <tr class="proforma-total"><td colspan="5"><strong>Total</strong></td><td class="num"><strong>${money(subtotal - rebaja)}</strong></td></tr>
       </tfoot>
     </table></div>
     <p class="proforma-nota">Este presupuesto cubre los tratamientos detallados arriba. Los precios se mantienen 30 días desde la fecha de esta proforma. Si durante el tratamiento aparece algo que hoy no se ve, se conversa antes de hacerlo.</p>
@@ -6702,6 +6704,8 @@ function presupuestoGuardado(patient) {
   return {
     descuento: Number(guardado.descuento || 0),
     precios: guardado.precios && typeof guardado.precios === "object" ? guardado.precios : {},
+    // el descuento en soles de cada linea, por su clave (pedido 2026-10-31)
+    descuentos: guardado.descuentos && typeof guardado.descuentos === "object" ? guardado.descuentos : {},
     quitadas: Array.isArray(guardado.quitadas) ? guardado.quitadas : [],
     /* Lo que no sale del odontograma: brackets, limpieza, endodoncia, una PPR.
        La boca no los marca en rojo pero se cobran igual, asi que se eligen de
@@ -6729,6 +6733,7 @@ function lineasDelPresupuesto(patientId) {
          consultorio lo tiene en su catalogo. Antes caia en cero, y una linea
          sin tarifar se veia igual que una de cortesia. */
       precio: propio === undefined || propio === "" ? (linea.precioLista ?? "") : Number(propio),
+      descuento: Math.max(0, Number(guardado.descuentos[linea.clave] || 0)),
       quitada: guardado.quitadas.includes(linea.clave)
     };
   });
@@ -6744,6 +6749,7 @@ function lineasDelPresupuesto(patientId) {
       aMano: true,
       // el precio de la lista puede haber cambiado: manda el que se escribio
       precio: propio === undefined || propio === "" ? (suelto.precio ?? deLista ?? "") : Number(propio),
+      descuento: Math.max(0, Number(guardado.descuentos[suelto.clave] || 0)),
       quitada: guardado.quitadas.includes(suelto.clave)
     };
   });
@@ -6753,7 +6759,9 @@ function lineasDelPresupuesto(patientId) {
 
 /* Lo que suma una linea: en el papel del consultorio la cantidad va en su
    columna y el total es la multiplicacion, igual que en su talonario. */
-const totalDeLaLinea = (linea) => Number(linea.precio || 0) * Math.max(1, Number(linea.cantidad || 1));
+const brutoDeLaLinea = (linea) => Number(linea.precio || 0) * Math.max(1, Number(linea.cantidad || 1));
+// menos el descuento de esa linea, en soles; nunca por debajo de cero
+const totalDeLaLinea = (linea) => Math.max(0, brutoDeLaLinea(linea) - Math.min(brutoDeLaLinea(linea), Math.max(0, Number(linea.descuento || 0))));
 
 /* Una linea a la que todavia no le pusieron precio. No suma nada y en su
    total se ve una raya, para que se note cual falta antes de imprimir. */
@@ -6982,7 +6990,7 @@ function hojaDelPlan(patientId) {
           : `<strong>${descuento} %</strong>`}
       </label>
       <div class="table-wrap"><table class="hc-tabla presupuesto-tabla">
-        <thead><tr><th>Pieza</th><th>Tratamiento</th><th class="num">Cant.</th><th class="num">P. unitario S/</th><th class="num">Total S/</th>${puedeEditar ? "<th></th>" : ""}</tr></thead>
+        <thead><tr><th>Pieza</th><th>Tratamiento</th><th class="num">Cant.</th><th class="num">P. unitario S/</th><th class="num">Descuento S/</th><th class="num">Total S/</th>${puedeEditar ? "<th></th>" : ""}</tr></thead>
         <tbody>${vivas.map((linea) => `<tr>
           <td><strong>${escapeHtml(linea.pieza || "—")}</strong></td>
           <td>${escapeHtml(linea.detalle)}${linea.servicio && linea.servicio !== linea.detalle ? `<br><span class="muted">${escapeHtml(linea.servicio)}</span>` : ""}</td>
@@ -6994,6 +7002,11 @@ function hojaDelPlan(patientId) {
             : puedeEditar
               ? `<input class="presupuesto-precio" type="number" min="0" step="1" placeholder="Precio" value="${linea.precio === "" || linea.precio === null ? "" : Number(linea.precio)}" data-precio="${escapeHtml(linea.clave)}" data-paciente="${patientId}" />`
               : sinPrecio(linea) ? `<span class="muted">—</span>` : money(linea.precio || 0)}</td>
+          <td class="num">${linea.quitada || sinPrecio(linea)
+            ? `<span class="muted">—</span>`
+            : puedeEditar
+              ? `<input class="presupuesto-descuento-linea" type="number" min="0" step="1" placeholder="0" value="${Number(linea.descuento || 0) > 0 ? Number(linea.descuento) : ""}" data-descuento-linea="${escapeHtml(linea.clave)}" data-paciente="${patientId}" title="Descuento en soles para esta línea" />`
+              : Number(linea.descuento || 0) > 0 ? `− ${money(linea.descuento)}` : `<span class="muted">—</span>`}</td>
           <td class="num">${linea.quitada || sinPrecio(linea)
             ? `<span class="muted">—</span>`
             : `<strong>${money(totalDeLaLinea(linea))}</strong>`}</td>
@@ -11914,6 +11927,7 @@ function bindEvents() {
     return {
       descuento: Number(guardado.descuento || 0),
       precios: { ...(guardado.precios || {}) },
+      descuentos: { ...(guardado.descuentos || {}) },
       quitadas: Array.isArray(guardado.quitadas) ? [...guardado.quitadas] : [],
       sueltos: Array.isArray(guardado.sueltos) ? guardado.sueltos.map((suelto) => ({ ...suelto })) : []
     };
@@ -11922,13 +11936,16 @@ function bindEvents() {
   $("#historyTimeline")?.addEventListener("change", async (event) => {
     const precio = event.target.closest("[data-precio]");
     const rebaja = event.target.closest("[data-descuento]");
-    if (precio || rebaja) {
-      const control = precio || rebaja;
+    const rebajaLinea = event.target.closest("[data-descuento-linea]");
+    if (precio || rebaja || rebajaLinea) {
+      const control = precio || rebaja || rebajaLinea;
       const paciente = patientById(control.dataset.paciente);
       if (!paciente || !canManageClinical()) return;
       const presupuesto = presupuestoDeLaFicha(paciente);
       // borrar el campo deja la linea sin precio; escribir 0 es cobrar 0
       if (precio) presupuesto.precios = { ...presupuesto.precios, [precio.dataset.precio]: precio.value === "" ? "" : Number(precio.value || 0) };
+      // el descuento de una linea, en soles (pedido 2026-10-31)
+      else if (rebajaLinea) presupuesto.descuentos = { ...presupuesto.descuentos, [rebajaLinea.dataset.descuentoLinea]: Math.max(0, Number(rebajaLinea.value || 0)) };
       else presupuesto.descuento = Math.min(100, Math.max(0, Number(rebaja.value || 0)));
       paciente.presupuesto = presupuesto;
       await guardarPresupuesto(paciente);

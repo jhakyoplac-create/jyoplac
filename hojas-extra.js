@@ -693,7 +693,10 @@ function presupuestoImpreso(proforma) {
   const filas = (proforma.lineas || []).map((linea) => {
     const cantidad = Math.max(1, Number(linea.cantidad || 1));
     const precio = Number(linea.precio || 0) * cantidad;
-    const rebaja = Math.round(precio * descuento) / 100;
+    /* primero el descuento propio de la linea, en soles; el comercial
+       general va despues, sobre lo que queda */
+    const propio = Math.min(precio, Math.max(0, Number(linea.descuento || 0)));
+    const rebaja = propio + Math.round((precio - propio) * descuento) / 100;
     return { linea, cantidad, precio, rebaja, total: precio - rebaja };
   });
   const suma = filas.reduce((total, fila) => ({

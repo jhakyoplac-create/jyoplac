@@ -4312,10 +4312,25 @@ menu {
 }
 
 /* ---- Presupuesto armado desde el odontograma ---- */
+/* el descuento en soles de cada linea (pedido 2026-10-31) */
+.presupuesto-tabla .presupuesto-descuento-linea {
+  width: 58px;
+  min-height: 28px;
+  padding: 3px 7px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f6e56;
+}
+.presupuesto-tabla .presupuesto-descuento-linea::placeholder {
+  color: #b5bec4;
+  font-weight: 500;
+}
+/* cuadros justos al numero: el de 90 px quedaba mas de la mitad vacio (2026-10-31) */
 .presupuesto-tabla .presupuesto-precio {
-  width: 90px;
-  min-height: 30px;
-  padding: 4px 8px;
+  width: 64px;
+  min-height: 28px;
+  padding: 3px 7px;
   text-align: right;
   font-size: 13px;
   font-weight: 700;
