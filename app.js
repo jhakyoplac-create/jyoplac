@@ -2973,6 +2973,13 @@ function isAdmin() {
   return currentUser()?.role === "ADMIN";
 }
 
+/* Crear y manejar usuarios: el administrador y el dueno (desde el
+   2026-10-31). Las cuentas de administrador solo las toca el administrador;
+   el servidor revisa lo mismo. */
+function puedeAdministrarUsuarios() {
+  return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
+}
+
 function puedeConfigurar() {
   return ["ADMIN", "DOCTOR"].includes(currentUser()?.role);
 }
@@ -3089,7 +3096,10 @@ function applyAuthState() {
   $("#backupBtn").hidden = !isAdmin();
   $(".file-label").hidden = !isAdmin();
   const userAdminPanel = $("#userAdminPanel");
-  if (userAdminPanel) userAdminPanel.hidden = !isAdmin();
+  if (userAdminPanel) userAdminPanel.hidden = !puedeAdministrarUsuarios();
+  // el dueno no crea administradores: la opcion solo la ve el administrador
+  const opcionAdmin = $('#userForm select[name="role"] option[value="ADMIN"]');
+  if (opcionAdmin) opcionAdmin.hidden = !isAdmin();
   const openExpenseBtn = $("#openExpenseBtn");
   if (openExpenseBtn) openExpenseBtn.hidden = !canManageExpenses();
   if (!hasRoleView(currentView)) setView((roleViews[user.role] || ["dashboard"])[0]);
@@ -9459,15 +9469,17 @@ function renderConfig() {
 function renderUsers() {
   const table = $("#usersTable");
   if (!table) return;
+  // el dueno ve las cuentas de administrador, pero no las toca
+  const intocable = (user) => user.role === "ADMIN" && !isAdmin();
   table.innerHTML = state.users.map((user) => `<tr>
     <td>${escapeHtml(user.name)}</td>
     <td>${escapeHtml(user.username)}</td>
     <td>${roleLabels[user.role] || user.role}</td>
     <td>${user.active ? "Activo" : "Inactivo"}</td>
     <td>
-      <button class="ghost" data-edit-user="${user.id}">Editar</button>
-      ${user.id !== "u-admin" ? `<button class="ghost" data-toggle-user="${user.id}">${user.active ? "Desactivar" : "Activar"}</button>` : ""}
-      ${user.id !== "u-admin" && user.id !== currentUserId
+      ${intocable(user) ? "" : `<button class="ghost" data-edit-user="${user.id}">Editar</button>`}
+      ${user.id !== "u-admin" && !intocable(user) ? `<button class="ghost" data-toggle-user="${user.id}">${user.active ? "Desactivar" : "Activar"}</button>` : ""}
+      ${user.id !== "u-admin" && user.id !== currentUserId && !intocable(user)
         ? `<button class="ghost danger-btn" data-delete-user="${user.id}">Eliminar</button>`
         : ""}
     </td>
@@ -13129,8 +13141,8 @@ function bindEvents() {
   });
   $("#userForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!isAdmin()) {
-      uiAlert("Solo el administrador puede crear usuarios.");
+    if (!puedeAdministrarUsuarios()) {
+      uiAlert("Solo el administrador o el doctor pueden crear usuarios.");
       return;
     }
     const data = formData(event.currentTarget);
@@ -13141,6 +13153,11 @@ function bindEvents() {
       return;
     }
     const existing = state.users.find((user) => user.id === data.id);
+    // las cuentas de administrador son solo del administrador
+    if (!isAdmin() && (data.role === "ADMIN" || existing?.role === "ADMIN")) {
+      uiAlert("Solo el administrador puede crear o cambiar cuentas de administrador.");
+      return;
+    }
     if (!existing && !data.password) {
       uiAlert("Ingresa una contraseña para crear el usuario.");
       return;
@@ -13192,7 +13209,11 @@ function bindEvents() {
   });
 
   $("#usersTable").addEventListener("click", async (event) => {
-    if (!isAdmin()) return;
+    if (!puedeAdministrarUsuarios()) return;
+    // el dueno no toca las cuentas de administrador
+    const boton = event.target.closest("[data-edit-user], [data-toggle-user], [data-delete-user]");
+    const objetivo = state.users.find((item) => item.id === (boton?.dataset.editUser || boton?.dataset.toggleUser || boton?.dataset.deleteUser));
+    if (objetivo?.role === "ADMIN" && !isAdmin()) return;
     /* Eliminar deja al consultorio sin esa cuenta: no se puede volver atras y
        no hace falta para cerrarle el paso -un usuario desactivado ya no entra-.
        Por eso se pregunta nombrando a la persona y se ofrece lo otro. */

@@ -1692,7 +1692,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "cashSessions": list_table("cash_sessions", "date DESC"),
                 "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
                 "auditEvents": list_audit_events(),
-                "users": list_users() if user["role"] == "ADMIN" else [],
+                # el administrador y el dueno manejan las cuentas (2026-10-31)
+                "users": list_users() if normalize_role(user["role"]) in ("ADMIN", "DOCTOR") else [],
                 # quien puede firmar una hoja, para que su COP y su sello salgan
                 # impresos aunque quien mire no sea el administrador
                 "profesionales": list_signers(),
@@ -1729,7 +1730,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/cash-sessions":
             return send_json(self, {"cashSessions": list_table("cash_sessions", "date DESC")})
         if parsed.path == "/api/users":
-            if not require_role(self, {"ADMIN"}):
+            if not require_role(self, {"ADMIN", "DOCTOR"}):
                 return
             return send_json(self, {"users": list_users()})
         if parsed.path == "/api/patients-to-call":
@@ -1818,9 +1819,19 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/users":
-            if not require_role(self, {"ADMIN"}):
+            # el dueno tambien crea y maneja usuarios; las cuentas de
+            # administrador solo las toca el administrador (2026-10-31)
+            quien = require_role(self, {"ADMIN", "DOCTOR"})
+            if not quien:
                 return
             data = read_json(self)
+            es_admin = normalize_role(quien["role"]) == "ADMIN"
+            if not es_admin:
+                objetivo_id = data.get("id")
+                with db() as conn:
+                    objetivo = conn.execute("SELECT role FROM users WHERE id = ?", (objetivo_id,)).fetchone() if objetivo_id else None
+                if (objetivo and normalize_role(objetivo["role"]) == "ADMIN") or normalize_role(data.get("role") or "") == "ADMIN":
+                    return send_json(self, {"error": "Solo el administrador puede crear o cambiar cuentas de administrador."}, 403)
             # Borrar la cuenta: se va la llave para entrar, no lo que la persona
             # atendio. El administrador principal no se borra, ni uno a si mismo.
             if data.get("delete"):
@@ -1829,9 +1840,6 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     return send_json(self, {"error": "Usuario no indicado."}, 400)
                 if item_id == "u-admin":
                     return send_json(self, {"error": "El administrador principal no se puede eliminar."}, 400)
-                quien = require_auth(self)
-                if not quien:
-                    return
                 if quien["id"] == item_id:
                     return send_json(self, {"error": "No puedes eliminar tu propia cuenta."}, 400)
                 with db() as conn:
