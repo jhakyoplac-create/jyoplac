@@ -13843,7 +13843,7 @@ function revisarInactividad() {
     if (document.querySelector("dialog[open]")) return true;
     return [...document.querySelectorAll("input, textarea")].some((campo) => {
       if (campo.disabled || campo.readOnly || !campo.offsetParent) return false;
-      if (campo.tagName === "INPUT" && !["text", "tel", "email", "search"].includes(campo.type)) return false;
+      if (campo.tagName === "INPUT" && !["text", "tel", "email", "search", "password"].includes(campo.type)) return false;
       return campo.value !== "" && campo.value !== campo.defaultValue;
     });
   }
