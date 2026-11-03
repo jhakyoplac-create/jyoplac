@@ -2263,7 +2263,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/patient-photo":
-            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})  # recepcion escribe en la historia desde 2026-11-03
             if not user:
                 return
             data = read_json(self)
@@ -2555,7 +2555,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/treatments":
-            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})  # recepcion escribe en la historia desde 2026-11-03
             if not user:
                 return
             data = read_json(self)
@@ -2587,7 +2587,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/odontogram":
-            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})  # recepcion escribe en la historia desde 2026-11-03
             if not user:
                 return
             data = read_json(self)
@@ -2624,7 +2624,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             # reemplaza la copia de ese dia con lo ultimo. Antes cada guardado
             # sumaba una fila y el historial se llenaba de copias iguales. Las
             # repetidas que ya estaban no se borran: la pantalla muestra la ultima.
-            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})  # recepcion escribe en la historia desde 2026-11-03
             if not user:
                 return
             data = read_json(self)
@@ -3309,7 +3309,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/proformas":
-            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})  # recepcion escribe en la historia desde 2026-11-03
             if not user:
                 return
             data = read_json(self)
@@ -3362,7 +3362,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {"ok": True, "id": item_id})
 
         if parsed.path == "/api/consentimientos":
-            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"})
+            user = require_role(self, {"ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"})  # recepcion escribe en la historia desde 2026-11-03
             if not user:
                 return
             data = read_json(self)

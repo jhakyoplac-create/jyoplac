@@ -2956,7 +2956,7 @@ const roleViews = {
   DOCTOR_ATENCION: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "campanas"],
   DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
   // recepcion ve el historial clinico para consultarlo e imprimirlo; no escribe nada clinico
-  RECEPCION: ["dashboard", "pacientes", "agenda", "historial", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
+  RECEPCION: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -3025,8 +3025,10 @@ function canManageAppointments() {
   return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
+/* Recepcion tambien escribe en la historia desde el 2026-11-03 (pedido del
+   usuario); el servidor deja pasar lo mismo en backend/server.py. */
 function canManageClinical() {
-  return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR"].includes(currentUser()?.role);
+  return ["ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"].includes(currentUser()?.role);
 }
 
 /* Escribir la nota clinica y la hoja del Colegio, que es otra cosa que manejar
