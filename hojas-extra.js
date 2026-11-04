@@ -803,6 +803,13 @@ function imprimirPresupuesto(proformaId, paraImagen = false) {
       .pr-whatsapp:disabled { opacity: 0.7; cursor: wait; }
       .pr-aviso { margin: 6px 0 0; font-family: Arial, sans-serif; font-size: 12px; color: #4b5563; }
       @media print { .pr-acciones { display: none; } }
+      /* La imagen: una A4 exacta. La tabla baja de letra por niveles cuando
+         no cabe (2026-11-04). */
+      #hojaParaImagen { width: 794px; height: 1123px; overflow: hidden; background: #fff; margin: 0 auto; position: relative; }
+      .pr-chica .pr-tabla td { font-size: 10px; padding: 2px 6px; }
+      .pr-chica .pr-tabla th { font-size: 9.5px; padding: 3px 6px; }
+      .pr-chica-2 .pr-tabla td { font-size: 9px; padding: 1px 5px; line-height: 1.25; }
+      .pr-chica-2 .pr-tabla th { font-size: 9px; padding: 2px 5px; }
     </style></head><body>
     ${presupuestoImpreso(proforma)}
     <div class="pr-acciones">
@@ -877,21 +884,51 @@ function imprimirPresupuesto(proformaId, paraImagen = false) {
              ilegible: ese si se va a dos hojas. */
           hoja.style.zoom = String(Math.max(0.72, cabe / queda));
         }
+        /* La imagen cabe en una A4 (794 x 1123). Lo que sobra se le quita
+           primero al odontograma (hasta el 55 %), despues a la letra de la
+           tabla (dos niveles) y, si aun no cabe, la hoja entera se escala con
+           transform, mas ancha antes de escalar para que siga llenando la A4.
+           Nada de zoom: html2canvas no lo entiende. */
+        function unaSolaImagen() {
+          var hoja = document.querySelector(".hc-hoja.fd.pr");
+          if (!hoja) return;
+          var cabe = 1123;
+          var marco = document.createElement("div");
+          marco.id = "hojaParaImagen";
+          hoja.parentNode.insertBefore(marco, hoja);
+          marco.appendChild(hoja);
+          var caja = hoja.querySelector(".pr-odontograma");
+          if (hoja.scrollHeight > cabe && caja) {
+            var sobra = hoja.scrollHeight - cabe;
+            var alto = caja.getBoundingClientRect().height;
+            var corta = Math.max(alto * 0.55, alto - sobra);
+            if (alto && corta < alto) { caja.dataset.altoMax = String(Math.round(corta)); ajustar(); }
+          }
+          if (hoja.scrollHeight > cabe) hoja.classList.add("pr-chica");
+          if (hoja.scrollHeight > cabe) hoja.classList.add("pr-chica-2");
+          if (hoja.scrollHeight > cabe) {
+            var f = Math.max(0.7, cabe / hoja.scrollHeight);
+            hoja.style.width = Math.round(794 / f) + "px";
+            ajustar();
+            // con la hoja mas ancha la tabla ocupa menos alto: se vuelve a medir
+            f = Math.min(1, Math.max(0.7, Math.min(cabe / hoja.scrollHeight, 794 / hoja.offsetWidth)));
+            hoja.style.transformOrigin = "top left";
+            hoja.style.transform = "scale(" + f + ")";
+          }
+        }
         window.addEventListener("load", function () {
           setTimeout(function () {
             /* Para la imagen, la hoja se arma al ancho de una A4 aunque la
                ventana sea angosta: en el celular lo es, y el odontograma se
                encogia para caber en ese ancho, con las piezas encimadas. */
-            if (${paraImagen ? "true" : "false"}) {
+            if (paraImagen) {
               var hoja = document.querySelector(".hc-hoja.fd.pr");
               document.body.style.width = "794px";
               if (hoja) { hoja.style.width = "794px"; hoja.style.maxWidth = "none"; }
             }
             ajustar();
-            /* La imagen no tiene que caber en una A4: puede ser mas alta.
-               Encogerla con zoom era lo que html2canvas dibujaba mal. */
-            if (!paraImagen) unaSolaHoja();
-            if (!paraImagen) window.print();
+            if (paraImagen) unaSolaImagen();
+            else { unaSolaHoja(); window.print(); }
           }, 350);
         });
 
@@ -921,7 +958,7 @@ function imprimirPresupuesto(proformaId, paraImagen = false) {
              de la ventana: en el celular la ventana es angosta y la imagen
              salia toda apretada, con las piezas encimadas y la columna del
              precio cortada. Y ahi es justo donde se usa. */
-          window.html2canvas(document.querySelector(".hc-hoja.fd.pr"), { scale: 2, backgroundColor: "#ffffff", logging: false, windowWidth: 794 }).then(function (lienzo) {
+          window.html2canvas(document.getElementById("hojaParaImagen") || document.querySelector(".hc-hoja.fd.pr"), { scale: 2, backgroundColor: "#ffffff", logging: false, windowWidth: 794 }).then(function (lienzo) {
             lienzo.toBlob(function (imagen) {
               if (!imagen) return listo("No se pudo armar la imagen.");
               var archivo = new File([imagen], nombre, { type: "image/png" });
