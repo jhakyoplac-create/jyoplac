@@ -858,7 +858,10 @@ function imprimirPresupuesto(proformaId, paraImagen = false) {
         function unaSolaHoja() {
           var hoja = document.querySelector(".hc-hoja.fd.pr");
           if (!hoja) return;
-          var cabe = 297 * 96 / 25.4;   // una A4 de alto, en pixeles de CSS
+          /* Una A4 de alto, en pixeles de CSS, menos un dedo de margen: al
+             imprimir, el telefono del pie se iba solo a una segunda hoja por
+             un par de lineas (Aurea, 2026-11-04). */
+          var cabe = 297 * 96 / 25.4 - 24;
           hoja.style.zoom = "1";
           if (!hoja.scrollHeight || hoja.scrollHeight <= cabe) return;
 
