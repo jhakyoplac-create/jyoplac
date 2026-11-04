@@ -812,18 +812,33 @@ function imprimirPresupuesto(proformaId, paraImagen = false) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
     <script>
       (function () {
-        // el odontograma se encoge para caber en el ancho de la hoja
+        var paraImagen = ${paraImagen ? "true" : "false"};
+        /* El odontograma se encoge para caber en el ancho de la hoja. Al
+           imprimir, con zoom; para la imagen, con transform: html2canvas no
+           entiende zoom y dibujaba las piezas corridas y las letras encimadas
+           (2026-11-04). */
         function ajustar() {
           document.querySelectorAll(".hc-grafico").forEach(function (caja) {
             var lienzo = caja.firstElementChild;
             if (!lienzo || !caja.clientWidth) return;
             lienzo.style.zoom = "1";
+            lienzo.style.transform = "";
+            caja.style.height = "";
             var ancho = lienzo.scrollWidth;
             var alto = lienzo.scrollHeight;
             var altoMax = Number(caja.dataset.altoMax || 0);
             var zoom = ancho ? Math.min(1, caja.clientWidth / ancho) : 1;
             if (altoMax && alto) zoom = Math.min(zoom, altoMax / alto);
-            if (ancho) lienzo.style.zoom = String(zoom);
+            if (!ancho) return;
+            if (paraImagen) {
+              lienzo.style.transformOrigin = "top left";
+              lienzo.style.transform = "scale(" + zoom + ")";
+              // el transform no cambia el alto que ocupa: se fija a mano
+              caja.style.height = Math.ceil(alto * zoom) + "px";
+              caja.style.overflow = "hidden";
+            } else {
+              lienzo.style.zoom = String(zoom);
+            }
           });
         }
         /* Una sola hoja. Con pocos tratamientos la hoja entra sola y no se
@@ -873,8 +888,10 @@ function imprimirPresupuesto(proformaId, paraImagen = false) {
               if (hoja) { hoja.style.width = "794px"; hoja.style.maxWidth = "none"; }
             }
             ajustar();
-            unaSolaHoja();
-            if (!${paraImagen ? "true" : "false"}) window.print();
+            /* La imagen no tiene que caber en una A4: puede ser mas alta.
+               Encogerla con zoom era lo que html2canvas dibujaba mal. */
+            if (!paraImagen) unaSolaHoja();
+            if (!paraImagen) window.print();
           }, 350);
         });
 
