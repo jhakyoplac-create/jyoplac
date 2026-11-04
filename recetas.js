@@ -257,7 +257,42 @@ const listaImpresa = (texto, clase = "") => {
 // los codigos CIE-10 escritos en el campo, separados por coma o espacio
 const codigosCie = (texto) => [...new Set(String(texto || "").toUpperCase().match(/\b[A-Z]\d{2}(?:\.\d{1,2})?\b/g) || [])];
 
-/* Guarda lo escrito en el formulario como una receta mas del paciente.
+/* Una receta guardada se puede volver a abrir en el formulario para
+   corregirla (pedido 2026-11-03: un nombre a medias o un dato mal puesto).
+   Mientras se edita, el formulario de arriba muestra esa receta en vez de
+   una nueva; al guardar se cambia en su sitio, con el mismo folio, y queda
+   anotado cuando se corrigio. */
+let recetaEnEdicion = null;
+
+function empezarAEditarReceta(patientId, recetaId) {
+  const patient = patientById(patientId);
+  const receta = recetasDelPaciente(patient).find((item) => item.id === recetaId);
+  if (!receta || !canManageClinical()) return false;
+  recetaEnEdicion = { patientId, recetaId };
+  return true;
+}
+
+function dejarDeEditarReceta() {
+  recetaEnEdicion = null;
+}
+
+function recetaEnEdicionDe(patient) {
+  const marca = recetaEnEdicion;
+  if (!marca || marca.patientId !== patient.id) return null;
+  return recetasDelPaciente(patient).find((item) => item.id === marca.recetaId) || null;
+}
+
+/* Las filas de medicamentos de una receta guardada: por partes si las tiene,
+   y si es de antes de las filas, cada linea de texto como nombre. */
+function filasDeLaReceta(receta) {
+  const items = Array.isArray(receta.items) ? receta.items.filter((item) => item?.medicamento) : [];
+  if (items.length) return items.map((item) => filaDeMedicamento(item)).join("");
+  const nombres = lineas(receta.medicamentos);
+  return (nombres.length ? nombres : [""]).map((nombre) => filaDeMedicamento({ medicamento: nombre })).join("");
+}
+
+/* Guarda lo escrito en el formulario como una receta mas del paciente, o,
+   si se estaba corrigiendo una guardada, la cambia en su sitio.
    Devuelve la receta guardada, o null si falto algo. */
 function guardarReceta(form) {
   if (!canManageClinical()) return null;
@@ -274,12 +309,8 @@ function guardarReceta(form) {
     uiAlert("Escribe al menos un medicamento.");
     return null;
   }
-  const receta = {
-    id: uid("rx"),
-    numero: siguienteFolio(),
+  const escrito = {
     date: texto("fecha") || todayISO(),
-    hora: new Date().toTimeString().slice(0, 5),
-    doctor: doctorPorDefecto(patient),
     diagnostico: texto("diagnostico"),
     cie10: codigosCie(texto("cie10")).join(", "),
     tratamiento: texto("tratamiento"),
@@ -287,6 +318,22 @@ function guardarReceta(form) {
     medicamentos,
     items: itemsDeLasFilas(form),
     indicaciones: texto("indicaciones")
+  };
+  const anterior = form.dataset.editando ? recetasDelPaciente(patient).find((item) => item.id === form.dataset.editando) : null;
+  if (anterior) {
+    // misma receta, mismo folio y mismo doctor que la firmo; solo cambia lo escrito
+    const corregida = { ...anterior, ...escrito, editadaAt: new Date().toISOString() };
+    patient.recetas = recetasDelPaciente(patient).map((item) => (item.id === anterior.id ? corregida : item));
+    guardarEnElPaciente(patient);
+    dejarDeEditarReceta();
+    return corregida;
+  }
+  const receta = {
+    id: uid("rx"),
+    numero: siguienteFolio(),
+    hora: new Date().toTimeString().slice(0, 5),
+    doctor: doctorPorDefecto(patient),
+    ...escrito
   };
   patient.recetas = [...recetasDelPaciente(patient), receta];
   guardarEnElPaciente(patient);
@@ -300,6 +347,7 @@ async function borrarReceta(patientId, recetaId) {
   if (!receta) return false;
   if (!(await uiConfirm(`¿Borrar la receta ${numeroDeReceta(receta.numero)} de ${patient.name}?`))) return false;
   patient.recetas = recetasDelPaciente(patient).filter((item) => item.id !== recetaId);
+  if (recetaEnEdicion?.recetaId === recetaId) dejarDeEditarReceta();
   guardarEnElPaciente(patient);
   return true;
 }
@@ -315,20 +363,23 @@ function hojaDeRecetas(patientId) {
   const sePuedeEscribir = canManageClinical();
   const edad = ageFromBirthDate(patient.birthDate);
 
+  // la receta que se esta corrigiendo, si hay una: el formulario sale con lo suyo
+  const editando = sePuedeEscribir ? recetaEnEdicionDe(patient) : null;
+
   const formulario = sePuedeEscribir
-    ? `<form class="rx-form" data-paciente="${patient.id}" autocomplete="off">
-        <h4 class="rx-subtitulo">Nueva receta</h4>
+    ? `<form class="rx-form" data-paciente="${patient.id}"${editando ? ` data-editando="${escapeHtml(editando.id)}"` : ""} autocomplete="off">
+        <h4 class="rx-subtitulo">${editando ? `Corrigiendo la receta ${escapeHtml(numeroDeReceta(editando.numero))}` : "Nueva receta"}</h4>
         <!-- el doctor no se elige: firma quien esta usando el sistema si atiende, y si no, el doctor del paciente (pedido 2026-10-29) -->
         <div class="rx-campos rx-cabecera">
-          <label>Fecha<input type="date" name="fecha" value="${todayISO()}" required /></label>
-          <label>Peso (kg)<input name="peso" inputmode="decimal" placeholder="Ej: 60" /></label>
+          <label>Fecha<input type="date" name="fecha" value="${escapeHtml(editando?.date || todayISO())}" required /></label>
+          <label>Peso (kg)<input name="peso" inputmode="decimal" placeholder="Ej: 60" value="${escapeHtml(editando?.peso || "")}" /></label>
         </div>
-        <label class="rx-caja-ancha">Diagnóstico (procedimiento actual) <small>una línea por diagnóstico</small><textarea name="diagnostico" rows="3" maxlength="600" placeholder="- Pulpitis en pieza 3.6&#10;- Caries de dentina en pieza 1.6" required></textarea></label>
+        <label class="rx-caja-ancha">Diagnóstico (procedimiento actual) <small>una línea por diagnóstico</small><textarea name="diagnostico" rows="3" maxlength="600" placeholder="- Pulpitis en pieza 3.6&#10;- Caries de dentina en pieza 1.6" required>${escapeHtml(editando?.diagnostico || "")}</textarea></label>
         <!-- Tratamiento no va en el formulario (el usuario quiso dejarlo como estaba, 2026-10-29); en la hoja impresa el Tx. sale con un guion -->
         <!-- el CIE-10 se busca por nombre y el codigo elegido pasa al campo de la derecha (pedido 2026-10-29) -->
         <div class="rx-campos rx-cie">
           <label class="rx-buscador">Diagnóstico CIE-10 <small>escribe el nombre y elige de la lista</small><input name="cieBusqueda" maxlength="60" placeholder="Ej: caries, pulpitis, gingivitis" autocomplete="off" /><div class="rx-sugerencias" hidden></div></label>
-          <label>Código CIE-10 <small>se llena al elegir; admite varios</small><input name="cie10" maxlength="60" placeholder="K02.1" /></label>
+          <label>Código CIE-10 <small>se llena al elegir; admite varios</small><input name="cie10" maxlength="60" placeholder="K02.1" value="${escapeHtml(editando?.cie10 || "")}" /></label>
         </div>
         <!-- medicamentos y receta, cada uno en un rectangulo a todo el ancho, uno debajo del otro (pedido 2026-10-29) -->
         <div class="rx-cajas rx-cajas-largas">
@@ -336,14 +387,15 @@ function hojaDeRecetas(patientId) {
             <span class="rx-meds-titulo">Medicamentos <small>escribe el nombre, a la derecha la dosis, la presentación y la cantidad, y con Enter pasas a la siguiente línea</small></span>
             <div class="rx-med-cuadro">
               <div class="rx-med-cabecera"><span>Medicamento</span><span>Dosis</span><span>Presentación</span><span>Cant.</span><span>Vía</span><span>Frecuencia</span><span>Días</span><span></span></div>
-              <div class="rx-med-filas">${filaDeMedicamento()}</div>
+              <div class="rx-med-filas">${editando ? filasDeLaReceta(editando) : filaDeMedicamento()}</div>
             </div>
           </div>
-          <label>Indicaciones <small>cómo tomar cada uno y las recomendaciones</small><textarea name="indicaciones" rows="4" maxlength="1500" placeholder="- Amoxicilina: 1 tableta vía oral cada 8 horas por 4 días&#10;- Ibuprofeno: 1 tableta cada 8 horas por 3 días, después de los alimentos&#10;- No mezclar con alcohol"></textarea></label>
+          <label>Indicaciones <small>cómo tomar cada uno y las recomendaciones</small><textarea name="indicaciones" rows="4" maxlength="1500" placeholder="- Amoxicilina: 1 tableta vía oral cada 8 horas por 4 días&#10;- Ibuprofeno: 1 tableta cada 8 horas por 3 días, después de los alimentos&#10;- No mezclar con alcohol">${escapeHtml(editando?.indicaciones || "")}</textarea></label>
         </div>
         <p class="fd-acciones rx-botones">
+          ${editando ? `<button class="ghost" type="button" data-rx-cancelar>Cancelar</button>` : ""}
           <button class="ghost" type="submit" data-rx-imprimir>Guardar e imprimir</button>
-          <button class="primary" type="submit">Guardar receta</button>
+          <button class="primary" type="submit">${editando ? "Guardar cambios" : "Guardar receta"}</button>
         </p>
       </form>`
     : "";
@@ -353,12 +405,13 @@ function hojaDeRecetas(patientId) {
     ? `<table class="rx-lista">
         <thead><tr><th>Folio</th><th>Fecha</th><th>Doctor</th><th>Diagnóstico</th><th>Medicamentos</th><th></th></tr></thead>
         <tbody>${guardadas.map((receta) => `<tr>
-          <td><strong>${escapeHtml(numeroDeReceta(receta.numero))}</strong></td>
+          <td><strong>${escapeHtml(numeroDeReceta(receta.numero))}</strong>${receta.editadaAt ? `<br><small class="muted">corregida</small>` : ""}</td>
           <td>${window.HojasExtra.fecha(receta.date)}</td>
           <td>${escapeHtml(receta.doctor || "")}</td>
           <td>${lineas(receta.diagnostico).map(escapeHtml).join("<br>")}${receta.cie10 ? ` <small>(${escapeHtml(receta.cie10)})</small>` : ""}</td>
           <td>${lineas(receta.medicamentos).map(escapeHtml).join("<br>")}</td>
           <td class="rx-acciones">
+            ${sePuedeEscribir ? `<button class="ghost small-btn" type="button" data-editar-receta="${escapeHtml(receta.id)}" data-paciente="${patient.id}">Editar</button>` : ""}
             <button class="ghost small-btn" type="button" data-imprimir-receta="${escapeHtml(receta.id)}" data-paciente="${patient.id}">Imprimir</button>
             ${sePuedeEscribir ? `<button class="rx-quitar" type="button" title="Borrar esta receta" data-borrar-receta="${escapeHtml(receta.id)}" data-paciente="${patient.id}">×</button>` : ""}
           </td>
@@ -495,5 +548,5 @@ function imprimirReceta(patientId, recetaId) {
   ventana.document.close();
 }
 
-window.Recetas = { CIE10_ODONTOLOGICOS, sugerenciasCie, DOSIS_COMUNES, FRECUENCIAS, VIAS, PRESENTACIONES, filaDeMedicamento, medicamentosDeLasFilas, itemsDeLasFilas, numeroDeReceta, lineas, tieneReceta, guardarReceta, borrarReceta, hojaDeRecetas, recetaImpresa, imprimirReceta };
+window.Recetas = { CIE10_ODONTOLOGICOS, sugerenciasCie, DOSIS_COMUNES, FRECUENCIAS, VIAS, PRESENTACIONES, filaDeMedicamento, medicamentosDeLasFilas, itemsDeLasFilas, numeroDeReceta, lineas, tieneReceta, guardarReceta, borrarReceta, empezarAEditarReceta, dejarDeEditarReceta, hojaDeRecetas, recetaImpresa, imprimirReceta };
 })();

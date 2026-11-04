@@ -10368,6 +10368,21 @@ function bindHojasExtra() {
       if (await window.Recetas.borrarReceta(borrarRx.dataset.paciente, borrarRx.dataset.borrarReceta)) renderClinicalHistory();
       return;
     }
+    // corregir una receta guardada: sube al formulario de arriba con lo suyo
+    const editarRx = event.target.closest("[data-editar-receta]");
+    if (editarRx) {
+      if (window.Recetas.empezarAEditarReceta(editarRx.dataset.paciente, editarRx.dataset.editarReceta)) {
+        renderClinicalHistory();
+        $("#historyTimeline form.rx-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return;
+    }
+    const cancelarRx = event.target.closest("[data-rx-cancelar]");
+    if (cancelarRx) {
+      window.Recetas.dejarDeEditarReceta();
+      renderClinicalHistory();
+      return;
+    }
     const quitar = event.target.closest("[data-quitar-foto]");
     if (!quitar) return;
     try {
