@@ -4428,6 +4428,22 @@ function appointmentCard(appointment) {
   </article>`;
 }
 
+/* Cada doctor con su color en la agenda, para ver de un vistazo de quien es
+   cada cita: Carlos azul, Maghy rosado, Mily verde turquesa. Se busca por el
+   comienzo del nombre -sin el "Dr." o "Dra."-, asi que vale "Mily", "Mili" o
+   el nombre completo. Un doctor que no este en la lista sale con los colores
+   de siempre. */
+const COLORES_POR_DOCTOR = [
+  [/^carl/i, "#2563eb"],
+  [/^magh/i, "#ec4899"],
+  [/^mil/i, "#14b8a6"]
+];
+
+function colorDelDoctor(doctor) {
+  const nombre = String(doctor || "").trim().replace(/^(dra?\.?|doctora?)\s+/i, "");
+  return COLORES_POR_DOCTOR.find(([patron]) => patron.test(nombre))?.[1] || "";
+}
+
 function renderAgenda() {
   if (!$("#agendaDate").value) $("#agendaDate").value = todayISO();
   const date = $("#agendaDate").value;
@@ -4460,7 +4476,8 @@ function renderAgenda() {
            paciente conteste el recordatorio no es lo mismo que haber venido:
            una cita confirmada sigue siendo RESERVADA hasta que se atiende, y
            por eso la franja no cambia de color. Solo se pinta el boton. */
-        return `<div class="slot busy status-${appointment.status.toLowerCase()}" data-edit-appointment="${appointment.id}">
+        const colorDoctor = colorDelDoctor(appointment.doctor);
+        return `<div class="slot busy status-${appointment.status.toLowerCase()}${colorDoctor ? " del-doctor" : ""}" ${colorDoctor ? `style="--doctor-color: ${colorDoctor}"` : ""} data-edit-appointment="${appointment.id}">
           <div class="slot-main">
             <strong>${escapeHtml(patient?.name || "Paciente")}</strong>
             <span>${escapeHtml(appointment.service)}</span>

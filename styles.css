@@ -1151,6 +1151,27 @@ label {
   background: linear-gradient(135deg, #ffd3d0, #fff0ed);
 }
 
+/* Color por doctor: la cita toma el color de quien atiende (franja gruesa a la
+   izquierda y fondo suave). La atendida va un tono mas cargada; la cancelada
+   y la que no asistio se quedan en gris con la franja del doctor. */
+.slot.busy.del-doctor {
+  border-color: var(--doctor-color);
+  border-left: 6px solid var(--doctor-color);
+  background: color-mix(in srgb, var(--doctor-color) 20%, #fff);
+}
+
+.slot.busy.del-doctor.status-atendida {
+  background: color-mix(in srgb, var(--doctor-color) 34%, #fff);
+}
+
+.slot.busy.del-doctor.status-no_asistio,
+.slot.busy.del-doctor.status-cancelada {
+  border-color: #c9ccd1;
+  border-left-color: var(--doctor-color);
+  background: #f1f2f4;
+  color: #6b7280;
+}
+
 tr.followup-rescheduled td {
   background: #fff8db;
 }
