@@ -1158,7 +1158,7 @@ label {
 .slot.busy.del-doctor {
   border-color: var(--doctor-color);
   border-left: 6px solid var(--doctor-color);
-  background: color-mix(in srgb, var(--doctor-color) 20%, #fff);
+  background: var(--doctor-fondo, color-mix(in srgb, var(--doctor-color) 20%, #fff));
 }
 
 .slot.busy.del-doctor.status-atendida {

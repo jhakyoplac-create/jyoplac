@@ -4432,16 +4432,20 @@ function appointmentCard(appointment) {
    cada cita: Carlos azul, Maghy rosado, Mily verde turquesa. Se busca por el
    comienzo del nombre -sin el "Dr." o "Dra."-, asi que vale "Mily", "Mili" o
    el nombre completo. Un doctor que no este en la lista sale con los colores
-   de siempre. */
+   de siempre.
+   El primer color es el de la franja; el fondo sale de aclararlo, salvo que
+   el doctor traiga el suyo: Maghy pidio el rosado #FFC0CB tal cual. */
 const COLORES_POR_DOCTOR = [
   [/^carl/i, "#2563eb"],
-  [/^magh/i, "#ec4899"],
+  [/^magh/i, "#ec4899", "#ffc0cb"],
   [/^mil/i, "#14b8a6"]
 ];
 
 function colorDelDoctor(doctor) {
   const nombre = String(doctor || "").trim().replace(/^(dra?\.?|doctora?)\s+/i, "");
-  return COLORES_POR_DOCTOR.find(([patron]) => patron.test(nombre))?.[1] || "";
+  const fila = COLORES_POR_DOCTOR.find(([patron]) => patron.test(nombre));
+  if (!fila) return "";
+  return `--doctor-color: ${fila[1]};${fila[2] ? ` --doctor-fondo: ${fila[2]};` : ""}`;
 }
 
 function renderAgenda() {
@@ -4477,7 +4481,7 @@ function renderAgenda() {
            una cita confirmada sigue siendo RESERVADA hasta que se atiende, y
            por eso la franja no cambia de color. Solo se pinta el boton. */
         const colorDoctor = colorDelDoctor(appointment.doctor);
-        return `<div class="slot busy status-${appointment.status.toLowerCase()}${colorDoctor ? " del-doctor" : ""}" ${colorDoctor ? `style="--doctor-color: ${colorDoctor}"` : ""} data-edit-appointment="${appointment.id}">
+        return `<div class="slot busy status-${appointment.status.toLowerCase()}${colorDoctor ? " del-doctor" : ""}" ${colorDoctor ? `style="${colorDoctor}"` : ""} data-edit-appointment="${appointment.id}">
           <div class="slot-main">
             <strong>${escapeHtml(patient?.name || "Paciente")}</strong>
             <span>${escapeHtml(appointment.service)}</span>
