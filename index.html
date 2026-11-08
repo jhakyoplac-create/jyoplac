@@ -83,6 +83,7 @@
         <button class="nav-item" data-view="inventario"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>Inventario</button>
         <button class="nav-item" data-view="pagos"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5h.01M17.5 14.5h.01"/></svg>Pagos y caja</button>
         <button class="nav-item" data-view="comprobantes"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Comprobantes</button>
+        <button class="nav-item" data-view="productos"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16l-1.5 11h-13z"/><path d="M9 7V5a3 3 0 0 1 6 0v2M9 11v3M15 11v3"/></svg>Venta de productos</button>
         <button class="nav-item" data-view="caja-general"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg>Caja general</button>
         <button class="nav-item" data-view="cuentas-cobrar"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M14.5 9.5c-.5-.9-1.4-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1.1 0-2-.6-2.5-1.5M12 6.5V8M12 16v1.5"/></svg>Cuentas por cobrar</button>
         <button class="nav-item" data-view="seguimiento-citas"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16M9 16l2 2 4-4"/></svg>Seguimiento citas</button>
@@ -547,6 +548,37 @@
                 </tr>
               </thead>
               <tbody id="electronicReceiptsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- Venta de productos (pedido 2026-11-08): lo cobrado con «+ Producto», por mes, con su impresion -->
+      <section id="productos" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Venta de productos</h2>
+            <div class="staff-payment-tools">
+              <select id="productSalesMonth" aria-label="Mes de las ventas"></select>
+              <button class="ghost" id="printProductSalesBtn" type="button">Imprimir</button>
+              <button class="ghost" id="exportProductSalesBtn" type="button">CSV</button>
+            </div>
+          </div>
+          <p class="notice subtle">Los productos que se cobraron con «+ Producto» en Pagos y caja. El precio de la atención no entra aquí.</p>
+          <p class="muted staff-payment-total" id="productSalesTotal"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Paciente</th>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Precio</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="productSalesTable"></tbody>
             </table>
           </div>
         </section>
@@ -1429,6 +1461,6 @@
     <script src="hojas-extra.js?v=20261104-una-hoja"></script>
     <script src="recetas.js?v=20261103-receta-editar"></script>
     <script src="dialogos.js?v=20261019-ventanas"></script>
-    <script src="app.js?v=20261108-consentimiento-imagen"></script>
+    <script src="app.js?v=20261108-venta-productos"></script>
   </body>
 </html>

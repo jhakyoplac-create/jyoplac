@@ -2951,12 +2951,12 @@ const roleLabels = {
 };
 
 const roleViews = {
-  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
-  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  ADMIN: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "productos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
+  DOCTOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "productos", "comprobantes", "caja-general", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "reportes", "campanas", "configuracion"],
   DOCTOR_ATENCION: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios", "campanas"],
-  DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
+  DOCTOR_TRABAJADOR: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "productos", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"],
   // recepcion ve el historial clinico para consultarlo e imprimirlo; no escribe nada clinico
-  RECEPCION: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
+  RECEPCION: ["dashboard", "pacientes", "agenda", "historial", "odontograma", "inventario", "pagos", "productos", "comprobantes", "cuentas-cobrar", "seguimiento-citas", "panel", "recordatorios"]
 };
 
 function currentUser() {
@@ -3282,6 +3282,7 @@ function setView(view) {
     inventario: "Inventario",
     pagos: "Pagos y caja",
     comprobantes: "Comprobantes electrónicos",
+    productos: "Venta de productos",
     "caja-general": "Caja general",
     "cuentas-cobrar": "Cuentas por cobrar",
     panel: "Panel para doctores y recepción",
@@ -3332,6 +3333,9 @@ function renderActiveView() {
     case "pagos":
       renderPayments();
       break;
+    case "productos":
+      renderProductSales();
+      break;
     case "comprobantes":
       renderElectronicReceipts();
       refreshSunatStatus().then(renderElectronicReceipts);
@@ -3378,6 +3382,7 @@ function renderFullApp() {
   renderOdontogramSnapshots();
   renderOdontogram();
   renderInventory();
+  renderProductSales();
   renderPayments();
   renderElectronicReceipts();
   renderGeneralCash();
@@ -3739,6 +3744,120 @@ async function guardarDescuentoDeTratamiento({ form, data, restorePaymentButton 
   renderPaymentProductSummary();
   form.date.value = operatingDate();
   render();
+}
+
+/* Venta de productos (pedido 2026-11-08). Cada producto cobrado con
+   «+ Producto» sale en su propia fila, con el paciente que lo compro; el
+   precio de la atencion no entra. Aqui el servidor guarda cada venta como un
+   movimiento VENTA del inventario con el id del cobro; el paciente se saca
+   del cobro, que viene entero en la carga inicial. */
+function mesDeVentasDeProductos() {
+  return $("#productSalesMonth")?.value || "";
+}
+
+function mesesConVentasDeProductos() {
+  return [...new Set((state.inventoryMovements || [])
+    .filter((movement) => movement.type === "VENTA")
+    .map((movement) => String(movement.date || "").slice(0, 7)))]
+    .filter(Boolean)
+    .sort()
+    .reverse();
+}
+
+function ventasDeProductos(mes = mesDeVentasDeProductos()) {
+  return (state.inventoryMovements || [])
+    .filter((movement) => movement.type === "VENTA" && Number(movement.quantity || 0) > 0 && (!mes || String(movement.date || "").slice(0, 7) === mes))
+    .sort((a, b) => `${b.date || ""}${b.createdAt || ""}`.localeCompare(`${a.date || ""}${a.createdAt || ""}`))
+    .map((movement) => {
+      const pago = movement.paymentId ? state.payments.find((payment) => payment.id === movement.paymentId) : null;
+      const cantidad = Number(movement.quantity || 0);
+      const precio = Number(movement.unitPrice || 0) || (cantidad ? Number(movement.total || 0) / cantidad : 0);
+      return {
+        fecha: movement.date,
+        paciente: (pago && patientById(pago.patientId)?.name) || "Venta sin paciente",
+        producto: inventoryProductById(movement.productId)?.name || "Producto",
+        cantidad,
+        precio,
+        total: Math.round(Number(movement.total || cantidad * precio) * 100) / 100
+      };
+    });
+}
+
+function renderMesesDeVentasDeProductos() {
+  const select = $("#productSalesMonth");
+  if (!select) return;
+  const meses = mesesConVentasDeProductos();
+  const elegido = select.value;
+  select.innerHTML = `<option value="">Todos los meses</option>` +
+    meses.map((mes) => `<option value="${escapeHtml(mes)}">${escapeHtml(monthLabel(mes))}</option>`).join("");
+  if (meses.includes(elegido)) select.value = elegido;
+  else if (select.dataset.tocado) select.value = "";
+  else if (meses.length) select.value = meses[0];
+}
+
+function renderProductSales() {
+  const cuerpo = $("#productSalesTable");
+  if (!cuerpo) return;
+  renderMesesDeVentasDeProductos();
+  const mes = mesDeVentasDeProductos();
+  const filas = ventasDeProductos(mes);
+  const total = filas.reduce((suma, fila) => suma + fila.total, 0);
+  const resumen = $("#productSalesTotal");
+  if (resumen) {
+    resumen.textContent = filas.length
+      ? `${filas.length} producto${filas.length === 1 ? "" : "s"} vendido${filas.length === 1 ? "" : "s"} en ${mes ? monthLabel(mes) : "todos los meses"} · total ${money(total)}`
+      : "";
+  }
+  cuerpo.innerHTML = filas.map((fila) => `<tr>
+      <td>${formatDate(fila.fecha)}</td>
+      <td>${escapeHtml(fila.paciente)}</td>
+      <td>${escapeHtml(fila.producto)}</td>
+      <td>${fila.cantidad}</td>
+      <td>${money(fila.precio)}</td>
+      <td><strong>${money(fila.total)}</strong></td>
+    </tr>`).join("") || `<tr><td colspan="6">${mes ? "Sin productos vendidos en el mes elegido." : "Aún no se vendió ningún producto. Se cobran con «+ Producto» en Pagos y caja."}</td></tr>`;
+}
+
+function exportarVentasDeProductos() {
+  const mes = mesDeVentasDeProductos();
+  const filas = ventasDeProductos(mes);
+  if (!filas.length) return;
+  exportCsv(`venta-productos-${mes || "todos"}.csv`, filas.map((fila) => ({
+    Fecha: formatDate(fila.fecha),
+    Paciente: fila.paciente,
+    Producto: fila.producto,
+    Cantidad: fila.cantidad,
+    "Precio S/": fila.precio.toFixed(2),
+    "Total S/": fila.total.toFixed(2)
+  })));
+}
+
+function imprimirVentasDeProductos() {
+  const mes = mesDeVentasDeProductos();
+  const filas = ventasDeProductos(mes);
+  const total = filas.reduce((suma, fila) => suma + fila.total, 0);
+  const ventana = window.open("", "_blank");
+  if (!ventana) return;
+  const cuerpo = filas.map((fila) => `<tr><td>${escapeHtml(formatDate(fila.fecha))}</td><td>${escapeHtml(fila.paciente)}</td><td>${escapeHtml(fila.producto)}</td><td class="num">${fila.cantidad}</td><td class="num">${escapeHtml(money(fila.precio))}</td><td class="num">${escapeHtml(money(fila.total))}</td></tr>`).join("")
+    || `<tr><td colspan="6">Sin productos vendidos.</td></tr>`;
+  ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Venta de productos ${escapeHtml(mes ? monthLabel(mes) : "")}</title><style>
+    body{font-family:Arial,sans-serif;padding:24px;color:#111}
+    h1{margin:0 0 4px;font-size:22px}
+    p{margin:0 0 18px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    td,th{border:1px solid #cfcfcf;padding:8px 10px;text-align:left}
+    th{background:#eaf7fa;font-weight:700}
+    .num{text-align:right;white-space:nowrap}
+    tr.total td{font-weight:700}
+    @media print{body{padding:12px}}
+  </style></head><body>
+    <h1>Venta de productos · ${escapeHtml(mes ? monthLabel(mes) : "todos los meses")}</h1>
+    <p>${escapeHtml(state.config?.clinicName || "CM Odontología Estética")}</p>
+    <table><thead><tr><th>Fecha</th><th>Paciente</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">Total</th></tr></thead>
+    <tbody>${cuerpo}<tr class="total"><td colspan="5">Total</td><td class="num">${escapeHtml(money(total))}</td></tr></tbody></table>
+    <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });<\/script>
+  </body></html>`);
+  ventana.document.close();
 }
 
 function mesesConMovimientos() {
@@ -12781,6 +12900,14 @@ function bindEvents() {
     form.reset();
     render();
   });
+  // Venta de productos (2026-11-08)
+  $("#productSalesMonth")?.addEventListener("change", (event) => {
+    event.currentTarget.dataset.tocado = "1";
+    render();
+  });
+  $("#printProductSalesBtn")?.addEventListener("click", imprimirVentasDeProductos);
+  $("#exportProductSalesBtn")?.addEventListener("click", exportarVentasDeProductos);
+
   $("#inventoryMovementMonth")?.addEventListener("change", (event) => {
     // marcar que la eleccion es suya: sin esto cada refresco volveria al mes mas reciente
     event.currentTarget.dataset.tocado = "1";
