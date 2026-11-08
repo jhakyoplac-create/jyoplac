@@ -3928,10 +3928,10 @@ menu {
    coincidencias debajo, como en Cuentas por cobrar (2026-11-08). */
 .history-patient-search {
   position: relative;
-  /* ancho para un nombre completo con su DNI (2026-11-08: se cortaba) */
-  flex: 1 1 460px;
-  min-width: 360px;
-  max-width: 680px;
+  /* justo para un nombre completo con su DNI: ni cortado ni de pared a pared (2026-11-08) */
+  flex: 0 1 420px;
+  min-width: 340px;
+  max-width: 440px;
 }
 .history-patient-search input {
   width: 100%;
