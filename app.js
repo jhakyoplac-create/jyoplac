@@ -6245,7 +6245,8 @@ function bindFirmaDelConsentimiento() {
    aqui el presupuesto del paciente y la lista de precios viven en el servidor.
    ============================================================ */
 
-let historySheetTab = "historia";
+// al abrir la historia se entra por la Ficha de datos (pedido 2026-11-08)
+let historySheetTab = "ficha";
 let planSubTab = "plan";
 let serviciosBorrador = null;
 
