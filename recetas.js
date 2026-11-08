@@ -412,6 +412,7 @@ function hojaDeRecetas(patientId) {
           <td>${lineas(receta.medicamentos).map(escapeHtml).join("<br>")}</td>
           <td class="rx-acciones">
             ${sePuedeEscribir ? `<button class="ghost small-btn" type="button" data-editar-receta="${escapeHtml(receta.id)}" data-paciente="${patient.id}">Editar</button>` : ""}
+            <button class="ghost small-btn" type="button" data-imagen-receta="${escapeHtml(receta.id)}" data-paciente="${patient.id}" title="La receta como imagen, para mandársela al paciente por WhatsApp">Imagen</button>
             <button class="ghost small-btn" type="button" data-imprimir-receta="${escapeHtml(receta.id)}" data-paciente="${patient.id}">Imprimir</button>
             ${sePuedeEscribir ? `<button class="rx-quitar" type="button" title="Borrar esta receta" data-borrar-receta="${escapeHtml(receta.id)}" data-paciente="${patient.id}">×</button>` : ""}
           </td>
@@ -520,7 +521,7 @@ function recetaImpresa(patient, receta) {
   </article>`;
 }
 
-function imprimirReceta(patientId, recetaId) {
+function imprimirReceta(patientId, recetaId, paraImagen = false) {
   const patient = patientById(patientId);
   const receta = recetasDelPaciente(patient).find((item) => item.id === recetaId);
   if (!patient || !receta) return;
@@ -532,6 +533,7 @@ function imprimirReceta(patientId, recetaId) {
   const hojasDeEstilo = [...document.querySelectorAll('link[rel="stylesheet"][href]')]
     .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
     .join("");
+  const nombreDelArchivo = `Receta ${numeroDeReceta(receta.numero)} - ${String(patient.name || "paciente").replace(/[\\/:*?"<>|]/g, " ").trim()}`;
   ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
     <base href="${escapeHtml(location.href)}">
     <title>Receta ${escapeHtml(numeroDeReceta(receta.numero))} ${escapeHtml(patient.name)}</title>
@@ -541,9 +543,74 @@ function imprimirReceta(patientId, recetaId) {
       html, body { background: #fff !important; }
       body { display: block !important; min-height: 0 !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .hc-hoja.fd { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 12mm 15mm !important; max-width: 210mm; min-height: 297mm; box-sizing: border-box; margin: 0 auto; }
+      /* para la imagen (2026-11-08): una A4 exacta de 794 x 1123; si no cabe, la hoja se encoge con transform, que html2canvas si dibuja bien */
+      #hojaParaImagen { width: 794px; height: 1123px; overflow: hidden; margin: 0 auto; background: #fff; position: relative; }
+      #hojaParaImagen .hc-hoja.fd { width: 794px; max-width: none; min-height: 0; transform-origin: top left; }
+      .ci-acciones { max-width: 794px; margin: 0 auto 24px; padding: 0 60px; text-align: right; box-sizing: border-box; }
+      .ci-whatsapp { display: inline-block; padding: 8px 16px; border: 0; border-radius: 6px; background: #1fa855; color: #fff; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
+      .ci-whatsapp:disabled { opacity: 0.7; cursor: wait; }
+      .ci-aviso { margin: 6px 0 0; font-family: Arial, sans-serif; font-size: 12px; color: #4b5563; }
     </style></head><body>
+    ${paraImagen ? '<div id="hojaParaImagen">' : ""}
     ${recetaImpresa(patient, receta)}
-    <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });<\/script>
+    ${paraImagen ? `</div>
+    <div class="ci-acciones">
+      <button class="ci-whatsapp" id="enviarWhatsapp" type="button" data-archivo="${escapeHtml(nombreDelArchivo)}">Enviar imagen por WhatsApp</button>
+      <p class="ci-aviso" id="avisoWhatsapp"></p>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+    <script>
+      (function () {
+        /* La hoja cabe en la A4: si el texto se pasa, se encoge lo justo y se
+           ensancha en la misma medida, para que siga ocupando la hoja. */
+        window.addEventListener("load", function () {
+          var hoja = document.querySelector("#hojaParaImagen .hc-hoja");
+          if (!hoja) return;
+          function aplicar(escala) {
+            hoja.style.width = (794 / escala) + "px";
+            hoja.style.transform = "scale(" + escala + ")";
+            return hoja.scrollHeight * escala <= 1118;
+          }
+          if (hoja.scrollHeight <= 1118) return;
+          var cabe = 0.6, noCabe = 1;
+          for (var i = 0; i < 7; i++) {
+            var medio = (cabe + noCabe) / 2;
+            if (aplicar(medio)) cabe = medio; else noCabe = medio;
+          }
+          aplicar(cabe);
+        });
+        var boton = document.getElementById("enviarWhatsapp");
+        var aviso = document.getElementById("avisoWhatsapp");
+        var puedeCompartir = Boolean(navigator.canShare && navigator.share);
+        var textoBoton = puedeCompartir ? "Enviar imagen por WhatsApp" : "Descargar imagen";
+        boton.textContent = textoBoton;
+        function listo(mensaje) { boton.disabled = false; boton.textContent = textoBoton; aviso.textContent = mensaje || ""; }
+        boton.addEventListener("click", function () {
+          if (!window.html2canvas) { listo("Para armar la imagen hace falta internet. Mientras tanto, imprime la receta."); return; }
+          boton.disabled = true;
+          boton.textContent = "Preparando imagen…";
+          var nombre = boton.dataset.archivo + ".png";
+          window.html2canvas(document.getElementById("hojaParaImagen"), { scale: 2, backgroundColor: "#ffffff", logging: false, windowWidth: 794 }).then(function (lienzo) {
+            lienzo.toBlob(function (imagen) {
+              if (!imagen) return listo("No se pudo armar la imagen.");
+              var archivo = new File([imagen], nombre, { type: "image/png" });
+              if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+                navigator.share({ files: [archivo], title: boton.dataset.archivo }).then(function () { listo(""); }).catch(function (error) {
+                  listo(error && error.name === "AbortError" ? "" : "No se pudo compartir la imagen.");
+                });
+                return;
+              }
+              var enlace = document.createElement("a");
+              enlace.href = URL.createObjectURL(imagen);
+              enlace.download = nombre;
+              enlace.click();
+              setTimeout(function () { URL.revokeObjectURL(enlace.href); }, 4000);
+              listo("La imagen se descargó (" + nombre + "). Adjúntala en WhatsApp.");
+            }, "image/png");
+          }).catch(function () { listo("No se pudo armar la imagen."); });
+        });
+      })();
+    <\/script>` : `<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });<\/script>`}
     </body></html>`);
   ventana.document.close();
 }

@@ -1085,25 +1085,6 @@
             </div>
           </section>
 
-          <form class="panel form inventory-form" id="inventoryMovementForm">
-            <div class="panel-head">
-              <h2>Entrada / salida</h2>
-              <button type="reset" class="ghost">Limpiar</button>
-            </div>
-            <label>Producto<select name="productId" required></select></label>
-            <div class="settings-grid">
-              <label>Movimiento<select name="type" required>
-                <option value="ENTRADA">Entrada</option>
-                <option value="SALIDA">Salida</option>
-                <option value="AJUSTE">Ajuste</option>
-              </select></label>
-              <label>Cantidad<input name="quantity" type="number" min="0.01" step="1" required /></label>
-              <label>Costo / precio S/<input name="unitPrice" type="number" min="0" step="0.01" /></label>
-            </div>
-            <label>Detalle<textarea name="detail" rows="3" placeholder="Compra, perdida, ajuste de conteo..."></textarea></label>
-            <button class="primary" type="submit">Guardar movimiento</button>
-          </form>
-
           <section class="panel">
             <div class="panel-head">
               <h2>Movimientos de inventario</h2>
@@ -1459,8 +1440,8 @@
     <!-- El ojito para ver lo que se escribe en los campos de contrasena. -->
     <script src="ver-contrasena.js?v=20261005-ojo-contrasena"></script>
     <script src="hojas-extra.js?v=20261104-una-hoja"></script>
-    <script src="recetas.js?v=20261103-receta-editar"></script>
+    <script src="recetas.js?v=20261108-receta-imagen"></script>
     <script src="dialogos.js?v=20261019-ventanas"></script>
-    <script src="app.js?v=20261108-venta-productos"></script>
+    <script src="app.js?v=20261108-receta-imagen"></script>
   </body>
 </html>

@@ -5310,6 +5310,10 @@ function odontogramFichaFor(patientId, sheet) {
       ficha.spans = Array.isArray(saved.spans) ? saved.spans : [];
       ficha.arcada = saved.arcada || { up: null, down: null };
       ficha.esp = row.note || "";
+      /* La marca de piezas de leche va en la fila de la ficha. Sin leerla
+         aqui, el plan de tratamiento y la proforma rearmaban la ficha desde
+         las filas y dibujaban siempre la dentadura de adulto (2026-11-08). */
+      ficha.nino = Boolean(saved.nino);
       return;
     }
     if (!ficha.dientes[tooth]) return;
@@ -5362,7 +5366,7 @@ async function odontogramFlush() {
       condition: esFicha ? "Ficha" : (odontogramView.resumenPieza(clave) || "Sano"),
       note: esFicha ? (ficha.esp || "") : (ficha.dientes[clave]?.nota || ""),
       findings: JSON.stringify(esFicha
-        ? { spans: ficha.spans, arcada: ficha.arcada }
+        ? { spans: ficha.spans, arcada: ficha.arcada, nino: Boolean(ficha.nino) }
         : ficha.dientes[clave])
     };
     try {
@@ -7436,7 +7440,7 @@ async function restaurarCopiaDelOdontograma(id) {
       tooth: toothFicha,
       condition: "Ficha",
       note: ficha.esp || "",
-      findings: JSON.stringify({ spans: ficha.spans, arcada: ficha.arcada })
+      findings: JSON.stringify({ spans: ficha.spans, arcada: ficha.arcada, nino: Boolean(ficha.nino) })
     });
     // lo que la copia no tenia deja de estar marcado
     for (const [tooth, row] of previas) {
@@ -10635,6 +10639,12 @@ function bindHojasExtra() {
       else quitarRx.closest(".rx-med-fila")?.querySelectorAll("input").forEach((campo) => { campo.value = ""; });
       return;
     }
+    // la receta como imagen, para mandarsela al paciente por WhatsApp (2026-11-08)
+    const imagenRx = event.target.closest("[data-imagen-receta]");
+    if (imagenRx) {
+      window.Recetas.imprimirReceta(imagenRx.dataset.paciente, imagenRx.dataset.imagenReceta, true);
+      return;
+    }
     const imprimirRx = event.target.closest("[data-imprimir-receta]");
     if (imprimirRx) {
       window.Recetas.imprimirReceta(imprimirRx.dataset.paciente, imprimirRx.dataset.imprimirReceta);
@@ -12860,46 +12870,6 @@ function bindEvents() {
     }, 0);
   });
 
-  $("#inventoryMovementForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!canManageInventory()) return;
-    const form = event.currentTarget;
-    const data = formData(form);
-    const product = inventoryProductById(data.productId);
-    const quantity = Number(data.quantity || 0);
-    if (!product || quantity <= 0) {
-      uiAlert("Selecciona producto y cantidad.");
-      return;
-    }
-    const movement = {
-      id: uid("mov"),
-      productId: product.id,
-      date: todayISO(),
-      type: data.type,
-      quantity,
-      unitPrice: Number(data.unitPrice || product.price || 0),
-      total: quantity * Number(data.unitPrice || product.price || 0),
-      detail: String(data.detail || "").trim()
-    };
-    if (["SALIDA", "VENTA"].includes(movement.type) && quantity > Number(product.stock || 0)) {
-      uiAlert("No hay stock suficiente para registrar la salida.");
-      return;
-    }
-    try {
-      await saveInventoryMovementApi(movement);
-    } catch (error) {
-      uiAlert(error.message);
-      return;
-    }
-    if (!API_ENABLED) {
-      const signedQty = movement.type === "ENTRADA" ? quantity : -quantity;
-      product.stock = Number(product.stock || 0) + signedQty;
-      state.inventoryMovements.unshift(movement);
-      saveState();
-    }
-    form.reset();
-    render();
-  });
   // Venta de productos (2026-11-08)
   $("#productSalesMonth")?.addEventListener("change", (event) => {
     event.currentTarget.dataset.tocado = "1";
