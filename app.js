@@ -2740,7 +2740,13 @@ function fillPaymentPatientSelect(select, selected = "") {
   if (agendaOptions.length) groups.push(`<optgroup label="Citas del día">${agendaOptions.join("")}</optgroup>`);
   // la venta de mostrador va primera y siempre: sin citas del dia es lo unico que queda
   select.innerHTML = `<option value="${VENTA_DE_MOSTRADOR}">Venta de mostrador (sin paciente)</option>` + groups.join("");
-  if (selected && paymentSelectionExists(selected)) select.value = selected;
+  /* La venta de mostrador solo se queda elegida si alguien la eligio a mano o
+     no hay a quien cobrar: la lista se arma antes de que lleguen las citas y,
+     sin esto, se quedaba pegada en mostrador con la agenda llena. */
+  const mostradorAMano = select.dataset.mostradorAMano === "1";
+  const hayAQuienCobrar = patients.length > 0 || agendaOptions.length > 0;
+  const seQueda = selected && paymentSelectionExists(selected) && (!esVentaDeMostrador(selected) || mostradorAMano || !hayAQuienCobrar);
+  if (seQueda) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
   else if (agendaOptions.length) select.value = agendaPaymentAppointments()[0]?.id ? `appt:${agendaPaymentAppointments()[0].id}` : VENTA_DE_MOSTRADOR;
   else select.value = VENTA_DE_MOSTRADOR;
@@ -12555,7 +12561,10 @@ function bindEvents() {
   // eventos los registra el propio modulo al crearse en renderOdontogram().
 
   $('#paymentForm select[name="patientId"]').addEventListener("change", () => {
-    const selectedPatient = patientIdFromPaymentSelection($('#paymentForm select[name="patientId"]').value);
+    // la venta de mostrador elegida a mano se respeta en los redibujos; cualquier otra eleccion lo olvida
+    const lista = $('#paymentForm select[name="patientId"]');
+    lista.dataset.mostradorAMano = esVentaDeMostrador(lista.value) ? "1" : "";
+    const selectedPatient = patientIdFromPaymentSelection(lista.value);
     const forcedHistory = historyById(forcedPaymentHistoryId);
     if (!forcedHistory || forcedHistory.patientId !== selectedPatient) forcedPaymentHistoryId = "";
     renderTreatmentPaymentOptions();
@@ -12822,6 +12831,8 @@ function bindEvents() {
     openPaymentReceiptPrompt({ payment, form, restorePaymentButton });
   });
   $("#paymentForm")?.addEventListener("reset", () => {
+    const lista = $('#paymentForm select[name="patientId"]');
+    if (lista) lista.dataset.mostradorAMano = "";
     selectedProductSaleItems = [];
     serviciosExtra = [];
     renderServiciosExtra();
