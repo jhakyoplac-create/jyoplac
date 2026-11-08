@@ -3924,6 +3924,31 @@ menu {
 /* ---- Historia clinica del paciente ----
    Una hoja con secciones que se ve igual en pantalla y en papel. Colores
    fijos: la misma hoja se imprime en una ventana aparte. */
+/* El buscador de paciente de la historia: una caja con su lista de
+   coincidencias debajo, como en Cuentas por cobrar (2026-11-08). */
+.history-patient-search {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+  max-width: 440px;
+}
+.history-patient-search input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.history-patient-search .patient-suggestions {
+  text-align: left;
+}
+/* el CSV y el icono del ano, juntos a la derecha del grafico de atenciones */
+.care-chart-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .history-sheet-actions {
   display: flex;
   flex-wrap: wrap;

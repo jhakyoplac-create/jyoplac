@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" href="assets/app-icon-cm-apple-180.png" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261105-rosado-maghy" />
+    <link rel="stylesheet" href="styles.css?v=20261108-buscador-historia" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -321,7 +321,14 @@
               <div class="history-sheet-actions">
                 <!-- Imprimir vive al final de la hoja, no aqui: se imprime cuando
                      ya se termino de leerla y de firmarla, no antes. -->
-                <select id="historyPatientFilter"></select>
+                <!-- El paciente se busca escribiendo el nombre o el DNI (pedido
+                     2026-11-08). La lista desplegable sigue, escondida: es la
+                     que lee el resto del sistema. -->
+                <div class="history-patient-search">
+                  <input id="historyPatientSearch" type="search" autocomplete="off" placeholder="Escribe nombre o DNI" aria-label="Buscar paciente por nombre o DNI" />
+                  <div class="patient-suggestions" id="historyPatientSuggestions"></div>
+                </div>
+                <select id="historyPatientFilter" hidden></select>
               </div>
             </div>
             <!-- Las formas de mirar al mismo paciente: no son pantallas
@@ -959,7 +966,7 @@
             <div id="dailyAuditReport" class="table-wrap"></div>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>Atenciones mensuales</h2><button class="open-mini-modal" id="openYearChartBtn" type="button" aria-label="Ver el año completo" title="Ver el año completo">↗</button></div>
+            <div class="panel-head"><h2>Atenciones mensuales</h2><div class="care-chart-tools"><button class="ghost small-btn" id="careCsvBtn" type="button" title="Quiénes son los nuevos y los recurrentes del mes y cuánto pagó cada uno">CSV</button><button class="open-mini-modal" id="openYearChartBtn" type="button" aria-label="Ver el año completo" title="Ver el año completo">↗</button></div></div>
             <div id="monthlyCareChart" class="mini-chart"></div>
           </section>
           <section class="panel">
@@ -1422,6 +1429,6 @@
     <script src="hojas-extra.js?v=20261104-una-hoja"></script>
     <script src="recetas.js?v=20261103-receta-editar"></script>
     <script src="dialogos.js?v=20261019-ventanas"></script>
-    <script src="app.js?v=20261105-rosado-maghy"></script>
+    <script src="app.js?v=20261108-buscador-historia"></script>
   </body>
 </html>

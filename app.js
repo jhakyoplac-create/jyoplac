@@ -3433,6 +3433,12 @@ function hydrateForms() {
   avisoDeDeudaDelDia();
   fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), $('#paymentForm select[name="patientId"]')?.value || "");
   fillPatientSelect($("#historyPatientFilter"), $("#historyPatientFilter").value);
+  // el buscador de la historia muestra al paciente elegido, salvo mientras se escribe en el
+  const buscadorDeHistoria = $("#historyPatientSearch");
+  if (buscadorDeHistoria && document.activeElement !== buscadorDeHistoria) {
+    const elegido = state.patients.find((patient) => patient.id === $("#historyPatientFilter").value);
+    buscadorDeHistoria.value = elegido ? `${elegido.name} - ${elegido.dni}` : "";
+  }
   $$('select[name="tooth"]').forEach((select) => fillSelect(select, teeth, select.value));
   $$('select[name="condition"]').forEach((select) => fillSelect(select, toothConditions, select.value));
   fillSelect($("#doctorFilter"), ["Todos los doctores", ...state.config.doctors], $("#doctorFilter").value);
@@ -9128,6 +9134,67 @@ function imprimirGraficoAnual() {
   ventana.document.close();
 }
 
+/* Quienes estan detras de los numeros del grafico, para un mes (replica de
+   EF, 2026-11-08): cada paciente atendido con si es nuevo o recurrente
+   (nuevo = su primera cita atendida fue ese mes), sus atenciones, las
+   fechas y lo pagado en el mes sin productos. */
+function detalleDeAtencionesDelMes(month) {
+  const primeraAtencion = new Map();
+  state.appointments.forEach((appointment) => {
+    if (appointment.status !== "ATENDIDA" || !appointment.patientId || !appointment.date) return;
+    const previa = primeraAtencion.get(appointment.patientId);
+    if (!previa || appointment.date < previa) primeraAtencion.set(appointment.patientId, appointment.date);
+  });
+  const porPaciente = new Map();
+  state.appointments
+    .filter((appointment) => appointment.status === "ATENDIDA" && appointment.patientId && String(appointment.date || "").startsWith(month))
+    .forEach((appointment) => {
+      const fila = porPaciente.get(appointment.patientId) || { fechas: [] };
+      fila.fechas.push(appointment.date);
+      porPaciente.set(appointment.patientId, fila);
+    });
+  const pagadoPor = new Map();
+  state.payments
+    .filter((payment) => payment.patientId && String(payment.date || "").startsWith(month))
+    .forEach((payment) => {
+      const monto = Math.max(0, Number(payment.amount || 0) - Number(payment.productAmount || 0));
+      pagadoPor.set(payment.patientId, (pagadoPor.get(payment.patientId) || 0) + monto);
+    });
+  return [...porPaciente.entries()].map(([patientId, fila]) => {
+    const patient = patientById(patientId);
+    const nuevo = String(primeraAtencion.get(patientId) || "").startsWith(month);
+    return {
+      patientId,
+      paciente: patient?.name || "Paciente",
+      dni: patient?.dni || "",
+      telefono: patient?.phone || "",
+      tipo: nuevo ? "Nuevo" : "Recurrente",
+      primeraAtencion: primeraAtencion.get(patientId) || "",
+      atenciones: fila.fechas.length,
+      fechas: [...fila.fechas].sort(),
+      pagado: Math.round((pagadoPor.get(patientId) || 0) * 100) / 100
+    };
+  }).sort((a, b) => (a.tipo === b.tipo ? a.paciente.localeCompare(b.paciente) : a.tipo === "Nuevo" ? -1 : 1));
+}
+
+function csvDeAtencionesDelMes() {
+  const month = $("#reportMonth")?.value || todayISO().slice(0, 7);
+  const filas = detalleDeAtencionesDelMes(month);
+  if (!filas.length) return;
+  const total = (tipo) => filas.filter((fila) => fila.tipo === tipo);
+  const suma = (lista, clave) => Math.round(lista.reduce((acumulado, fila) => acumulado + fila[clave], 0) * 100) / 100;
+  exportCsv(`atenciones-${month}.csv`, [
+    ...filas.map((fila) => ({
+      mes: month, paciente: fila.paciente, dni: fila.dni, telefono: fila.telefono, tipo: fila.tipo,
+      primera_atencion: fila.primeraAtencion, atenciones_en_el_mes: fila.atenciones,
+      fechas: fila.fechas.map((fecha) => formatDate(fecha)).join(" · "), pagado_en_el_mes: fila.pagado
+    })),
+    { mes: month, paciente: "TOTAL NUEVOS", dni: "", telefono: "", tipo: "Nuevo", primera_atencion: "", atenciones_en_el_mes: suma(total("Nuevo"), "atenciones"), fechas: `${total("Nuevo").length} pacientes`, pagado_en_el_mes: suma(total("Nuevo"), "pagado") },
+    { mes: month, paciente: "TOTAL RECURRENTES", dni: "", telefono: "", tipo: "Recurrente", primera_atencion: "", atenciones_en_el_mes: suma(total("Recurrente"), "atenciones"), fechas: `${total("Recurrente").length} pacientes`, pagado_en_el_mes: suma(total("Recurrente"), "pagado") },
+    { mes: month, paciente: "TOTAL", dni: "", telefono: "", tipo: "", primera_atencion: "", atenciones_en_el_mes: suma(filas, "atenciones"), fechas: `${filas.length} pacientes`, pagado_en_el_mes: suma(filas, "pagado") }
+  ]);
+}
+
 function csvDelGraficoAnual() {
   const anio = Number($("#yearChartDialog")?.dataset.anio) || new Date().getFullYear();
   exportCsv(`atenciones-${anio}.csv`, yearlyCareData(anio).map((item) => ({
@@ -10880,6 +10947,8 @@ function bindEvents() {
     renderCommissions();
   });
   // la ventana del grafico anual: abrir, cambiar de ano, descargar, imprimir y CSV
+  // quienes son los nuevos, los recurrentes y las atenciones del grafico, con lo pagado en el mes
+  on("#careCsvBtn", "click", csvDeAtencionesDelMes);
   $("#openYearChartBtn")?.addEventListener("click", () => {
     renderYearChart(new Date().getFullYear());
     $("#yearChartDialog")?.showModal();
@@ -10907,6 +10976,48 @@ function bindEvents() {
   on("#compareMonth", "change", () => {
     renderReports();
     refreshReportsRange();
+  });
+  /* El paciente de la historia se busca escribiendo el nombre o el DNI
+     (pedido 2026-11-08): la lista desplegable sigue escondida y es la que
+     lee el resto del codigo, asi que aqui solo se le pone el valor y se
+     avisa como si la persona hubiera elegido. */
+  const elegirPacienteDeHistoria = (patient) => {
+    const select = $("#historyPatientFilter");
+    if (!patient || !select) return;
+    select.value = patient.id;
+    const buscador = $("#historyPatientSearch");
+    if (buscador) buscador.value = patientOptionLabel(patient);
+    const lista = $("#historyPatientSuggestions");
+    if (lista) lista.innerHTML = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const sugerirPacientesDeHistoria = () => {
+    const buscador = $("#historyPatientSearch");
+    const lista = $("#historyPatientSuggestions");
+    if (!buscador || !lista) return;
+    lista.innerHTML = receivablePatientMatches(buscador.value).map((patient) =>
+      `<button type="button" data-select-history-patient="${patient.id}"><strong>${escapeHtml(patient.name)}</strong><span>${escapeHtml(patient.dni || "")}${patient.phone ? ` · ${escapeHtml(patient.phone)}` : ""}</span></button>`).join("");
+  };
+  on("#historyPatientSearch", "input", sugerirPacientesDeHistoria);
+  on("#historyPatientSearch", "focus", (event) => { event.target.select(); sugerirPacientesDeHistoria(); });
+  on("#historyPatientSearch", "keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const primero = $("#historyPatientSuggestions button");
+    if (primero) elegirPacienteDeHistoria(patientById(primero.dataset.selectHistoryPatient));
+  });
+  on("#historyPatientSearch", "blur", (event) => {
+    // un momento, por si el clic fue sobre una sugerencia; si no eligio nada, vuelve el paciente actual
+    setTimeout(() => {
+      const lista = $("#historyPatientSuggestions");
+      if (lista) lista.innerHTML = "";
+      const actual = patientById($("#historyPatientFilter")?.value || "");
+      if (actual) event.target.value = patientOptionLabel(actual);
+    }, 200);
+  });
+  $("#historyPatientSuggestions")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-select-history-patient]");
+    if (button) elegirPacienteDeHistoria(patientById(button.dataset.selectHistoryPatient));
   });
   on("#historyPatientFilter", "change", () => {
     // el consentimiento abierto era de ese paciente, no del siguiente
