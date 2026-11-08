@@ -2738,11 +2738,12 @@ function fillPaymentPatientSelect(select, selected = "") {
   if (selectedOption) groups.push(`<optgroup label="Paciente seleccionado">${selectedOption}</optgroup>`);
   if (debtOptions.length) groups.push(`<optgroup label="Atenciones pendientes">${debtOptions.join("")}</optgroup>`);
   if (agendaOptions.length) groups.push(`<optgroup label="Citas del día">${agendaOptions.join("")}</optgroup>`);
-  select.innerHTML = groups.length ? groups.join("") : `<option value="">Sin pacientes pendientes</option>`;
+  // la venta de mostrador va primera y siempre: sin citas del dia es lo unico que queda
+  select.innerHTML = `<option value="${VENTA_DE_MOSTRADOR}">Venta de mostrador (sin paciente)</option>` + groups.join("");
   if (selected && paymentSelectionExists(selected)) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
-  else if (agendaOptions.length) select.value = agendaPaymentAppointments()[0]?.id ? `appt:${agendaPaymentAppointments()[0].id}` : "";
-  else select.value = "";
+  else if (agendaOptions.length) select.value = agendaPaymentAppointments()[0]?.id ? `appt:${agendaPaymentAppointments()[0].id}` : VENTA_DE_MOSTRADOR;
+  else select.value = VENTA_DE_MOSTRADOR;
 }
 
 function agendaPaymentAppointments() {
@@ -2796,13 +2797,46 @@ function appointmentFromPaymentSelection(value) {
   return id ? state.appointments.find((appointment) => appointment.id === id) : null;
 }
 
+/* Venta de mostrador (pedido 2026-11-08): un cepillo o una pasta que se
+   vende a quien entra de la calle, sin cita ni ficha. En la lista de cobro es
+   la primera opcion. Aqui el servidor exige que todo pago apunte a un
+   paciente, asi que estas ventas van a un paciente de sistema con este mismo
+   id, que el servidor crea solo y nunca devuelve en la lista de pacientes. */
+const VENTA_DE_MOSTRADOR = "mostrador";
+
+function esPagoDeMostrador(payment) {
+  return !payment?.patientId || payment.patientId === VENTA_DE_MOSTRADOR;
+}
+
+function esVentaDeMostrador(value) {
+  return value === VENTA_DE_MOSTRADOR;
+}
+
 function patientIdFromPaymentSelection(value) {
+  if (esVentaDeMostrador(value)) return VENTA_DE_MOSTRADOR;
   const appointment = appointmentFromPaymentSelection(value);
   return appointment?.patientId || value || "";
 }
 
+/* Como se llama a quien pago: el paciente, o «Venta de mostrador» cuando el
+   cobro no lleva paciente. */
+function nombreDelPagador(payment) {
+  if (!payment) return "";
+  if (esPagoDeMostrador(payment)) return "Venta de mostrador";
+  return patientById(payment.patientId)?.name || "Paciente";
+}
+
+/* Lo vendido en un cobro sin paciente, para la boleta. */
+function descripcionDeVentaDeMostrador(payment) {
+  return (payment?.productItems || [])
+    .filter((item) => Number(item.quantity || 0) > 0)
+    .map((item) => `${Number(item.quantity)} ${item.name || inventoryProductById(item.productId)?.name || "Producto"}`)
+    .join(", ");
+}
+
 function paymentSelectionExists(value) {
   if (!value) return false;
+  if (esVentaDeMostrador(value)) return true;
   if (appointmentFromPaymentSelection(value)) return true;
   return state.patients.some((patient) => patient.id === value);
 }
@@ -3473,6 +3507,29 @@ function renderTreatmentPaymentOptions() {
   const previo = mismaSeleccion ? historySelect.value : "";
   historySelect.dataset.seleccion = patientSelect.value;
   const existe = (valor) => [...historySelect.options].some((option) => option.value === valor);
+  /* Venta de mostrador: no hay atencion que cobrar ni saldo; la fila de la
+     atencion se esconde y el monto es la suma de los productos. */
+  const filaDeAtencion = $("#paymentForm .payment-attention-row");
+  if (filaDeAtencion) filaDeAtencion.hidden = esVentaDeMostrador(patientSelect.value);
+  if (esVentaDeMostrador(patientSelect.value)) {
+    historySelect.innerHTML = `<option value="">Venta de mostrador</option>`;
+    historySelect.disabled = true;
+    forcedPaymentHistoryId = "";
+    const form = $("#paymentForm");
+    if (form?.amount) form.amount.readOnly = false;
+    if (form?.amountDue) ponerSaldoBase(form, 0);
+    if (form?.date) form.date.value = operatingDate();
+    if (form) {
+      form.dataset.paymentMode = "mostrador";
+      form.dataset.basePaymentAmount = 0;
+    }
+    const clearDebtBtn = $("#clearHistoryDebtBtn");
+    if (clearDebtBtn) clearDebtBtn.hidden = true;
+    applyProductTotalToPaymentForm();
+    updatePaymentChange();
+    aplicarCuadroDeDescuento();
+    return;
+  }
   const appointment = appointmentFromPaymentSelection(patientSelect.value);
   if (appointment) {
     const amount = Number(serviceByName(appointment.service)?.price || 0);
@@ -3774,7 +3831,7 @@ function ventasDeProductos(mes = mesDeVentasDeProductos()) {
       const precio = Number(movement.unitPrice || 0) || (cantidad ? Number(movement.total || 0) / cantidad : 0);
       return {
         fecha: movement.date,
-        paciente: (pago && patientById(pago.patientId)?.name) || "Venta sin paciente",
+        paciente: (pago && patientById(pago.patientId)?.name) || "Venta de mostrador",
         producto: inventoryProductById(movement.productId)?.name || "Producto",
         cantidad,
         precio,
@@ -7597,7 +7654,7 @@ function renderPayments() {
       const showChange = paymentCashPortion(payment) > 0;
       return `<tr>
         <td>${formatDate(payment.date || cashDate)}</td>
-        <td>${escapeHtml(patient?.name || "Paciente")}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
+        <td>${escapeHtml(nombreDelPagador(payment))}<br><span class="muted">${escapeHtml(history?.attendedBy ? `Dr(a). ${history.attendedBy}` : "")}</span></td>
         <td>${esDescuentoDeTratamiento(payment) ? `<span class="payment-discount-tag">Tratamiento</span>` : escapeHtml(paymentMethodLabel(payment))}</td>
         <td><strong>${money(payment.amount)}</strong>${esDescuentoDeTratamiento(payment) ? `<br><span class="muted">Descontado ${money(payment.descontado)} · no entra a caja</span>` : ""}${showChange ? `<br><span class="muted">Vuelto: ${money(payment.change || 0)}</span>` : ""}</td>
         <td>${escapeHtml(payment.receipt || (history ? history.reason : ""))}${payment.comprobante ? `<br><span class="muted">${escapeHtml(payment.comprobante)}</span>` : ""}</td>
@@ -7613,6 +7670,8 @@ function renderPayments() {
    que dejar el campo vacio habria emitido "Servicio odontologico" en una cita
    que tenia su servicio escrito. */
 function descripcionPorDefecto(payment) {
+  // venta de mostrador: lo vendido, no un servicio odontologico
+  if (payment && esPagoDeMostrador(payment)) return descripcionDeVentaDeMostrador(payment) || "Venta de productos";
   const patient = patientById(payment?.patientId);
   const history = historyById(payment?.historyId);
   const appointment = state.appointments.find((item) => item.id === payment?.appointmentId);
@@ -8042,7 +8101,7 @@ function openPaymentReceiptPrompt(context) {
   const resumen = $("#receiptPromptResumen");
   const pago = context?.payment;
   if (resumen) resumen.textContent = pago
-    ? [patientById(pago.patientId)?.name, money(pago.amount), String(paymentMethodLabel(pago) || "").toLowerCase().replace(/^./, (letra) => letra.toUpperCase())].filter(Boolean).join(" · ")
+    ? [nombreDelPagador(pago), money(pago.amount), String(paymentMethodLabel(pago) || "").toLowerCase().replace(/^./, (letra) => letra.toUpperCase())].filter(Boolean).join(" · ")
     : "";
   $("#receiptPromptDialog")?.showModal();
 }
@@ -8056,7 +8115,8 @@ function setupReceiptIssueForm() {
   form.elements.namedItem("type").value = "BOLETA";
   form.elements.namedItem("customerDoc").placeholder = "DNI";
   form.elements.namedItem("customerDoc").value = patient?.dni || "";
-  form.elements.namedItem("customerName").value = patient?.name || "";
+  // sin paciente, la boleta sale a clientes varios
+  form.elements.namedItem("customerName").value = patient?.name || (esPagoDeMostrador(context.payment) ? "CLIENTES VARIOS" : "");
   form.elements.namedItem("customerAddress").value = "";
   /* Vacio a proposito, con lo que saldria en gris: asi no hay que borrar lo
      puesto para escribir otra cosa, y quien no lo toca obtiene lo de siempre. */
@@ -8084,7 +8144,7 @@ function applyReceiptTypeUI() {
   } else {
     const patient = patientById(pendingPaymentContext?.payment?.patientId);
     docField.value = patient?.dni || "";
-    nameField.value = patient?.name || "";
+    nameField.value = patient?.name || (esPagoDeMostrador(pendingPaymentContext?.payment) ? "CLIENTES VARIOS" : "");
     addressField.value = "";
   }
 }
@@ -10469,7 +10529,7 @@ function csvRowsForDailyClose(date = todayISO()) {
     rows.push({
       seccion: "PAGO",
       fecha: payment.date || date,
-      concepto: patientById(payment.patientId)?.name || "",
+      concepto: nombreDelPagador(payment),
       metodo: paymentMethodLabel(payment),
       origen: "INGRESO",
       ingreso: Number(payment.amount || 0),
@@ -10517,7 +10577,7 @@ function printableRowsForDailyClose(date = todayISO()) {
   paymentsForCashView(date).forEach((payment) => {
     rows.push({
       tipo: "PAGO",
-      detalle: patientById(payment.patientId)?.name || "",
+      detalle: nombreDelPagador(payment),
       metodo: paymentMethodLabel(payment),
       origen: "INGRESO",
       monto: Number(payment.amount || 0),
@@ -12680,13 +12740,15 @@ function bindEvents() {
       return;
     }
     const careAmount = Math.max(0, amount - productsTotal - extrasTotal);
+    const ventaDeMostrador = esVentaDeMostrador(data.patientId);
     if (!appointment && !data.historyId && !hasProducts) {
-      uiAlert("Selecciona una atención pendiente, una cita del día o agrega un producto.");
+      uiAlert(ventaDeMostrador ? "Agrega lo que se vende con «+ Producto»." : "Selecciona una atención pendiente, una cita del día o agrega un producto.");
       restorePaymentButton();
       return;
     }
     const paymentPatient = patientById(paymentPatientId);
-    const missingPatientFields = patientPaymentMissingFields(paymentPatient);
+    // la venta de mostrador no lleva paciente: no hay datos que completar
+    const missingPatientFields = ventaDeMostrador ? [] : patientPaymentMissingFields(paymentPatient);
     if (missingPatientFields.length) {
       uiAlert(`Antes de registrar el pago, completa los datos del paciente: ${missingPatientFields.join(", ")}.`);
       restorePaymentButton();
@@ -12742,13 +12804,16 @@ function bindEvents() {
       receipt: [
         tratamientoCobrado && !String(data.receipt || "").trim()
           ? `Tratamiento: ${tratamientoCobrado.entry.plan}`
-          : buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
+          : ventaDeMostrador && !String(data.receipt || "").trim()
+            ? "Venta de mostrador" // el servidor le agrega «Productos: …» con lo vendido
+            : buildPaymentReceiptText(data.receipt, appointment, selectedProductSaleItems),
         extrasDelPago.length ? `Servicios: ${extrasDelPago.map((item) => `${item.texto} ${money(item.monto)}`).join(", ")}` : ""
       ].filter((parte) => String(parte || "").trim()).join(" | "),
       /* Quien atendio ese dia, que no siempre es el doctor asignado: si Carlos
          se demora, lo atiende otra y la comision le toca a ella. Se guarda en el
          pago porque es ahi donde se sabe y donde se cuenta el dinero. */
-      attendedBy: String(data.attendedBy || "").trim(),
+      // la venta de mostrador no es atencion de nadie: no comisiona ni lleva doctor
+      attendedBy: ventaDeMostrador ? "" : String(data.attendedBy || "").trim(),
       /* El servidor guarda quien cobro tomandolo de la sesion, no de aqui. Se
          anota igual en la copia local para que la fila lo muestre al momento y
          no recien despues de recargar; es el mismo usuario, asi que coincide. */
@@ -13283,7 +13348,7 @@ function bindEvents() {
     const cashDate = cashViewDate();
     exportCsv(`pagos-${cashDate}.csv`, visiblePaymentsForCashView(cashDate).map((payment) => ({
       fecha: payment.date || cashDate,
-      paciente: patientById(payment.patientId)?.name || "",
+      paciente: nombreDelPagador(payment),
       metodo: payment.method,
       monto: Number(payment.amount || 0),
       vuelto: Number(payment.change || 0),

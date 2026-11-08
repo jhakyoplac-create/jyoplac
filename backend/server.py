@@ -75,6 +75,10 @@ def now_id(prefix):
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
 
+# el paciente de sistema de las ventas de mostrador (2026-11-08)
+PACIENTE_MOSTRADOR = "mostrador"
+
+
 def today_lima():
     if ZoneInfo:
         return datetime.now(ZoneInfo("America/Lima")).date().isoformat()
@@ -1249,6 +1253,7 @@ def list_patients():
                    (SELECT COUNT(*) FROM appointments a
                      WHERE a.patient_id = p.id) AS total_appointments
               FROM patients p
+             WHERE p.id <> 'mostrador'
              ORDER BY p.name ASC
             """,
             (hoy,),
@@ -1331,6 +1336,7 @@ def seguimiento_de_pacientes():
                      WHERE a.patient_id = p.id AND a.date < ?
                        AND a.status IN ('REPROGRAMADA', 'CANCELADA', 'NO_ASISTIO')) AS ultima_fallida
               FROM patients p
+             WHERE p.id <> 'mostrador'
              ORDER BY p.name ASC
             """,
             (hoy, hoy),
@@ -2855,27 +2861,48 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 cash_received = float(data.get("cashReceived") or cash_portion or 0) if cash_portion > 0 else 0.0
                 with db() as conn:
                     payment_date = data.get("date") or open_cash_date(conn) or today_lima()
-                    patient = conn.execute(
-                        "SELECT name, dni, phone, birth_date FROM patients WHERE id = ?",
-                        (data.get("patientId"),),
-                    ).fetchone()
-                    if not patient:
-                        return send_json(self, {"error": "Paciente no encontrado."}, 404)
-                    missing_patient_fields = []
-                    if not str(patient["name"] or "").strip():
-                        missing_patient_fields.append("nombre completo")
-                    if not str(patient["dni"] or "").strip():
-                        missing_patient_fields.append("DNI")
-                    if not str(patient["phone"] or "").strip():
-                        missing_patient_fields.append("numero de celular")
-                    if not str(patient["birth_date"] or "").strip():
-                        missing_patient_fields.append("fecha de nacimiento")
-                    if missing_patient_fields:
-                        return send_json(
-                            self,
-                            {"error": "Antes de registrar el pago, completa los datos del paciente: " + ", ".join(missing_patient_fields) + "."},
-                            400,
+                    # Venta de mostrador (2026-11-08): productos vendidos a quien entra
+                    # de la calle, sin paciente. Solo vale con productos y sin atencion.
+                    # Todo pago apunta a un paciente (clave foranea), asi que la venta va a
+                    # un paciente de sistema que se crea aqui la primera vez y que
+                    # list_patients nunca devuelve.
+                    venta_de_mostrador = str(data.get("patientId") or "").strip() == PACIENTE_MOSTRADOR
+                    if venta_de_mostrador:
+                        if not product_items:
+                            return send_json(self, {"error": "Agrega lo que se vende con + Producto."}, 400)
+                        if str(data.get("historyId") or "").strip() or data.get("appointmentId") or treatment_id:
+                            return send_json(self, {"error": "La venta de mostrador no lleva atencion ni cita."}, 400)
+                        data["patientId"] = PACIENTE_MOSTRADOR
+                        conn.execute(
+                            """
+                            INSERT INTO patients (id, dni, name, phone, birth_date, status)
+                            VALUES (?, ?, ?, ?, ?, 'INACTIVO')
+                            ON CONFLICT(id) DO NOTHING
+                            """,
+                            (PACIENTE_MOSTRADOR, "MOSTRADOR", "VENTA DE MOSTRADOR", "", ""),
                         )
+                    if not venta_de_mostrador:
+                        patient = conn.execute(
+                            "SELECT name, dni, phone, birth_date FROM patients WHERE id = ?",
+                            (data.get("patientId"),),
+                        ).fetchone()
+                        if not patient:
+                            return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                        missing_patient_fields = []
+                        if not str(patient["name"] or "").strip():
+                            missing_patient_fields.append("nombre completo")
+                        if not str(patient["dni"] or "").strip():
+                            missing_patient_fields.append("DNI")
+                        if not str(patient["phone"] or "").strip():
+                            missing_patient_fields.append("numero de celular")
+                        if not str(patient["birth_date"] or "").strip():
+                            missing_patient_fields.append("fecha de nacimiento")
+                        if missing_patient_fields:
+                            return send_json(
+                                self,
+                                {"error": "Antes de registrar el pago, completa los datos del paciente: " + ", ".join(missing_patient_fields) + "."},
+                                400,
+                            )
                     history_id = str(data.get("historyId") or "").strip()
                     if treatment_id:
                         tratamiento = conn.execute(
@@ -3033,7 +3060,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     apply_payment_inventory(conn, item_id, payment_date, product_items)
                     snapshot = inventory_snapshot(conn)
                 pid = str(data.get("patientId") or "")
-                anotar(quien_cobra, "COBRO", f"Cobro S/ {amount:.2f} en {method or 'efectivo'} a {nombre_de_paciente(pid)}", pid)
+                anotar(quien_cobra, "COBRO", f"Cobro S/ {amount:.2f} en {method or 'efectivo'} a {'venta de mostrador' if pid == PACIENTE_MOSTRADOR else nombre_de_paciente(pid)}", pid)
                 return send_json(self, {"ok": True, "id": item_id, **snapshot})
             except Exception as exc:
                 return send_json(self, {"error": f"No se pudo guardar el pago: {exc}"}, 500)
