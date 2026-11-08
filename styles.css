@@ -3748,6 +3748,15 @@ menu {
   grid-column: 1 / -1;
 }
 
+/* Movimientos de inventario va a la derecha, bajo los productos en stock. Era
+   el cuarto elemento de la grilla; al quitar el formulario Entrada / salida
+   (2026-11-08) quedo tercero y caia en la columna angosta. */
+@media (min-width: 981px) {
+  .content-grid.form-and-list > .inventory-movements-panel {
+    grid-column: 2;
+  }
+}
+
 .odontogram-copies-panel th:last-child {
   text-align: right;
 }
