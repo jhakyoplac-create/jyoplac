@@ -178,6 +178,8 @@ function filaDeMedicamento(item = {}) {
       <option value="__otra">Otra…</option>
     </select>
     <input data-rx="dias" value="${escapeHtml(item.dias || "")}" maxlength="3" inputmode="numeric" placeholder="Días" aria-label="Duración en días" />
+    <!-- en la tablet el teclado no manda Enter: el + abre la fila de abajo (pedido 2026-11-09) -->
+    <button class="rx-mas" type="button" title="Agregar otro medicamento debajo" aria-label="Agregar otro medicamento" data-rx-agregar>+</button>
     <button class="rx-quitar" type="button" title="Quitar este medicamento" data-rx-quitar>×</button>
   </div>`;
 }
@@ -384,9 +386,9 @@ function hojaDeRecetas(patientId) {
         <!-- medicamentos y receta, cada uno en un rectangulo a todo el ancho, uno debajo del otro (pedido 2026-10-29) -->
         <div class="rx-cajas rx-cajas-largas">
           <div class="rx-meds">
-            <span class="rx-meds-titulo">Medicamentos <small>escribe el nombre, a la derecha la dosis, la presentación y la cantidad, y con Enter pasas a la siguiente línea</small></span>
+            <span class="rx-meds-titulo">Medicamentos <small>escribe el nombre, a la derecha la dosis, la presentación y la cantidad, y con Enter o con + pasas a la siguiente línea</small></span>
             <div class="rx-med-cuadro">
-              <div class="rx-med-cabecera"><span>Medicamento</span><span>Dosis</span><span>Presentación</span><span>Cant.</span><span>Vía</span><span>Frecuencia</span><span>Días</span><span></span></div>
+              <div class="rx-med-cabecera"><span>Medicamento</span><span>Dosis</span><span>Presentación</span><span>Cant.</span><span>Vía</span><span>Frecuencia</span><span>Días</span><span></span><span></span></div>
               <div class="rx-med-filas">${editando ? filasDeLaReceta(editando) : filaDeMedicamento()}</div>
             </div>
           </div>

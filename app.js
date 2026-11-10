@@ -10690,6 +10690,13 @@ function bindHojasExtra() {
     // la receta medica: imprimir una guardada o borrarla, y agregar o quitar filas de medicamentos
     const agregarRx = event.target.closest("[data-rx-agregar]");
     if (agregarRx) {
+      // el + de una fila abre la nueva justo debajo de ella; fuera de una fila, al final
+      const fila = agregarRx.closest(".rx-med-fila");
+      if (fila) {
+        fila.insertAdjacentHTML("afterend", window.Recetas.filaDeMedicamento());
+        fila.nextElementSibling?.querySelector("input")?.focus();
+        return;
+      }
       const filas = agregarRx.closest(".rx-meds")?.querySelector(".rx-med-filas");
       if (filas) {
         filas.insertAdjacentHTML("beforeend", window.Recetas.filaDeMedicamento());
