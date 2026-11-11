@@ -597,16 +597,14 @@ def corregir_metodo_de_compras_con_utilidad(conn):
         print(f"[Dental]   {identificador} {fecha} {detalle}")
 
 
-# Cuantos dias se guarda el registro de actividad. Antes se borraba todo lo que
-# no fuera de hoy, asi que al dia siguiente no quedaba con que mirar quien hizo
-# que. Una semana alcanza para revisar y no crece sin fin.
-DIAS_DE_BITACORA = 7
-
-
+# Cuanto se guarda el registro de actividad: el mes en curso y el anterior
+# completo (pedido 2026-11-10; antes una semana). El dia 1 todavia se mira
+# entero el mes que acaba de cerrar, y no crece sin fin.
 def dias_de_bitacora():
     """Los dias que se pueden consultar, del mas reciente al mas antiguo."""
     hoy = date.fromisoformat(today_lima())
-    return [(hoy - timedelta(days=n)).isoformat() for n in range(DIAS_DE_BITACORA)]
+    desde = (hoy.replace(day=1) - timedelta(days=1)).replace(day=1)
+    return [(hoy - timedelta(days=n)).isoformat() for n in range((hoy - desde).days + 1)]
 
 
 def purge_old_audit_events(conn):

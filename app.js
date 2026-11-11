@@ -9520,7 +9520,9 @@ function etiquetaDeDia(fecha) {
   ayer.setDate(ayer.getDate() - 1);
   if (fecha === ayer.toISOString().slice(0, 10)) return "Ayer";
   const dia = new Date(`${fecha}T12:00:00`);
-  const texto = dia.toLocaleDateString("es-PE", { weekday: "long", day: "2-digit", month: "2-digit" });
+  // corto («Mié 04/11»): el mes y el dia van lado a lado junto al titulo (2026-11-10)
+  const semana = dia.toLocaleDateString("es-PE", { weekday: "short" }).replace(".", "");
+  const texto = `${semana} ${dia.toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit" })}`;
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
@@ -9573,16 +9575,42 @@ function horaDelEvento(evento) {
   return (partes[1] || "").slice(0, 5);
 }
 
+/* El registro se mira por mes y, dentro del mes, por dia (pedido 2026-11-10). */
+function nombreDelMes(mes) {
+  const texto = new Date(`${mes}-15T12:00:00`).toLocaleDateString("es-PE", { month: "long", year: "numeric" }).replace(" de ", " ");
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+// al cambiar de mes se abre su dia mas reciente con movimientos
+function elegirMesDeBitacora(mes) {
+  const dias = (bitacora.dias || []).filter((dia) => dia.fecha.startsWith(mes));
+  const dia = (dias.find((item) => item.total) || dias[0])?.fecha;
+  if (dia) cargarBitacora(dia);
+}
+
 function renderDailyAuditReport() {
   const caja = $("#dailyAuditReport");
   if (!caja) return;
 
+  const todosLosDias = bitacora.dias.length ? bitacora.dias : [{ fecha: todayISO(), total: 0 }];
+  const mesElegido = String(bitacora.dia || todayISO()).slice(0, 7);
+  const selectorMes = $("#auditMonth");
+  if (selectorMes) {
+    const meses = [...new Set(todosLosDias.map((dia) => dia.fecha.slice(0, 7)))];
+    const html = meses.map((mes) => {
+      const total = todosLosDias.filter((dia) => dia.fecha.startsWith(mes)).reduce((suma, dia) => suma + dia.total, 0);
+      return `<option value="${mes}"${mes === mesElegido ? " selected" : ""}>${escapeHtml(nombreDelMes(mes))} — ${total}</option>`;
+    }).join("");
+    if (selectorMes.dataset.pintado !== html) {
+      selectorMes.innerHTML = html;
+      selectorMes.dataset.pintado = html;
+    }
+  }
   const selector = $("#auditDay");
   if (selector) {
-    const dias = bitacora.dias.length ? bitacora.dias : [{ fecha: todayISO(), total: 0 }];
+    const dias = todosLosDias.filter((dia) => dia.fecha.startsWith(mesElegido));
     const html = dias.map((dia) => {
-      const marca = dia.total ? `${dia.total} movimiento${dia.total === 1 ? "" : "s"}` : "sin movimientos";
-      return `<option value="${dia.fecha}"${dia.fecha === bitacora.dia ? " selected" : ""}>${escapeHtml(etiquetaDeDia(dia.fecha))} — ${marca}</option>`;
+      return `<option value="${dia.fecha}"${dia.fecha === bitacora.dia ? " selected" : ""}>${escapeHtml(etiquetaDeDia(dia.fecha))} — ${dia.total}</option>`;
     }).join("");
     if (selector.dataset.pintado !== html) {
       selector.innerHTML = html;
@@ -13172,6 +13200,7 @@ function bindEvents() {
     render();
   });
 
+  $("#auditMonth")?.addEventListener("change", (event) => elegirMesDeBitacora(event.target.value));
   $("#auditDay")?.addEventListener("change", (event) => cargarBitacora(event.target.value));
   $("#auditSearch")?.addEventListener("input", () => renderDailyAuditReport());
   $("#auditExport")?.addEventListener("click", exportarBitacora);

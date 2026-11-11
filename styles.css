@@ -1380,6 +1380,13 @@ tr.followup-pending td:first-child {
   flex: 1 1 120px;
 }
 
+/* mes y dia, lado a lado y del ancho de lo que dicen (2026-11-10) */
+.audit-controles select {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+
 /* El titulo de una pieza y los controles en la otra: si no entran en la misma
    linea, bajan enteros en vez de partir el titulo en dos. */
 .daily-audit-panel .panel-head {
