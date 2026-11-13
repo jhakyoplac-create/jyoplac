@@ -53,6 +53,16 @@ DOC_LOOKUP_KEY = os.environ.get("DOC_LOOKUP_KEY", "").strip()
 DOC_LOOKUP_BASE_URL = os.environ.get("DOC_LOOKUP_BASE_URL", "").strip().rstrip("/")
 DOC_LOOKUP_DNI_URL = os.environ.get("DOC_LOOKUP_DNI_URL", "").strip()
 DOC_LOOKUP_RUC_URL = os.environ.get("DOC_LOOKUP_RUC_URL", "").strip()
+# El proveedor de respaldo. El 2026-11-13 el proveedor del consultorio paso el
+# dia lento -respondia bien, pero en 20 segundos o mas- y aqui se cortaba a los
+# 12 con un "No se pudo contactar". Si hay clave de respaldo, cuando el
+# proveedor propio no responde a tiempo, falla o se queda sin cupo, se le
+# pregunta a este otro y recepcion recibe los datos igual. En cuanto el propio
+# vuelve a contestar bien se usa el propio: cada consulta empieza por el.
+# Se activa cargando DOC_LOOKUP_RESPALDO_KEY en Render; por defecto es DevEx.
+DOC_LOOKUP_RESPALDO_KEY = os.environ.get("DOC_LOOKUP_RESPALDO_KEY", "").strip()
+DOC_LOOKUP_RESPALDO_DNI_URL = os.environ.get("DOC_LOOKUP_RESPALDO_DNI_URL", "").strip() or "https://tools.devex.pe/api/v1/person/{numero}"
+DOC_LOOKUP_RESPALDO_RUC_URL = os.environ.get("DOC_LOOKUP_RESPALDO_RUC_URL", "").strip() or "https://tools.devex.pe/api/v1/company/{numero}"
 
 sessions = {}
 
@@ -1079,47 +1089,103 @@ def consultar_documento(kind, number):
     if not DOC_LOOKUP_KEY:
         return {"error": "La consulta de documentos no esta configurada. Agrega DOC_LOOKUP_KEY y DOC_LOOKUP_DNI_URL en Render."}, 503
 
+    candidatos = list(documento_candidatos(kind))
+    respaldo = respaldo_de_documento(kind, number, candidatos)
+    # habiendo a quien mas preguntar no tiene sentido tener a recepcion esperando
+    espera = 8 if respaldo else 12
+
+    falla = None
     last_404 = ""
-    for template in documento_candidatos(kind):
-        request = urllib.request.Request(
-            documento_url(template, number),
-            headers={
-                "Accept": "application/json",
-                "User-Agent": "CM-Odontologia/1.0",
-                # Cada proveedor pide la clave a su manera y ninguno se queja de
-                # que venga tambien de la otra. Mandar las dos evita tener que
-                # tocar el codigo cuando se cambia de proveedor.
-                "x-api-key": DOC_LOOKUP_KEY,
-                "Authorization": f"Bearer {DOC_LOOKUP_KEY}",
-            },
-            method="GET",
-        )
+    for template in candidatos:
         try:
-            with urllib.request.urlopen(request, timeout=12) as response:
-                raw_text = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            try:
-                error_text = exc.read().decode("utf-8")
-            except Exception:
-                error_text = ""
-            if exc.code == 404:
-                last_404 = error_text[:300]
-                continue
-            return {"error": f"El proveedor respondio con error {exc.code}.", "detail": error_text[:300]}, 502
-        except Exception:
-            return {"error": "No se pudo contactar al proveedor de consulta de documentos."}, 502
-
+            estado, texto = pedir_documento(documento_url(template, number), DOC_LOOKUP_KEY, espera)
+        except Exception as exc:
+            falla = falla_de_red(exc)
+            break
+        if estado == 404:
+            last_404 = texto[:300]
+            continue
+        if estado >= 400:
+            falla = ({"error": f"El proveedor respondio con error {estado}.", "detail": texto[:300]}, 502)
+            # Al respaldo solo se va si el proveedor fallo (5xx), pide esperar
+            # entre consultas (429) o se quedo sin cupo o sin saldo (422, 402).
+            # Una clave rechazada o una consulta mal armada hay que verlas.
+            if estado >= 500 or estado in (429, 422, 402):
+                break
+            return falla
         try:
-            payload = json.loads(raw_text) if raw_text else {}
+            payload = json.loads(texto) if texto else {}
         except json.JSONDecodeError:
-            return {"error": "El proveedor devolvio una respuesta no valida."}, 502
-
+            falla = ({"error": "El proveedor devolvio una respuesta no valida."}, 502)
+            break
         return normalizar_respuesta_documento(kind, number, payload), 200
+    else:
+        return {
+            "error": f"No se pudo consultar el {kind.upper()}. Completa los datos manualmente.",
+            "detail": last_404,
+        }, 502
 
-    return {
-        "error": f"No se pudo consultar el {kind.upper()}. Completa los datos manualmente.",
-        "detail": last_404,
-    }, 502
+    if respaldo:
+        try:
+            estado, texto = pedir_documento(respaldo, DOC_LOOKUP_RESPALDO_KEY, 10)
+            if 200 <= estado < 300:
+                return normalizar_respuesta_documento(kind, number, json.loads(texto) if texto else {}), 200
+        except Exception:
+            pass  # si el respaldo tampoco contesta, se explica la falla del propio
+    return falla
+
+
+def pedir_documento(url, key, espera):
+    """Una consulta al proveedor. Devuelve (estado, texto) tambien cuando el
+    proveedor responde con error; los problemas de red salen como excepcion."""
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "CM-Odontologia/1.0",
+            # Cada proveedor pide la clave a su manera y ninguno se queja de
+            # que venga tambien de la otra. Mandar las dos evita tener que
+            # tocar el codigo cuando se cambia de proveedor.
+            "x-api-key": key,
+            "Authorization": f"Bearer {key}",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=espera) as response:
+            return response.status, response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        try:
+            error_text = exc.read().decode("utf-8")
+        except Exception:
+            error_text = ""
+        return exc.code, error_text
+
+
+def respaldo_de_documento(kind, number, candidatos):
+    """La direccion del proveedor de respaldo, o "" si no hay o si es el mismo
+    proveedor que ya se usa: el que consulta con el no tiene a quien mas ir."""
+    if not DOC_LOOKUP_RESPALDO_KEY:
+        return ""
+    url = documento_url(DOC_LOOKUP_RESPALDO_DNI_URL if kind == "dni" else DOC_LOOKUP_RESPALDO_RUC_URL, number)
+    anfitrion = urlparse(url).hostname or ""
+    if any((urlparse(documento_url(template, number)).hostname or "") == anfitrion for template in candidatos):
+        return ""
+    return url
+
+
+def falla_de_red(exc):
+    """Lo que se le dice a recepcion cuando no hubo respuesta. Antes todo salia
+    como "No se pudo contactar", tambien cuando el proveedor solo estaba lento,
+    y no habia forma de saber cual de las dos cosas pasaba."""
+    motivo = getattr(exc, "reason", exc)
+    texto = f"{type(motivo).__name__}: {motivo}"[:200]
+    if isinstance(motivo, TimeoutError) or "timed out" in texto.lower():
+        return {
+            "error": "El proveedor no respondio a tiempo: su servicio esta lento. Escribe los datos a mano y prueba otra vez en unos minutos.",
+            "detail": texto,
+        }, 502
+    return {"error": "No se pudo contactar al proveedor de consulta de documentos.", "detail": texto}, 502
 
 
 CAMPOS_DE_FIRMA = ("firma", "firmaFecha", "firmaPor", "firmaDoctor", "firmaDoctorFecha", "firmaDoctorPor")
