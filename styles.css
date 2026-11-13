@@ -1152,9 +1152,10 @@ label {
 }
 
 /* Color por doctor: la cita toma el color de quien atiende (franja gruesa a la
-   izquierda y fondo suave). La atendida vuelve al verde de siempre y conserva
-   la franja del doctor, para seguir viendo de quien fue; la cancelada y la
-   que no asistio se quedan en gris con la franja del doctor. */
+   izquierda y fondo suave). La atendida se pinta entera con el color
+   encendido del doctor -el mismo de la franja-, con la letra blanca u oscura
+   segun el color; la cancelada y la que no asistio se quedan en gris con la
+   franja del doctor. */
 .slot.busy.del-doctor {
   border-color: var(--doctor-color);
   border-left: 6px solid var(--doctor-color);
@@ -1162,11 +1163,16 @@ label {
 }
 
 .slot.busy.del-doctor.status-atendida {
-  border-color: #22c55e;
-  border-left-color: var(--doctor-color);
-  /* Un verde mas marcado que el de antes: el clarito se confundia con el
-     turquesa de las citas reservadas de Mily. */
-  background: #bbf0c8;
+  background: var(--doctor-color);
+  color: var(--doctor-texto, #fff);
+}
+
+.slot.busy.del-doctor.status-atendida .slot-meta {
+  color: inherit;
+}
+
+.slot.busy.del-doctor.status-atendida .slot-meta span {
+  border-right-color: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 .slot.busy.del-doctor.status-no_asistio,

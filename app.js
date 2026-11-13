@@ -4633,7 +4633,19 @@ function colorDelDoctor(doctor) {
   const nombre = String(doctor || "").trim().replace(/^(dra?\.?|doctora?)\s+/i, "");
   const fila = COLORES_POR_DOCTOR.find(([patron]) => patron.test(nombre));
   if (!fila) return "";
-  return `--doctor-color: ${fila[1]};${fila[2] ? ` --doctor-fondo: ${fila[2]};` : ""}`;
+  return `--doctor-color: ${fila[1]}; --doctor-texto: ${letraSobreColor(fila[1])};${fila[2] ? ` --doctor-fondo: ${fila[2]};` : ""}`;
+}
+
+/* La cita atendida se pinta entera con el color encendido de su doctor, y la
+   letra tiene que leerse encima: blanca sobre los tonos oscuros (el azul) y
+   oscura sobre los claros (rosado, turquesa). Se elige la que mas contrasta. */
+function letraSobreColor(hex) {
+  const canal = (desde) => {
+    const valor = parseInt(String(hex).slice(desde, desde + 2), 16) / 255;
+    return valor <= 0.03928 ? valor / 12.92 : ((valor + 0.055) / 1.055) ** 2.4;
+  };
+  const luz = 0.2126 * canal(1) + 0.7152 * canal(3) + 0.0722 * canal(5);
+  return 1.05 / (luz + 0.05) >= (luz + 0.05) / 0.063 ? "#ffffff" : "#16202a";
 }
 
 function renderAgenda() {
