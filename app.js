@@ -934,6 +934,43 @@ function applyApiBootstrap(payload) {
   render();
 }
 
+/* El estado entero para el respaldo: la base completa que entrega el servidor,
+   pasada por los mismos traductores que el arranque, sobre una copia de lo que
+   hay en pantalla (la configuracion, los servicios, los cierres del dia). No
+   toca el estado con el que se esta trabajando. */
+async function respaldoCompleto() {
+  const todo = await apiFetch("/api/export-completo");
+  if (!Array.isArray(todo.patients) || !Array.isArray(todo.appointments)) {
+    throw new Error("El servidor no entregó la base completa.");
+  }
+  const lista = (clave, traducir) => (Array.isArray(todo[clave]) ? todo[clave] : []).map(traducir);
+  const estado = structuredClone(state);
+  Object.assign(estado, {
+    patients: lista("patients", mapApiPatient),
+    appointments: lista("appointments", mapApiAppointment),
+    clinicalHistory: lista("clinicalHistory", mapApiClinicalHistory),
+    treatments: lista("treatments", mapApiTreatment),
+    odontogram: lista("odontogram", mapApiOdontogram),
+    odontogramSnapshots: lista("odontogramSnapshots", mapApiOdontogramSnapshot),
+    proformas: lista("proformas", mapApiProforma),
+    consentimientos: lista("consentimientos", mapApiConsentimiento),
+    payments: lista("payments", mapApiPayment),
+    electronicReceipts: lista("electronicReceipts", mapApiElectronicReceipt),
+    expenses: lista("expenses", mapApiExpense),
+    inventoryProducts: lista("inventoryProducts", mapApiInventoryProduct),
+    inventoryMovements: lista("inventoryMovements", mapApiInventoryMovement),
+    cashSessions: lista("cashSessions", mapApiCashSession),
+    pettyCashAllocations: lista("pettyCashAllocations", mapApiPettyCash),
+    auditEvents: lista("auditEvents", mapApiAuditEvent),
+    users: lista("users", mapApiUser),
+    profesionales: lista("profesionales", mapApiUser)
+  });
+  const fotos = (Array.isArray(todo.fotos) ? todo.fotos : [])
+    .filter((fila) => fila?.foto)
+    .map((fila) => ({ patientId: fila.patient_id, foto: fila.foto }));
+  return { estado, fotos };
+}
+
 function applyApiCashState(payload) {
   if (Array.isArray(payload.cashSessions)) {
     state.cashSessions = payload.cashSessions.map(mapApiCashSession);
@@ -13321,9 +13358,39 @@ function bindEvents() {
     setView("dashboard");
   });
 
-  $("#backupBtn").addEventListener("click", () => {
+  /* El respaldo sale del servidor, completo. Antes se descargaba lo que el
+     navegador tenia cargado en ese momento, y el navegador solo carga lo que
+     necesita para trabajar: las citas de hoy y dos dias mas, la actividad del
+     dia. El archivo parecia un respaldo y le faltaba casi todo el historial
+     de citas. Ahora se pide la base entera y, si el servidor no la entrega, no
+     se descarga nada a medias: se avisa. Las fotos del DNI van en un archivo
+     aparte, porque pesan y no forman parte del sistema que se vuelve a cargar. */
+  $("#backupBtn").addEventListener("click", async (event) => {
     if (!isAdmin()) return;
-    download("respaldo-cm-odontologia.json", JSON.stringify(state, null, 2), "application/json");
+    if (!API_ENABLED || !apiToken) {
+      download("respaldo-cm-odontologia.json", JSON.stringify(state, null, 2), "application/json");
+      return;
+    }
+    const boton = event.currentTarget;
+    boton.disabled = true;
+    boton.textContent = "Preparando el respaldo…";
+    try {
+      const { estado, fotos } = await respaldoCompleto();
+      download(`respaldo-cm-odontologia-${todayISO()}.json`, JSON.stringify(estado, null, 2), "application/json");
+      if (fotos.length) {
+        download(`fotos-dni-cm-odontologia-${todayISO()}.json`, JSON.stringify(fotos), "application/json");
+      }
+      uiAlert(
+        `Respaldo completo descargado: ${estado.patients.length} pacientes, ${estado.appointments.length} citas, ` +
+        `${estado.clinicalHistory.length} atenciones y ${estado.payments.length} pagos.` +
+        (fotos.length ? `\n\n${fotos.length === 1 ? "La foto de DNI va" : `Las ${fotos.length} fotos de DNI van`} en un segundo archivo.` : "")
+      );
+    } catch (error) {
+      uiAlert(`No se pudo traer el respaldo completo del servidor, así que no se descargó nada.\n\n${error.message}\n\nInténtalo otra vez en un momento.`);
+    } finally {
+      boton.disabled = false;
+      boton.textContent = "Exportar respaldo";
+    }
   });
   $("#restoreInput").addEventListener("change", async (event) => {
     if (!isAdmin()) return;

@@ -1703,6 +1703,38 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "profesionales": list_signers(),
                 "config": app_config(),
             })
+        if parsed.path == "/api/export-completo":
+            # El respaldo completo, para guardarlo o para mudar el consultorio a
+            # otro sistema. El arranque le da al navegador solo lo que necesita
+            # para trabajar -las citas de hoy y dos dias mas, la actividad del
+            # dia- y por eso «Exportar respaldo» sacaba un archivo al que le
+            # faltaba casi todo el historial de citas. Aqui sale la base entera:
+            # todas las citas, toda la actividad guardada y las fotos del DNI.
+            # Las contrasenas no salen: estan cifradas y no sirven fuera de aqui.
+            if normalize_role(user["role"]) != "ADMIN":
+                return send_json(self, {"error": "Solo el administrador puede exportar el respaldo completo."}, 403)
+            return send_json(self, {
+                "patients": list_patients(),
+                "appointments": list_table("appointments", "date DESC, time DESC"),
+                "clinicalHistory": list_table("clinical_history", "date DESC"),
+                "treatments": list_table("treatments", "created_at DESC"),
+                "odontogram": list_table("odontogram", "patient_id ASC, tooth ASC"),
+                "odontogramSnapshots": list_table("odontogram_snapshots", "saved_at DESC"),
+                "proformas": list_table("proformas", "numero DESC"),
+                "consentimientos": list_table("consentimientos", "fecha DESC"),
+                "payments": list_table("payments", "date DESC, created_at DESC"),
+                "electronicReceipts": list_electronic_receipts(),
+                "expenses": list_table("expenses", "date DESC, created_at DESC"),
+                "inventoryProducts": list_table("inventory_products", "name ASC"),
+                "inventoryMovements": list_table("inventory_movements", "date DESC, created_at DESC"),
+                "cashSessions": list_table("cash_sessions", "date DESC"),
+                "pettyCashAllocations": list_table("petty_cash_allocations", "date DESC"),
+                "auditEvents": list_table("audit_events", "created_at DESC"),
+                "users": list_users(),
+                "profesionales": list_signers(),
+                "config": app_config(),
+                "fotos": list_table("patient_photos", "patient_id ASC"),
+            })
         if parsed.path == "/api/cash-state":
             return send_json(self, {
                 "cashSessions": list_table("cash_sessions", "date DESC"),
