@@ -11340,12 +11340,32 @@ function bindEvents() {
     if (lista) lista.innerHTML = "";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   };
+  /* Tambien por numero de historia (pedido del 2026-11-15): "6", "0006" o
+     "HC N.° 0006" traen la historia 6, y "DNI - HC N.° 0006", como sale en las
+     hojas, trae a ese paciente. El numero va primero; despues, lo de siempre
+     por nombre, DNI o celular. */
+  const coincidenciasDeHistoria = (texto) => {
+    const escrito = String(texto || "").trim();
+    const sinPrefijo = (valor) => valor.replace(/^hc\s*(n\s*\.?\s*°?)?\s*/i, "");
+    const conDni = escrito.match(/^(\d+)\s*-\s*(.+)$/);
+    const numeroConDni = conDni && /^\d{1,6}$/.test(sinPrefijo(conDni[2].trim())) ? Number(sinPrefijo(conDni[2].trim())) : null;
+    const suelto = sinPrefijo(escrito);
+    const soloNumero = !conDni && /^\d{1,5}$/.test(suelto) ? Number(suelto) : null;
+    const porHistoria = state.patients.filter((patient) => {
+      const numero = Number(patient.historiaNumero || 0);
+      if (!numero) return false;
+      if (numeroConDni !== null) return String(patient.dni || "").startsWith(conDni[1]) && numero === numeroConDni;
+      return soloNumero !== null && numero === soloNumero;
+    });
+    const resto = numeroConDni !== null ? [] : receivablePatientMatches(escrito).filter((patient) => !porHistoria.includes(patient));
+    return [...porHistoria, ...resto].slice(0, 12);
+  };
   const sugerirPacientesDeHistoria = () => {
     const buscador = $("#historyPatientSearch");
     const lista = $("#historyPatientSuggestions");
     if (!buscador || !lista) return;
-    lista.innerHTML = receivablePatientMatches(buscador.value).map((patient) =>
-      `<button type="button" data-select-history-patient="${patient.id}"><strong>${escapeHtml(patient.name)}</strong><span>${escapeHtml(patient.dni || "")}${patient.phone ? ` · ${escapeHtml(patient.phone)}` : ""}</span></button>`).join("");
+    lista.innerHTML = coincidenciasDeHistoria(buscador.value).map((patient) =>
+      `<button type="button" data-select-history-patient="${patient.id}"><strong>${escapeHtml(patient.name)}</strong><span>${patient.historiaNumero ? `${escapeHtml(numeroDeHistoria(patient.historiaNumero))} · ` : ""}${escapeHtml(patient.dni || "")}${patient.phone ? ` · ${escapeHtml(patient.phone)}` : ""}</span></button>`).join("");
   };
   on("#historyPatientSearch", "input", sugerirPacientesDeHistoria);
   on("#historyPatientSearch", "focus", (event) => { event.target.select(); sugerirPacientesDeHistoria(); });
