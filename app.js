@@ -3864,6 +3864,52 @@ function mesesConVentasDeProductos() {
     .reverse();
 }
 
+/* Por donde entro la plata de cada producto (pedido 2026-11-15, replica de
+   EmpresaFacil): una columna para Yape y otra para Efectivo en lugar del
+   precio unitario, y el total. Plin va con Yape, que para la caja es lo mismo:
+   billetera del celular. Tarjeta y transferencia no tienen columna y se avisan
+   junto al total.
+
+   Un cobro mixto no dice que parte de cada medio fue al producto y cual a la
+   atencion, asi que el producto se reparte en la misma proporcion que el cobro
+   entero: si se pago un tercio en efectivo, un tercio del producto va a
+   Efectivo. Es un estimado y la fila lo marca con «≈». */
+function repartoDelCobro(payment) {
+  if (!payment) return { yape: 0, efectivo: 0, otro: 1, nombreDelOtro: "sin medio anotado", mixto: false };
+  const partes = paymentSplit(payment);
+  const yape = Number(partes.YAPE || 0) + Number(partes.PLIN || 0);
+  const efectivo = Number(partes.EFECTIVO || 0);
+  const otros = [["TARJETA", "Tarjeta"], ["TRANSFERENCIA", "Transferencia"]].filter(([clave]) => Number(partes[clave] || 0) > 0);
+  const otro = otros.reduce((suma, [clave]) => suma + Number(partes[clave] || 0), 0);
+  const todo = yape + efectivo + otro;
+  if (todo <= 0) return { yape: 0, efectivo: 0, otro: 1, nombreDelOtro: "sin medio anotado", mixto: false };
+  return {
+    yape: yape / todo,
+    efectivo: efectivo / todo,
+    otro: otro / todo,
+    nombreDelOtro: otros.map(([, nombre]) => nombre).join(" y "),
+    mixto: [yape, efectivo, otro].filter((monto) => monto > 0).length > 1
+  };
+}
+
+const redondeoDeVenta = (monto) => Math.round(monto * 100) / 100;
+
+/* «Yape S/ 55 · Efectivo S/ 55»: cuanto de lo vendido entro por cada medio. */
+function ventasPorMedio(filas) {
+  const suma = (campo) => redondeoDeVenta(filas.reduce((total, fila) => total + fila[campo], 0));
+  const partes = [`Yape ${money(suma("yape"))}`, `Efectivo ${money(suma("efectivo"))}`];
+  if (suma("otro") > 0) partes.push(`Otros medios ${money(suma("otro"))}`);
+  return partes.join(" · ");
+}
+
+/* La celda de Yape o de Efectivo: vacia si por ahi no entro nada, y con «≈»
+   delante cuando sale de repartir un cobro mixto. */
+function montoDeMedio(fila, medio) {
+  if (!(fila[medio] > 0)) return "";
+  // en una sola linea: en la tablet «≈ S/ 16» se partia en dos renglones
+  return `<span style="white-space:nowrap">${fila.mixto ? "≈ " : ""}${escapeHtml(money(fila[medio]))}</span>`;
+}
+
 function ventasDeProductos(mes = mesDeVentasDeProductos()) {
   return (state.inventoryMovements || [])
     .filter((movement) => movement.type === "VENTA" && Number(movement.quantity || 0) > 0 && (!mes || String(movement.date || "").slice(0, 7) === mes))
@@ -3872,13 +3918,23 @@ function ventasDeProductos(mes = mesDeVentasDeProductos()) {
       const pago = movement.paymentId ? state.payments.find((payment) => payment.id === movement.paymentId) : null;
       const cantidad = Number(movement.quantity || 0);
       const precio = Number(movement.unitPrice || 0) || (cantidad ? Number(movement.total || 0) / cantidad : 0);
+      const total = redondeoDeVenta(Number(movement.total || cantidad * precio));
+      const reparto = repartoDelCobro(pago);
+      const yape = redondeoDeVenta(total * reparto.yape);
+      const otro = redondeoDeVenta(total * reparto.otro);
       return {
         fecha: movement.date,
         paciente: (pago && patientById(pago.patientId)?.name) || "Venta de mostrador",
         producto: inventoryProductById(movement.productId)?.name || "Producto",
         cantidad,
         precio,
-        total: Math.round(Number(movement.total || cantidad * precio) * 100) / 100
+        total,
+        yape,
+        // lo que sobra va a efectivo, para que las tres partes sumen el total
+        efectivo: redondeoDeVenta(total - yape - otro),
+        otro,
+        nombreDelOtro: otro > 0 ? reparto.nombreDelOtro : "",
+        mixto: reparto.mixto
       };
     });
 }
@@ -3905,7 +3961,7 @@ function renderProductSales() {
   const resumen = $("#productSalesTotal");
   if (resumen) {
     resumen.textContent = filas.length
-      ? `${filas.length} producto${filas.length === 1 ? "" : "s"} vendido${filas.length === 1 ? "" : "s"} en ${mes ? monthLabel(mes) : "todos los meses"} · total ${money(total)}`
+      ? `${filas.length} producto${filas.length === 1 ? "" : "s"} vendido${filas.length === 1 ? "" : "s"} en ${mes ? monthLabel(mes) : "todos los meses"} · total ${money(total)} · ${ventasPorMedio(filas)}${filas.some((fila) => fila.mixto) ? " · ≈ cobro mixto, repartido en su proporción" : ""}`
       : "";
   }
   cuerpo.innerHTML = filas.map((fila) => `<tr>
@@ -3913,9 +3969,10 @@ function renderProductSales() {
       <td>${escapeHtml(fila.paciente)}</td>
       <td>${escapeHtml(fila.producto)}</td>
       <td>${fila.cantidad}</td>
-      <td>${money(fila.precio)}</td>
-      <td><strong>${money(fila.total)}</strong></td>
-    </tr>`).join("") || `<tr><td colspan="6">${mes ? "Sin productos vendidos en el mes elegido." : "Aún no se vendió ningún producto. Se cobran con «+ Producto» en Pagos y caja."}</td></tr>`;
+      <td>${montoDeMedio(fila, "yape")}</td>
+      <td>${montoDeMedio(fila, "efectivo")}</td>
+      <td><strong>${money(fila.total)}</strong>${fila.otro > 0 ? ` <span class="muted">${escapeHtml(fila.nombreDelOtro)}</span>` : ""}</td>
+    </tr>`).join("") || `<tr><td colspan="7">${mes ? "Sin productos vendidos en el mes elegido." : "Aún no se vendió ningún producto. Se cobran con «+ Producto» en Pagos y caja."}</td></tr>`;
 }
 
 function exportarVentasDeProductos() {
@@ -3928,7 +3985,11 @@ function exportarVentasDeProductos() {
     Producto: fila.producto,
     Cantidad: fila.cantidad,
     "Precio S/": fila.precio.toFixed(2),
-    "Total S/": fila.total.toFixed(2)
+    "Yape S/": fila.yape.toFixed(2),
+    "Efectivo S/": fila.efectivo.toFixed(2),
+    "Otros medios S/": fila.otro.toFixed(2),
+    "Total S/": fila.total.toFixed(2),
+    "Cobro mixto (reparto estimado)": fila.mixto ? "Sí" : ""
   })));
 }
 
@@ -3938,8 +3999,8 @@ function imprimirVentasDeProductos() {
   const total = filas.reduce((suma, fila) => suma + fila.total, 0);
   const ventana = window.open("", "_blank");
   if (!ventana) return;
-  const cuerpo = filas.map((fila) => `<tr><td>${escapeHtml(formatDate(fila.fecha))}</td><td>${escapeHtml(fila.paciente)}</td><td>${escapeHtml(fila.producto)}</td><td class="num">${fila.cantidad}</td><td class="num">${escapeHtml(money(fila.precio))}</td><td class="num">${escapeHtml(money(fila.total))}</td></tr>`).join("")
-    || `<tr><td colspan="6">Sin productos vendidos.</td></tr>`;
+  const cuerpo = filas.map((fila) => `<tr><td>${escapeHtml(formatDate(fila.fecha))}</td><td>${escapeHtml(fila.paciente)}</td><td>${escapeHtml(fila.producto)}</td><td class="num">${fila.cantidad}</td><td class="num">${montoDeMedio(fila, "yape")}</td><td class="num">${montoDeMedio(fila, "efectivo")}</td><td class="num">${escapeHtml(money(fila.total))}${fila.otro > 0 ? ` (${escapeHtml(fila.nombreDelOtro)})` : ""}</td></tr>`).join("")
+    || `<tr><td colspan="7">Sin productos vendidos.</td></tr>`;
   ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Venta de productos ${escapeHtml(mes ? monthLabel(mes) : "")}</title><style>
     body{font-family:Arial,sans-serif;padding:24px;color:#111}
     h1{margin:0 0 4px;font-size:22px}
@@ -3953,8 +4014,9 @@ function imprimirVentasDeProductos() {
   </style></head><body>
     <h1>Venta de productos · ${escapeHtml(mes ? monthLabel(mes) : "todos los meses")}</h1>
     <p>${escapeHtml(state.config?.clinicName || "CM Odontología Estética")}</p>
-    <table><thead><tr><th>Fecha</th><th>Paciente</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">Total</th></tr></thead>
-    <tbody>${cuerpo}<tr class="total"><td colspan="5">Total</td><td class="num">${escapeHtml(money(total))}</td></tr></tbody></table>
+    <table><thead><tr><th>Fecha</th><th>Paciente</th><th>Producto</th><th class="num">Cant.</th><th class="num">Yape</th><th class="num">Efec.</th><th class="num">Total</th></tr></thead>
+    <tbody>${cuerpo}<tr class="total"><td colspan="4">Total</td><td class="num">${escapeHtml(money(filas.reduce((suma, fila) => suma + fila.yape, 0)))}</td><td class="num">${escapeHtml(money(filas.reduce((suma, fila) => suma + fila.efectivo, 0)))}</td><td class="num">${escapeHtml(money(total))}</td></tr></tbody></table>
+    ${filas.some((fila) => fila.mixto) ? `<p style="margin-top:10px;font-size:12px">≈ Cobro mixto: el producto se repartió entre Yape y Efectivo en la misma proporción del cobro.</p>` : ""}
     <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });<\/script>
   </body></html>`);
   ventana.document.close();
