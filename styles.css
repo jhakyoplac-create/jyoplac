@@ -8398,3 +8398,102 @@ dialog.ui-dialogo {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Fotos y radiografias (Google Drive del consultorio, 2026-11-15) ---------- */
+.fotos-hoja { display: grid; gap: 14px; }
+.fotos-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.fotos-barra .small-btn.activo { background: var(--green-soft); border-color: var(--brand-primary, #00a6d6); }
+.fotos-filtros { display: flex; flex-wrap: wrap; gap: 6px; }
+.fotos-filtro {
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.fotos-filtro.activo { background: var(--green-soft); border-color: var(--brand-primary, #00a6d6); color: var(--brand-secondary, #0b6e8a); }
+.fotos-drive { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.fotos-medidor { width: 90px; height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; display: inline-block; }
+.fotos-medidor i { display: block; height: 100%; background: var(--brand-primary, #00a6d6); }
+.fotos-enlace { background: none; border: 0; padding: 0; color: var(--brand-secondary, #0b6e8a); text-decoration: underline; cursor: pointer; font-size: 12.5px; }
+.fotos-ayuda, .fotos-error { margin: 0; font-size: 13px; }
+.fotos-error { color: #b42318; }
+.fotos-cargando { padding: 18px 0; }
+.fotos-vacio { border: 1px dashed var(--line); border-radius: 12px; padding: 26px; text-align: center; }
+.fotos-vacio p { margin: 4px 0; }
+.fotos-aviso { border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; background: var(--surface); max-width: 680px; }
+.fotos-aviso h4 { margin: 0 0 8px; font-size: 17px; }
+.fotos-aviso p { margin: 0 0 10px; color: var(--muted); }
+.fotos-aviso ul { margin: 0 0 16px; padding-left: 20px; color: var(--muted); display: grid; gap: 4px; font-size: 14px; }
+.fotos-dia h5 { margin: 0 0 10px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.fotos-dia h5 small { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+.fotos-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.foto-tarjeta {
+  position: relative; display: flex; flex-direction: column; text-align: left; padding: 0; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); color: var(--ink);
+}
+.foto-tarjeta:hover, .foto-tarjeta:focus-visible { border-color: var(--brand-primary, #00a6d6); }
+.foto-tarjeta.elegida { outline: 3px solid var(--brand-primary, #00a6d6); outline-offset: -1px; }
+.foto-cuadro { position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden; background: #eceae6; }
+.foto-cuadro img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto-cuadro img:not([src]) { visibility: hidden; }
+.foto-cuadro.sin-imagen { background: repeating-linear-gradient(45deg, #eceae6, #eceae6 8px, #e3e0da 8px, #e3e0da 16px); }
+.foto-pie { display: grid; gap: 3px; padding: 7px 9px 9px; }
+.foto-etiqueta { justify-self: start; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; background: #f1f1f1; color: #4b5563; }
+.foto-etiqueta.tipo-radiografia { background: #e8eefc; color: #2c4a8f; }
+.foto-etiqueta.tipo-intraoral { background: #fde8ec; color: #9b2c45; }
+.foto-etiqueta.tipo-extraoral { background: #eaf6ef; color: #23704a; }
+.foto-etiqueta.tipo-antes-despues { background: var(--green-soft); color: var(--brand-secondary, #0b6e8a); }
+.foto-nota { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foto-marca {
+  position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(255, 255, 255, .92); border: 2px solid var(--brand-primary, #00a6d6); color: var(--brand-secondary, #0b6e8a);
+  display: grid; place-items: center; font-weight: 800; font-size: 13px;
+}
+
+/* ventanas */
+.fotos-ventana { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 17, 21, .72); display: grid; place-items: center; padding: 16px; }
+.fotos-dialogo { background: var(--surface); color: var(--ink); border-radius: 14px; padding: 20px; width: min(620px, 100%); max-height: 92vh; overflow: auto; display: grid; gap: 14px; }
+.fotos-dialogo h4 { margin: 0; }
+.fotos-previas { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; }
+.fotos-previas img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+.fotos-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fotos-campos label, .fotos-lado label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+.fotos-campos .ancho { grid-column: 1 / -1; }
+.fotos-progreso { margin: 0; min-height: 1.2em; color: var(--muted); font-size: 13px; }
+.fotos-botones { display: flex; justify-content: flex-end; gap: 8px; }
+
+.fotos-visor { width: min(1200px, 100%); height: min(88vh, 860px); display: grid; grid-template-columns: 1fr 290px; background: #17191d; border-radius: 14px; overflow: hidden; color: #fff; }
+.fotos-escenario { position: relative; background: #000; display: grid; place-items: center; min-height: 0; }
+.fotos-escenario img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.fotos-cargando-grande { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: #c9ccd3; font-size: 13px; margin: 0; }
+.fotos-flecha, .fotos-cerrar {
+  position: absolute; border: 0; cursor: pointer; color: #fff; background: rgba(255, 255, 255, .16);
+  width: 42px; height: 42px; border-radius: 50%; font-size: 24px; line-height: 1; display: grid; place-items: center;
+}
+.fotos-flecha { top: 50%; transform: translateY(-50%); }
+.fotos-flecha.izq { left: 12px; }
+.fotos-flecha.der { right: 12px; }
+.fotos-cerrar { top: 12px; right: 12px; z-index: 2; }
+.fotos-lado { padding: 18px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.fotos-lado h4 { margin: 0; font-size: 17px; }
+.fotos-lado .fotos-sub { margin: 0; color: #aab0bb; font-size: 12.5px; }
+.fotos-lado select, .fotos-lado input, .fotos-lado textarea { background: rgba(255, 255, 255, .08); color: #fff; border: 1px solid rgba(255, 255, 255, .14); border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; }
+.fotos-lado select option { color: #111; }
+.fotos-lado .small-btn { align-self: flex-start; }
+.fotos-accion { border: 0; border-radius: 8px; padding: 10px 12px; font-weight: 600; cursor: pointer; text-align: left; background: rgba(255, 255, 255, .1); color: #fff; }
+.fotos-accion.whatsapp { background: #1f9d55; }
+.fotos-accion.borrar { background: transparent; color: #f19a9a; border: 1px solid rgba(241, 154, 154, .45); }
+
+.fotos-comparar { position: relative; width: min(1200px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #17191d; border-radius: 14px; padding: 14px; }
+.fotos-comparar figure { margin: 0; background: #000; border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: 1fr auto; }
+.fotos-comparar img { width: 100%; height: min(70vh, 620px); object-fit: contain; }
+.fotos-comparar figcaption { display: flex; justify-content: space-between; padding: 8px 12px; color: #fff; font-size: 14px; background: #24272d; }
+.fotos-comparar figcaption span { color: #aab0bb; }
+
+@media (max-width: 760px) {
+  .fotos-drive { margin-left: 0; width: 100%; }
+  .fotos-rejilla { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .fotos-visor { grid-template-columns: 1fr; grid-template-rows: 46vh minmax(0, 1fr); height: 92vh; }
+  .fotos-comparar { grid-template-columns: 1fr; max-height: 92vh; overflow: auto; }
+  .fotos-comparar img { height: 38vh; }
+  .fotos-campos { grid-template-columns: 1fr; }
+}
+.fotos-boton-whatsapp { display: inline-block; text-decoration: none; padding: 10px 16px; border-radius: 8px; background: #1f9d55; color: #fff; font-weight: 700; }

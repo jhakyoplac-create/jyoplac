@@ -17,6 +17,7 @@ import threading
 import time
 import uuid
 
+import drive as google_drive
 from sunat import config as sunat_config
 from sunat import emision as sunat_emision
 
@@ -432,6 +433,17 @@ def migrate_db(conn):
     ensure_column(conn, "consentimientos", "doctor_firmante", "TEXT")
     # La foto de la Ficha de datos va aparte: no viaja en el bootstrap, se pide
     # solo al abrir o imprimir la ficha.
+    # La conexion con el Google Drive del consultorio (fotos y radiografias,
+    # 2026-11-15): una sola fila, cifrada. Ver backend/drive.py.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS google_drive (
+          id TEXT PRIMARY KEY,
+          datos TEXT NOT NULL,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS patient_photos (
@@ -830,6 +842,18 @@ def auth_user(handler):
       if data:
           data["role"] = normalize_role(data["role"])
       return data
+
+
+def vuelta_de_drive(handler):
+    """La direccion a la que Google devuelve al dueño despues de conectar. Tiene
+    que ser identica a la cargada en el cliente de Google."""
+    fija = os.environ.get("DRIVE_VUELTA", "").strip()
+    if fija:
+        return fija
+    host = handler.headers.get("Host", "")
+    local = host.startswith("localhost") or host.startswith("127.0.0.1")
+    esquema = handler.headers.get("X-Forwarded-Proto") or ("http" if local else "https")
+    return f"{esquema}://{host}/api/drive/vuelta"
 
 
 def require_auth(handler):
@@ -1713,6 +1737,16 @@ class DentalHandler(SimpleHTTPRequestHandler):
             database = "postgresql" if USE_POSTGRES else str(DB_PATH)
             return send_json(self, {"ok": True, "database": database})
 
+        # Google vuelve aqui sin la sesion del sistema: lo que vale es el
+        # «state» firmado que se armo al tocar «Conectar Google Drive».
+        if parsed.path == "/api/drive/vuelta":
+            destino = google_drive.vuelta_de_google(db, params, vuelta_de_drive(self))
+            self.send_response(302)
+            self.send_header("Location", destino)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
         user = require_auth(self)
         if not user:
             return
@@ -1913,6 +1947,41 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"error": "Actividad incompleta."}, 400)
             anotar(user, accion, detalle, str(data.get("patientId") or ""))
             return send_json(self, {"ok": True})
+
+        if parsed.path == "/api/drive":
+            # Fotos y radiografias en el Google Drive del consultorio. Conectar,
+            # desconectar y borrar: el dueño y el administrador. Subir y editar:
+            # quien maneja lo clinico. Mirar: cualquiera que haya entrado.
+            user = require_auth(self)
+            if not user:
+                return
+            data = read_json(self)
+            accion = str(data.get("accion") or "")
+            rol = normalize_role(user["role"])
+            if accion in ("conectar", "desconectar", "borrar") and rol not in ("ADMIN", "DOCTOR"):
+                return send_json(self, {"error": "Solo el dueño o el administrador puede hacer esto."}, 403)
+            if accion in ("subir", "editar") and rol not in ("ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"):
+                return send_json(self, {"error": "No tienes permiso para esta accion"}, 403)
+            try:
+                respuesta, estado = google_drive.atender(db, accion, data, user, vuelta_de_drive(self))
+            except Exception as error:
+                print(f"Fotos en Drive: {error}", flush=True)
+                return send_json(self, {"error": "No se pudo completar con Google Drive."}, 424)
+            if estado == "binario":
+                cuerpo, tipo = respuesta
+                self.send_response(200)
+                self.send_header("Content-Type", tipo)
+                self.send_header("Content-Length", str(len(cuerpo)))
+                self.send_header("Cache-Control", "private, no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(cuerpo)
+                return
+            if accion in ("subir", "borrar", "conectar", "desconectar") and estado == 200:
+                anotar(user, {"subir": "FOTO_SUBIDA", "borrar": "FOTO_BORRADA", "conectar": "DRIVE_CONECTAR", "desconectar": "DRIVE_DESCONECTADO"}[accion],
+                       {"subir": "Subió una foto del paciente", "borrar": "Mandó una foto a la papelera del Drive", "conectar": "Abrió la conexión con Google Drive", "desconectar": "Desconectó el Google Drive del consultorio"}[accion],
+                       str(((data.get("meta") or {}).get("paciente")) or ""))
+            return send_json(self, respuesta, estado)
 
         if parsed.path == "/api/logout":
             token = self.headers.get("Authorization", "").replace("Bearer ", "").strip()

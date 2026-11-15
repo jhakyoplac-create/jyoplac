@@ -5339,6 +5339,7 @@ function renderClinicalHistory() {
   if (copias) copias.hidden = hoja !== "odontograma";
   caja.innerHTML = contenidoDeLaPestana(patientId);
   if (hoja === "ficha") window.HojasExtra.traerFotoDeLaFicha(patientId, renderClinicalHistory);
+  if (hoja === "fotos") window.FotosDrive.despuesDePintarFotos(caja);
   if (hoja === "plan") alinearBotonDePrecios(caja);
   ajustarGraficos(caja);
   // otra pasada cuando el navegador ya repartio las columnas (la ficha estomatologica)
@@ -5356,6 +5357,8 @@ function contenidoDeLaPestana(patientId) {
   if (hoja === "evolucion") return window.HojasExtra.hojaDeEvolucion(patientId);
   if (hoja === "estomatologica") return window.HojasExtra.fichaEstomatologica(patientId);
   if (hoja === "receta") return window.Recetas.hojaDeRecetas(patientId);
+  // fotos y radiografias en el Google Drive del consultorio (2026-11-15)
+  if (hoja === "fotos") return window.FotosDrive.hojaDeFotos(patientId, renderClinicalHistory);
   return hojaDeLaHistoria(patientId, { pantalla: true });
 }
 
@@ -12474,6 +12477,7 @@ function bindEvents() {
     if (imprimir) imprimirConsentimiento($("#historyPatientFilter")?.value || "", imprimir.dataset.imprimirConsentimiento);
   });
 
+  window.FotosDrive.iniciarFotos();
   $("#historySheetTabs")?.addEventListener("click", (event) => {
     const pestana = event.target.closest("[data-hoja]");
     if (!pestana) return;
