@@ -8497,3 +8497,76 @@ dialog.ui-dialogo {
   .fotos-campos { grid-template-columns: 1fr; }
 }
 .fotos-boton-whatsapp { display: inline-block; text-decoration: none; padding: 10px 16px; border-radius: 8px; background: #1f9d55; color: #fff; font-weight: 700; }
+
+/* El selector de la linea del plan: cuando la lista del consultorio tiene
+   varios servicios que pueden ser ese trabajo (2026-11-15). Va debajo del
+   nombre, del ancho de la celda como mucho; en amarillo suave mientras falta
+   elegir, para que se vea cual linea no tiene precio todavia. */
+.presupuesto-tabla tr.plan-con-selector > td {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+.presupuesto-tabla tr.plan-fila-elegir > td {
+  padding-top: 0;
+  padding-bottom: 8px;
+}
+.presupuesto-tabla .plan-elegir {
+  display: block;
+  /* al 100% el selector se encoge con la celda; con su ancho propio, la
+     opcion mas larga ensanchaba la tabla y los precios se salian de la vista */
+  width: 100%;
+  min-width: 0;
+  max-width: 360px;
+  min-height: 28px;
+  padding: 3px 26px 3px 8px;
+  border: 1px solid var(--brand-primary);
+  border-radius: 8px;
+  background-color: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+/* en el celular la tabla se desliza de lado: el selector se queda del ancho
+   de lo que se ve, para no tener que deslizar para leerlo */
+@media (max-width: 760px) {
+  .presupuesto-tabla .plan-elegir {
+    max-width: 205px;
+  }
+}
+.presupuesto-tabla .plan-elegir.falta {
+  background-color: #fff8e6;
+  font-weight: 700;
+}
+
+/* En Configuracion: los trabajos del odontograma que no tienen precio. */
+.config-precios-aviso {
+  display: grid;
+  gap: 3px;
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #ecd9a6;
+  border-left: 4px solid var(--brand-primary);
+  border-radius: 9px;
+  background: #fffaf0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.config-precios-aviso[hidden] {
+  display: none;
+}
+.config-precios-faltan {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+.config-precios-faltan > span {
+  padding: 2px 9px;
+  border: 1px solid #e0c98d;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #6d5215;
+}

@@ -676,6 +676,7 @@ ETIQUETAS_DE_CONFIG = {
     "services": "lista de tratamientos",
     "servicesCustomized": "lista propia de tratamientos",
     "listaDePrecios": "lista de precios",
+    "preciosElegidos": "servicio elegido en el plan",
     "commissions": "comisiones por doctor",
     "generalCashOpening": "saldo inicial de caja",
     "generalBankOpening": "saldo inicial del banco",
@@ -3628,6 +3629,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
             # ventana de Precios: tratamiento y cuanto cobra por el.
             if "listaDePrecios" in data:
                 values["listaDePrecios"] = data["listaDePrecios"]
+            # Que servicio de la lista eligio el consultorio para cada trabajo
+            # del odontograma (la corona que cobran casi siempre): asi la
+            # proxima vez la linea del plan baja sola con ese.
+            if isinstance(data.get("preciosElegidos"), dict):
+                values["preciosElegidos"] = {
+                    str(trabajo)[:60]: str(servicio)[:200]
+                    for trabajo, servicio in list(data["preciosElegidos"].items())[:80]
+                }
             # El % de comision de cada doctor, para el Resumen por doctor.
             if isinstance(data.get("commissions"), dict):
                 values["commissions"] = {
@@ -3636,9 +3645,12 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     if isinstance(valor, (int, float)) and 0 <= valor <= 100
                 }
             set_config(values)
-            cambiado = [ETIQUETAS_DE_CONFIG.get(clave, clave) for clave in values]
-            anotar(user, "CONFIGURACION",
-                   f"Cambio en Configuracion: {', '.join(cambiado) if cambiado else 'nada'}")
+            # Elegir una corona en el plan no es tocar la Configuracion: no se
+            # anota, o el registro de actividad se llenaria con cada eleccion.
+            if set(values) != {"preciosElegidos"}:
+                cambiado = [ETIQUETAS_DE_CONFIG.get(clave, clave) for clave in values]
+                anotar(user, "CONFIGURACION",
+                       f"Cambio en Configuracion: {', '.join(cambiado) if cambiado else 'nada'}")
             return send_json(self, {"ok": True})
 
         if parsed.path == "/api/reset-operational":
