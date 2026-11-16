@@ -3288,7 +3288,11 @@ function quitarFondoAlSelloGuardado() {
       uiAlert("Este sello ya no tiene fondo.");
       return;
     }
-    mostrarSelloDelUsuario(lienzo.toDataURL("image/png"));
+    /* En WebP cuando pesa menos, igual que al subirlo: aqui se guardaba
+       siempre en PNG, que pesa casi el triple (2026-11-16). */
+    const selloWebp = lienzo.toDataURL("image/webp", 0.85);
+    const selloPng = lienzo.toDataURL("image/png");
+    mostrarSelloDelUsuario(selloWebp.startsWith("data:image/webp") && selloWebp.length < selloPng.length ? selloWebp : selloPng);
   };
   imagen.onerror = () => uiAlert("No se pudo abrir el sello guardado.");
   imagen.src = actual;
