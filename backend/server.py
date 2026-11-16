@@ -18,6 +18,7 @@ import time
 import uuid
 
 import drive as google_drive
+import recordatorios
 from sunat import config as sunat_config
 from sunat import emision as sunat_emision
 
@@ -417,6 +418,10 @@ def migrate_db(conn):
     # confirmar no es lo mismo que haber venido, y una cita confirmada sigue
     # RESERVADA hasta que se atiende.
     ensure_column(conn, "appointments", "confirmada", "INTEGER NOT NULL DEFAULT 0")
+    # Lo que dejo el recordatorio automatico por WhatsApp: si salio, si llego y
+    # que contesto el paciente, en JSON (ver recordatorios.py). Lo escribe el
+    # servidor; guardar la cita desde la agenda no lo toca.
+    ensure_column(conn, "appointments", "whatsapp", "TEXT")
     # Las hojas extra del paciente (las pidio Smart Medic en EmpresaFacil y se
     # pasaron a CM): la Hoja de evolucion escrita a mano y los datos de la
     # Ficha estomatologica van juntos en JSON en el paciente. La nota guarda su
@@ -1748,6 +1753,21 @@ class DentalHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
+        # El servicio de recordatorios por WhatsApp pide las citas de mañana.
+        # No trae sesion: lo que vale es la clave compartida. Sin esa clave
+        # cargada en Render la direccion no existe.
+        if parsed.path == "/api/whatsapp/citas":
+            if not recordatorios.configurado():
+                return send_json(self, {"error": "No disponible."}, 404)
+            if not recordatorios.clave_valida(self.headers.get("x-recordatorios-clave")):
+                return send_json(self, {"error": "Clave no valida."}, 401)
+            hoy = today_lima()
+            fecha = (params.get("fecha") or [""])[0]
+            # solo hoy, mañana o pasado: nadie necesita la agenda entera
+            if not valid_iso_date(fecha) or not (hoy <= fecha <= (date.fromisoformat(hoy) + timedelta(days=2)).isoformat()):
+                return send_json(self, {"error": "Fecha no valida."}, 400)
+            return send_json(self, recordatorios.citas_del_dia(db, fecha, hoy, app_config()))
+
         user = require_auth(self)
         if not user:
             return
@@ -1845,7 +1865,11 @@ class DentalHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/patients":
             return send_json(self, {"patients": list_patients()})
         if parsed.path == "/api/appointments":
-            return send_json(self, {"appointments": list_appointments(params)})
+            # Cada equipo pide la agenda cada pocos segundos: de paso, si ya
+            # toca, se le pregunta al servicio de recordatorios que contestaron
+            # los pacientes. No hace esperar a esta respuesta.
+            recordatorios.revisar(db, today_lima())
+            return send_json(self, {"appointments": list_appointments(params), "whatsappAuto": recordatorios.servicio()})
         if parsed.path == "/api/clinical-history":
             return send_json(self, {"clinicalHistory": list_table("clinical_history", "date DESC, created_at DESC")})
         if parsed.path == "/api/treatments":
@@ -2427,6 +2451,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
                         1 if data.get("confirmada") else 0,
                     ),
                 )
+                # «Atendido» en Seguimiento de citas: ya se hablo con el paciente
+                # que pidio reprogramar por WhatsApp.
+                if data.get("whatsappAtendidoAt"):
+                    recordatorios.marcar_atendido(conn, item_id, data.get("whatsappAtendidoAt"))
                 patient = conn.execute("SELECT name FROM patients WHERE id = ?", (data["patientId"],)).fetchone()
                 audit_event = appointment_audit_event(data, existing_appointment, patient["name"] if patient else "")
                 if audit_event:

@@ -1299,8 +1299,11 @@ tr.followup-pending td:first-child {
   color: #1c5f39;
 }
 
-/* La cita confirmada: una pastilla chica y liviana junto al estado, en vez
-   del boton de la derecha. Igual que en EmpresaFacil; un clic la deshace. */
+/* Lo que dejo dicho el recordatorio por WhatsApp. En la agenda es una pastilla
+   chica junto al estado; en Recordatorios, una linea bajo la tarjeta. Verde
+   para «confirmó» (tambien el marcado a mano: reemplaza al boton de la derecha
+   y un clic la deshace), ambar para «pidió reprogramar», rojo para «no se pudo
+   enviar». Igual que en EmpresaFacil. */
 .wa-badge {
   display: inline-flex;
   align-items: center;
@@ -1324,6 +1327,37 @@ tr.followup-pending td:first-child {
 }
 
 .wa-badge.wa-confirmado:hover {
+  border-color: #2f8f57;
+}
+
+.wa-badge.wa-reprogramar,
+.wa-estado.wa-reprogramar {
+  background: #fff1d6;
+  color: #8a5a00;
+  border: 1px solid #f0c36d;
+}
+
+.wa-badge.wa-fallido,
+.wa-estado.wa-fallido {
+  background: #fde4e4;
+  color: #9b1c1c;
+  border: 1px solid #f0a0a0;
+}
+
+.wa-estado {
+  margin: 8px 0 6px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: #fff;
+}
+
+.wa-estado.wa-confirma {
+  background: #e4f5ea;
+  color: #1c5f39;
   border-color: #2f8f57;
 }
 
@@ -1919,6 +1953,12 @@ th {
 
 #recordatorios .campaign-card .muted {
   font-size: 13px;
+}
+
+#recordatorios .wa-estado {
+  margin: 6px 0 5px;
+  padding: 5px 8px;
+  font-size: 11.5px;
 }
 
 #recordatorios .campaign-card .primary {

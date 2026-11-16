@@ -140,6 +140,9 @@ let apiToken = localStorage.getItem(API_TOKEN_KEY) || "";
 let apiUser = loadApiUser();
 let apiBootstrapped = false;
 let apiRefreshing = false;
+/* Recordatorios automaticos por WhatsApp: lo que dice el servidor cada vez que
+   se pide la agenda. null = sin el servicio (o todavia no se sabe). */
+let whatsappAutomatico = null;
 let apiCashRefreshing = false;
 let patientSaving = false;
 let historySaving = false;
@@ -549,6 +552,20 @@ function mapApiAuditEvent(row) {
   };
 }
 
+/* Lo que dejo el recordatorio automatico por WhatsApp: si salio, si llego y
+   que contesto el paciente. Lo escribe el servidor (backend/recordatorios.py)
+   y llega como texto JSON desde la base. */
+function leerWhatsappDeCita(valor) {
+  if (!valor) return null;
+  if (typeof valor === "object") return valor;
+  try {
+    const leido = JSON.parse(valor);
+    return leido && typeof leido === "object" ? leido : null;
+  } catch {
+    return null;
+  }
+}
+
 function mapApiAppointment(row) {
   return {
     id: row.id,
@@ -567,7 +584,8 @@ function mapApiAppointment(row) {
     reminderSentAt: row.reminder_sent_at || row.reminderSentAt || "",
     reminderSentBy: row.reminder_sent_by || row.reminderSentBy || "",
     // la base la guarda como 0 o 1; en el navegador se trabaja con si o no
-    confirmada: Boolean(row.confirmada)
+    confirmada: Boolean(row.confirmada),
+    whatsapp: leerWhatsappDeCita(row.whatsapp)
   };
 }
 
@@ -1080,6 +1098,7 @@ async function cargarRangoOperativo(from, to, rerender) {
     if (Array.isArray(appointmentsResult.appointments)) {
       state.appointments = replaceDateRange(state.appointments, appointmentsResult.appointments.map(mapApiAppointment), from, to);
     }
+    if ("whatsappAuto" in appointmentsResult) whatsappAutomatico = appointmentsResult.whatsappAuto || null;
     if (Array.isArray(paymentsResult.payments)) {
       state.payments = replaceDateRange(state.payments, paymentsResult.payments.map(mapApiPayment), from, to);
     }
@@ -4565,6 +4584,75 @@ function isSlotBlockingAppointment(appointment) {
   return Boolean(appointment && !SLOT_FREE_STATUSES.includes(appointment.status));
 }
 
+/* El aviso de WhatsApp de esta cita, o null. Si la cita se movio de dia
+   despues del aviso, ese aviso ya no habla de ella. */
+function whatsappDeCita(cita) {
+  const info = cita?.whatsapp;
+  if (!info || info.fecha !== cita.date) return null;
+  return info;
+}
+
+/* El paciente toco «Reprogramar» y nadie del consultorio lo atendio todavia.
+   No cambia el estado de la cita -sigue ocupando su turno- porque el
+   consultorio es quien llama y decide; solo se avisa en la agenda y entra a
+   Seguimiento de citas. */
+function pideReprogramarPorWhatsapp(cita) {
+  const info = whatsappDeCita(cita);
+  return Boolean(info && info.respuesta === "REPROGRAMAR" && !info.atendidoAt && isSlotBlockingAppointment(cita));
+}
+
+function confirmoPorWhatsapp(cita) {
+  const info = whatsappDeCita(cita);
+  return Boolean(info && info.respuesta === "CONFIRMA");
+}
+
+function hayWhatsappAutomatico() {
+  return Boolean(whatsappAutomatico?.activo);
+}
+
+function horaDelAviso(iso) {
+  if (!iso) return "";
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return "";
+  return reminderTimeLabel(`${String(fecha.getHours()).padStart(2, "0")}:${String(fecha.getMinutes()).padStart(2, "0")}`);
+}
+
+/* Para la tarjeta de Recordatorios: una frase corta con lo que paso. */
+function resumenWhatsapp(cita) {
+  const info = whatsappDeCita(cita);
+  if (!info) return null;
+  if (info.entrega === "fallido") {
+    return { clase: "wa-fallido", texto: `No se pudo enviar${info.error ? `: ${info.error}` : ""}` };
+  }
+  const envio = `Enviado ${horaDelAviso(info.enviadoAt)}`;
+  if (info.respuesta === "CONFIRMA") return { clase: "wa-confirma", texto: `${envio} · Confirmó ${horaDelAviso(info.respondidoAt)}` };
+  if (info.respuesta === "REPROGRAMAR") {
+    return { clase: "wa-reprogramar", texto: `${envio} · Pidió reprogramar ${horaDelAviso(info.respondidoAt)}${info.atendidoAt ? " · atendido" : ""}` };
+  }
+  if (info.respuesta === "OTRO") return { clase: "wa-otro", texto: `${envio} · Escribió: ${info.respuestaTexto || "…"}` };
+  const entrega = info.entrega === "leido" ? "leído" : info.entrega === "entregado" ? "entregado" : "enviado";
+  return { clase: "wa-pendiente", texto: `${envio} · ${entrega}, sin respuesta` };
+}
+
+/* Lo que el recordatorio dejo dicho y la agenda tiene que mostrar, en el mismo
+   sitio y con la misma letra: confirmado (por WhatsApp o a mano), pidio
+   reprogramar, o el aviso no salio. Confirmada manda sobre lo demas: si el
+   aviso no salio y recepcion llamo y el paciente confirmo, se lee «Confirmó».
+   Esa etiqueta reemplaza al boton: un clic sobre ella deshace la confirmacion. */
+function avisoWhatsappEnAgenda(appointment) {
+  if (appointment.confirmada) {
+    return `<button type="button" class="wa-badge wa-confirmado" data-confirm-appointment="${appointment.id}" title="${confirmoPorWhatsapp(appointment) ? "El paciente confirmó por WhatsApp." : "El paciente confirmó."} Clic para deshacer.">Confirmó</button>`;
+  }
+  if (pideReprogramarPorWhatsapp(appointment)) {
+    return `<span class="wa-badge wa-reprogramar" title="Pidió reprogramar por WhatsApp. Está en Seguimiento de citas.">Pidió reprog.</span>`;
+  }
+  const info = whatsappDeCita(appointment);
+  if (info?.entrega === "fallido") {
+    return `<span class="wa-badge wa-fallido" title="El recordatorio por WhatsApp no se pudo enviar${info.error ? `: ${escapeHtml(info.error)}` : ""}. Avísele a mano.">Sin aviso</span>`;
+  }
+  return "";
+}
+
 function appointmentFollowUpStatus(appointment) {
   if (!appointment) return "";
   if (appointment.followUpStatus) return appointment.followUpStatus;
@@ -4624,20 +4712,23 @@ function isFollowUpOpen(appointment) {
 
 function appointmentFollowUps() {
   return state.appointments
-    .filter(isFollowUpOpen)
+    .filter((appointment) => isFollowUpOpen(appointment) || pideReprogramarPorWhatsapp(appointment))
     .sort((a, b) => appointmentSortKey(b).localeCompare(appointmentSortKey(a)));
 }
 
 function followUpLabel(appointment) {
+  if (pideReprogramarPorWhatsapp(appointment)) return "PIDE REPROG.";
   if (nextAppointmentAfterFollowUp(appointment)) return "REPROG.";
   return appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "REPROG." : "PENDIENTE";
 }
 
 function followUpClass(appointment) {
+  if (pideReprogramarPorWhatsapp(appointment)) return "followup-pending";
   return nextAppointmentAfterFollowUp(appointment) || appointmentFollowUpStatus(appointment) === "REPROGRAMADO" ? "followup-rescheduled" : "followup-pending";
 }
 
 function followUpNextText(appointment) {
+  if (pideReprogramarPorWhatsapp(appointment)) return "Pidió reprogramar por WhatsApp; la cita sigue en agenda";
   const next = (appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null) || nextAppointmentAfterFollowUp(appointment);
   return next ? `${formatDate(next.date)} ${agendaTimeLabel(next.time)} | ${appointmentStatusText(next.status)}` : "Pendiente";
 }
@@ -4804,9 +4895,7 @@ function renderAgenda() {
             <span>${escapeHtml(appointment.doctor)}</span>
             <span>${escapeHtml(statusText)}</span>
             <span>${money(debt)}</span>
-            ${appointment.confirmada
-              ? `<button type="button" class="wa-badge wa-confirmado" data-confirm-appointment="${appointment.id}" title="El paciente confirmó. Clic para deshacer.">Confirmó</button>`
-              : ""}
+            ${avisoWhatsappEnAgenda(appointment)}
           </div>
         </div>`;
       }
@@ -8655,17 +8744,26 @@ function renderAppointmentFollowUps() {
     const waPhone = whatsappPhone(patient?.phone);
     const message = `Hola ${patient?.name || ""}, le saludamos de ${state.config.clinicName}. Tenemos pendiente reprogramar su cita dental. Podemos ayudarle con una nueva fecha.`;
     const wa = `https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`;
+    /* El pedido que llego por WhatsApp se lee distinto: lo que escribio el
+       paciente va en la columna del comentario, y «Cerrar» no da de baja a
+       nadie -solo dice que ya se le llamo-, por eso se llama «Atendido». */
+    const pideWa = pideReprogramarPorWhatsapp(appointment);
+    const dicho = appointment.whatsapp?.respuestaTexto || "";
+    const comentario = pideWa
+      ? (dicho && dicho.toLowerCase() !== "reprogramar" ? `Escribió: ${dicho}` : "Tocó el botón Reprogramar del recordatorio")
+      : (appointment.followUpComment || appointment.notes || "");
+    const etiqueta = followUpLabel(appointment);
     return `<tr class="${followUpClass(appointment)}">
       <td>${formatDate(appointment.date)}<br><span class="muted">${agendaTimeLabel(appointment.time)} | ${escapeHtml(appointment.unit || "")}</span></td>
       <td><strong>${escapeHtml(patient?.name || "Paciente")}</strong><br><span class="muted">${escapeHtml(appointment.service || "")}</span></td>
       <td>${escapeHtml(patient?.phone || "-")}</td>
-      <td><span class="status ${followUpLabel(appointment) === "REPROG." ? "warn" : "danger"}">${escapeHtml(followUpLabel(appointment))}</span></td>
+      <td><span class="status ${etiqueta === "REPROG." || pideWa ? "warn" : "danger"}">${escapeHtml(etiqueta)}</span></td>
       <td>${escapeHtml(followUpNextText(appointment))}</td>
-      <td>${escapeHtml(appointment.followUpComment || appointment.notes || "")}</td>
+      <td>${escapeHtml(comentario)}</td>
       <td class="row-actions">
         ${canManageAppointments() ? `<button class="small-btn" data-followup-reschedule="${appointment.id}">Reprogramar</button>` : ""}
         ${waPhone ? `<a class="small-btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
-        ${canManageAppointments() ? `<button class="small-btn danger-btn" data-followup-close="${appointment.id}">Cerrar</button>` : ""}
+        ${canManageAppointments() ? `<button class="small-btn ${pideWa ? "" : "danger-btn"}" data-followup-close="${appointment.id}">${pideWa ? "Atendido" : "Cerrar"}</button>` : ""}
       </td>
     </tr>`;
   }).join("") || `<tr><td colspan="7">No hay citas en seguimiento.</td></tr>`;
@@ -8823,28 +8921,58 @@ function renderReminders() {
      la manana, y lo viejo vuelve a la lista como una cita mas por avisar. */
   const cuentaDesde = addDaysISO(startDate, -1);
   const avisadoHacePoco = (appointment) => String(appointment.reminderSentAt || "").slice(0, 10) >= cuentaDesde;
-  const pendientes = state.appointments
+  const proximas = state.appointments
     .filter((appointment) =>
       appointment.date >= startDate &&
       appointment.date <= endDate &&
-      !avisadoHacePoco(appointment) &&
       isSlotBlockingAppointment(appointment)
     )
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const pendientes = proximas.filter((appointment) => !avisadoHacePoco(appointment));
+  /* Las que salieron solas por WhatsApp se quedan a la vista con lo que
+     contesto el paciente: confirmo, pidio reprogramar, no contesto. Lo mandado
+     a mano sigue desapareciendo como siempre. Y solo durante 24 horas desde el
+     envio: despues la tarjeta se va sola, para que lo de ayer no siga ocupando
+     la pantalla de hoy. */
+  const vigente = (appointment) => {
+    const momento = Date.parse(whatsappDeCita(appointment)?.enviadoAt || "");
+    return Number.isFinite(momento) ? Date.now() - momento < 24 * 60 * 60 * 1000 : true;
+  };
+  const automaticas = proximas.filter((appointment) => avisadoHacePoco(appointment) && whatsappDeCita(appointment) && vigente(appointment));
   /* Se cortaba en 60 tarjetas para tres dias. Aqui se atienden unos 20
      pacientes diarios, asi que el corte dejaba fuera a los del final -los de
      pasado manana- sin avisar que faltaban. */
-  const upcoming = pendientes.slice(0, 200);
+  const upcoming = [...pendientes, ...automaticas]
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
+    .slice(0, 200);
   const resumen = $("#remindersSummary");
   if (resumen) {
     const porDia = (fecha) => pendientes.filter((appointment) => appointment.date === fecha).length;
-    resumen.hidden = !pendientes.length;
-    resumen.textContent = `Por enviar: hoy ${porDia(startDate)} · mañana ${porDia(addDaysISO(startDate, 1))} · pasado mañana ${porDia(endDate)}. Total ${pendientes.length}.`;
+    const automatico = hayWhatsappAutomatico();
+    resumen.hidden = !pendientes.length && !automaticas.length && !automatico;
+    const partes = [`Por enviar: hoy ${porDia(startDate)} · mañana ${porDia(addDaysISO(startDate, 1))} · pasado mañana ${porDia(endDate)}. Total ${pendientes.length}.`];
+    if (automatico) {
+      const hora = reminderTimeLabel(`${String(whatsappAutomatico.horaEnvio ?? 20).padStart(2, "0")}:00`);
+      // «08:00 p. m.» ya termina en punto: no se le pone otro
+      partes.push(`Los recordatorios de mañana salen solos por WhatsApp desde las ${hora.replace(/\.$/, "")}.`);
+    }
+    if (automaticas.length) {
+      const cuenta = (respuesta) => automaticas.filter((appointment) => whatsappDeCita(appointment)?.respuesta === respuesta).length;
+      const fallidos = automaticas.filter((appointment) => whatsappDeCita(appointment)?.entrega === "fallido").length;
+      const sinRespuesta = automaticas.length - cuenta("CONFIRMA") - cuenta("REPROGRAMAR") - fallidos - cuenta("OTRO");
+      partes.push(`WhatsApp: confirmaron ${cuenta("CONFIRMA")} · piden reprogramar ${cuenta("REPROGRAMAR")} · sin respuesta ${sinRespuesta}${fallidos ? ` · no enviados ${fallidos}` : ""}.`);
+    }
+    resumen.textContent = partes.join(" ");
   }
   $("#remindersList").innerHTML = upcoming.map((appointment) => {
     const patient = patientById(appointment.patientId);
     const text = appointmentReminderMessage(appointment, patient);
     const wa = `https://wa.me/51${patient?.phone || ""}?text=${encodeURIComponent(text)}`;
+    const estado = avisadoHacePoco(appointment) ? resumenWhatsapp(appointment) : null;
+    const accion = estado
+      ? `<p class="wa-estado ${estado.clase}">${escapeHtml(estado.texto)}</p>
+         <a class="ghost small-btn" href="${escapeHtml(wa)}" target="_blank" rel="noopener">Escribir</a>`
+      : `<button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>`;
     return `<article class="campaign-card">
       <div class="card-title">
         <strong>${formatDate(appointment.date)} ${reminderTimeLabel(appointment.time)}</strong>
@@ -8852,7 +8980,7 @@ function renderReminders() {
       </div>
       <p>${escapeHtml(friendlyName(patient?.name || ""))}</p>
       <p class="muted">${escapeHtml(appointment.service)} | ${escapeHtml(appointment.doctor)}</p>
-      <button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>
+      ${accion}
     </article>`;
   }).join("") || `<p class="muted">No hay recordatorios pendientes para hoy, mañana o pasado mañana.</p>`;
 }
@@ -11573,6 +11701,23 @@ function bindEvents() {
       if (close && canManageAppointments()) {
         const appointment = state.appointments.find((item) => item.id === close.dataset.followupClose);
         if (!appointment) return;
+        /* El pedido de reprogramar que llego por WhatsApp se atiende, no se
+           cierra: la cita sigue en pie y el paciente no pasa a inactivo. */
+        if (pideReprogramarPorWhatsapp(appointment)) {
+          if (!(await uiConfirm("¿Ya se habló con el paciente? El pedido deja de aparecer y la cita se queda como está."))) return;
+          const cuando = new Date().toISOString();
+          const atendida = { ...appointment, whatsapp: { ...appointment.whatsapp, atendidoAt: cuando } };
+          try {
+            await saveAppointmentApi({ ...atendida, whatsappAtendidoAt: cuando });
+          } catch (error) {
+            uiAlert(error.message);
+            return;
+          }
+          upsert(state.appointments, atendida);
+          if (!API_ENABLED) saveState();
+          render();
+          return;
+        }
         const patient = patientById(appointment.patientId);
         if (!(await uiConfirm("¿Cerrar este seguimiento? El paciente quedará como INACTIVO para recuperarlo luego en campañas."))) return;
         const updated = {
