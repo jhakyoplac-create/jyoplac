@@ -8652,11 +8652,7 @@ dialog.ui-dialogo {
 /* Respaldo del consultorio en su Google Drive: un desplegable en Configuracion
    (2026-11-16, igual que en EmpresaFacil). Cerrado solo se ve el titulo. */
 .respaldo-drive { margin-top: 18px; }
-.respaldo-drive > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; cursor: pointer; list-style: none; font-size: 18px; font-weight: 800; color: var(--ink); }
-.respaldo-drive > summary::-webkit-details-marker { display: none; }
-.respaldo-drive > summary::before { content: "▶"; font-size: 11px; color: var(--muted); transition: transform .15s; }
-.respaldo-drive[open] > summary::before { transform: rotate(90deg); }
-.respaldo-drive > summary span { flex: 1; }
+.respaldo-drive > summary { cursor: pointer; font-weight: 700; padding: 2px 0; }
 .respaldo-drive[open] > summary { margin-bottom: 10px; }
 .respaldo-drive p { margin: 0 0 10px; color: var(--muted); font-size: 14px; line-height: 1.45; }
 .respaldo-drive p strong { color: var(--ink); }
