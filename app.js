@@ -4754,6 +4754,9 @@ function letraSobreColor(hex) {
   return 1.05 / (luz + 0.05) >= (luz + 0.05) / 0.063 ? "#ffffff" : "#16202a";
 }
 
+// las citas cuya confirmacion esta viajando al servidor (ver el clic en la agenda)
+const confirmacionesEnCurso = new Set();
+
 function renderAgenda() {
   if (!$("#agendaDate").value) $("#agendaDate").value = todayISO();
   const date = $("#agendaDate").value;
@@ -4785,18 +4788,25 @@ function renderAgenda() {
         /* El boton de confirmado va aparte del estado de la cita. Que el
            paciente conteste el recordatorio no es lo mismo que haber venido:
            una cita confirmada sigue siendo RESERVADA hasta que se atiende, y
-           por eso la franja no cambia de color. Solo se pinta el boton. */
+           por eso la franja no cambia de color. Al confirmar, el boton de la
+           derecha se esconde y en su lugar sale la etiqueta «Confirmó» junto
+           al estado, igual que en EmpresaFacil; un clic en ella lo deshace. */
         const colorDoctor = colorDelDoctor(appointment.doctor);
         return `<div class="slot busy status-${appointment.status.toLowerCase()}${colorDoctor ? " del-doctor" : ""}" ${colorDoctor ? `style="${colorDoctor}"` : ""} data-edit-appointment="${appointment.id}">
           <div class="slot-main">
             <strong>${escapeHtml(patient?.name || "Paciente")}</strong>
             <span>${escapeHtml(appointment.service)}</span>
           </div>
-          <button class="slot-confirm${appointment.confirmada ? " confirmada" : ""}" type="button" data-confirm-appointment="${appointment.id}" aria-pressed="${Boolean(appointment.confirmada)}" title="${appointment.confirmada ? "El paciente confirmó. Clic para deshacer." : "Marcar que el paciente confirmó"}">Confir</button>
+          ${appointment.confirmada
+            ? ""
+            : `<button class="slot-confirm" type="button" data-confirm-appointment="${appointment.id}" aria-pressed="false" title="Marcar que el paciente confirmó">Confir</button>`}
           <div class="slot-meta">
             <span>${escapeHtml(appointment.doctor)}</span>
             <span>${escapeHtml(statusText)}</span>
             <span>${money(debt)}</span>
+            ${appointment.confirmada
+              ? `<button type="button" class="wa-badge wa-confirmado" data-confirm-appointment="${appointment.id}" title="El paciente confirmó. Clic para deshacer.">Confirmó</button>`
+              : ""}
           </div>
         </div>`;
       }
@@ -11510,38 +11520,38 @@ function bindEvents() {
       event.stopPropagation();
       const cita = state.appointments.find((item) => item.id === confirmar.dataset.confirmAppointment);
       if (!cita) return;
+      /* Mientras esa cita se esta guardando no se atiende otro clic sobre
+         ella: el viaje a Render tarda, y un segundo clic deshace el primero. */
+      if (confirmacionesEnCurso.has(cita.id)) return;
       const antes = Boolean(cita.confirmada);
       const marcada = !antes;
-      /* Se pinta al instante y recien despues se guarda. Antes se esperaba la
-         respuesta del servidor -el viaje a Render y de ahi a la base- y el
-         boton se quedaba gris varios segundos: parecia que el clic no habia
-         entrado y se volvia a pulsar, que es justo lo que lo deshace. */
-      const pintar = (valor) => {
-        confirmar.classList.toggle("confirmada", valor);
-        confirmar.setAttribute("aria-pressed", String(valor));
-        confirmar.title = valor ? "El paciente confirmó. Clic para deshacer." : "Marcar que el paciente confirmó";
+      /* Se pinta al instante y recien despues se guarda: el boton «Confir» se
+         vuelve la etiqueta «Confirmó» junto al estado, o al reves. Esperar la
+         respuesta del servidor dejaba la franja quieta varios segundos y
+         parecia que el clic no habia entrado. */
+      const poner = (valor) => {
+        cita.confirmada = valor;
+        /* Mientras se guardaba pudo entrar un refresco por rango y reemplazar
+           la cita por la copia del servidor, que no tenia la confirmacion. */
+        const vigente = state.appointments.find((item) => item.id === cita.id);
+        if (vigente) vigente.confirmada = valor;
+        renderAgenda();
       };
-      cita.confirmada = marcada;
-      pintar(marcada);
-      confirmar.disabled = true;
+      confirmacionesEnCurso.add(cita.id);
+      poner(marcada);
       try {
         await saveAppointmentApi(cita);
       } catch (error) {
         // si el servidor no lo acepta se deshace: la agenda no puede decir que
         // el paciente confirmo cuando eso no quedo guardado en ningun lado
-        cita.confirmada = antes;
-        pintar(antes);
-        confirmar.disabled = false;
+        confirmacionesEnCurso.delete(cita.id);
+        poner(antes);
         uiAlert(error.message || "No se pudo guardar la confirmacion.");
         return;
       }
-      confirmar.disabled = false;
-      /* Mientras se guardaba pudo entrar un refresco por rango y reemplazar la
-         cita por la copia del servidor, que todavia no tenia la confirmacion. */
-      const vigente = state.appointments.find((item) => item.id === cita.id);
-      if (vigente) vigente.confirmada = marcada;
+      confirmacionesEnCurso.delete(cita.id);
       if (!API_ENABLED) saveState();
-      renderAgenda();
+      poner(marcada);
       return;
     }
     const edit = event.target.closest("[data-edit-appointment]");
