@@ -12,6 +12,11 @@ subcarpeta «miniaturas» por paciente. El tipo, la fecha y quien la subio van e
 las appProperties de cada archivo y la nota en su descripcion: la lista sale
 del Drive mismo y no engorda la base.
 
+Tambien entran documentos en PDF (2026-11-16): resultados de laboratorio,
+informes y el consentimiento firmado a mano. Y en la misma cuenta, aparte, se
+guarda el respaldo del consultorio cuando el administrador lo pide: carpeta
+«CM - Respaldos», las ultimas 30 copias. Nada de eso es automatico.
+
 Usa el proyecto «EmpresaFacil» de Google Cloud. Necesita en Render
 GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET, y la direccion de vuelta
 https://<este sitio>/api/drive/vuelta cargada en ese cliente de Google.
@@ -36,9 +41,14 @@ DRIVE = "https://www.googleapis.com/drive/v3"
 SUBIDA = "https://www.googleapis.com/upload/drive/v3/files"
 CARPETA = "application/vnd.google-apps.folder"
 CAMPOS = "id,name,mimeType,size,createdTime,description,appProperties"
-TIPOS = ("radiografia", "intraoral", "extraoral", "antes-despues", "otros")
+TIPOS = ("radiografia", "intraoral", "extraoral", "antes-despues", "consentimiento", "documento", "otros")
 MAX_FOTO = 8 * 1024 * 1024
+MAX_PDF = 15 * 1024 * 1024
 MAX_MINI = 400 * 1024
+PDF = "application/pdf"
+MAX_RESPALDO = 40 * 1024 * 1024
+CUANTOS_RESPALDOS = 30
+CAMPOS_RESPALDO = "id,name,size,createdTime,appProperties"
 CONSULTORIO = "cm"
 
 
@@ -270,6 +280,8 @@ def a_foto(archivo):
         "nota": archivo.get("description", ""),
         "mini": p.get("mini", ""),
         "tamano": int(archivo.get("size") or 0),
+        # un documento (laboratorio, informe, consentimiento firmado) y no una imagen
+        "pdf": archivo.get("mimeType") == PDF,
     }
 
 
@@ -284,6 +296,9 @@ def _tipo_real(b):
         return "image/png"
     if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
         return "image/webp"
+    # un PDF empieza con %PDF
+    if b[:4] == b"%PDF":
+        return PDF
     return ""
 
 
@@ -345,6 +360,25 @@ def atender(db, accion, datos, usuario, vuelta):
         if accion == "subir":
             return _subir(db, llave, conexion, datos)
 
+        if accion == "respaldo-estado":
+            acerca = _drive(llave, "/about?fields=storageQuota(limit,usage)")
+            cuota = acerca.get("storageQuota") or {}
+            return {
+                "conectado": True, "correo": conexion.get("correo", ""),
+                "usado": int(cuota.get("usage") or 0), "total": int(cuota.get("limit") or 0),
+                "copias": _listar_respaldos(llave)[:CUANTOS_RESPALDOS],
+            }, 200
+
+        if accion == "respaldo-guardar":
+            return _guardar_respaldo(llave, datos, usuario)
+
+        if accion == "respaldo-bajar":
+            copia = _archivo_propio(llave, datos.get("id"))
+            if not copia or (copia.get("appProperties") or {}).get("rol") != "respaldo":
+                return {"error": "Esa copia ya no está en el Drive del consultorio."}, 404
+            cuerpo, _ = _drive(llave, f"/files/{copia['id']}?alt=media", binario=True)
+            return (cuerpo, "application/json; charset=utf-8"), "binario"
+
         if accion == "listar":
             paciente = _texto(datos.get("paciente"), 60)
             if not re.match(r"^[\w-]{1,60}$", paciente):
@@ -368,7 +402,8 @@ def atender(db, accion, datos, usuario, vuelta):
             return {"fotos": fotos}, 200
 
         archivo = _archivo_propio(llave, datos.get("id"))
-        if not archivo:
+        # las fotos y los documentos: una copia de respaldo no se toca desde aqui
+        if not archivo or (archivo.get("appProperties") or {}).get("rol") != "foto":
             return {"error": "Esa foto ya no está en el Drive del consultorio."}, 404
         p = archivo.get("appProperties") or {}
 
@@ -413,11 +448,14 @@ def _subir(db, llave, conexion, datos):
         mini = base64.b64decode(str(datos.get("mini") or ""), validate=True)
     except Exception:
         return {"error": "No llegó la foto."}, 400
-    if not foto or not mini or len(foto) > MAX_FOTO or len(mini) > MAX_MINI:
-        return {"error": "La foto debe pesar menos de 8 MB."}, 400
+    if not foto or not mini or len(foto) > MAX_PDF or len(mini) > MAX_MINI:
+        return {"error": "El archivo pesa demasiado: las fotos hasta 8 MB y los PDF hasta 15 MB."}, 400
     mime, mime_mini = _tipo_real(foto), _tipo_real(mini)
-    if not mime or not mime_mini:
-        return {"error": "Solo se pueden subir fotos (JPG, PNG o WebP)."}, 400
+    # la miniatura siempre es una imagen, tambien la de un PDF
+    if not mime or not mime_mini or mime_mini == PDF:
+        return {"error": "Solo se pueden subir fotos (JPG, PNG o WebP) y documentos en PDF."}, 400
+    if mime != PDF and len(foto) > MAX_FOTO:
+        return {"error": "La foto debe pesar menos de 8 MB."}, 400
     meta = datos.get("meta") or {}
     paciente = _texto(meta.get("paciente"), 60)
     if not re.match(r"^[\w-]{1,60}$", paciente):
@@ -438,11 +476,67 @@ def _subir(db, llave, conexion, datos):
     carpeta = _carpeta_del_paciente(llave, raiz, paciente, f"{nombre_paciente} - {dni}" if dni else nombre_paciente)
     miniaturas = _carpeta_de_miniaturas(llave, carpeta, paciente)
     base = re.sub(r'[\\/:*?"<>|]', "-", f"{fecha} {_texto(meta.get('tipoNombre'), 30) or tipo}")
-    extension = {"image/png": "png", "image/webp": "webp"}.get(mime, "jpg")
+    extension = {"image/png": "png", "image/webp": "webp", PDF: "pdf"}.get(mime, "jpg")
     propiedades = {"paciente": paciente, "tipo": tipo, "fecha": fecha, "subio": _texto(meta.get("subio"), 60)}
     chica = _subir_archivo(llave, f"{base}.jpg", miniaturas, mime_mini, mini, {**propiedades, "rol": "mini"})
     grande = _subir_archivo(llave, f"{base}.{extension}", carpeta, mime, foto, {**propiedades, "rol": "foto", "mini": chica["id"]}, _texto(meta.get("nota"), 1000))
     return {"foto": a_foto(grande)}, 200
+
+
+# ---------- El respaldo del consultorio ----------
+
+def _carpeta_de_respaldos(llave):
+    hallada = _buscar_uno(llave, f"appProperties has {{ key='rol' and value='respaldos' }} and appProperties has {{ key='empresa' and value='{CONSULTORIO}' }}")
+    return hallada["id"] if hallada else _crear_carpeta(llave, "CM - Respaldos", None, {"rol": "respaldos"})
+
+
+def _a_copia(archivo):
+    p = archivo.get("appProperties") or {}
+    return {
+        "id": archivo["id"],
+        "nombre": archivo.get("name", ""),
+        "dia": p.get("dia") or str(archivo.get("createdTime", ""))[:10],
+        "creado": archivo.get("createdTime", ""),
+        "tamano": int(archivo.get("size") or 0),
+        "por": p.get("por", ""),
+    }
+
+
+def _listar_respaldos(llave):
+    q = " and ".join([
+        f"appProperties has {{ key='empresa' and value='{CONSULTORIO}' }}",
+        "appProperties has { key='rol' and value='respaldo' }",
+        "trashed = false",
+    ])
+    parametros = {"q": q, "fields": f"files({CAMPOS_RESPALDO})", "pageSize": "100", "orderBy": "createdTime desc", "spaces": "drive"}
+    return [_a_copia(a) for a in _drive(llave, f"/files?{urllib.parse.urlencode(parametros)}").get("files") or []]
+
+
+def _guardar_respaldo(llave, datos, usuario):
+    """Guarda en el Drive el respaldo que arma la pantalla: el mismo archivo
+    que baja «Exportar respaldo», que ya viene sin las claves de los usuarios."""
+    respaldo = datos.get("respaldo")
+    if not isinstance(respaldo, dict) or not isinstance(respaldo.get("patients"), list):
+        return {"error": "No llegó el respaldo."}, 400
+    cuerpo = json.dumps(respaldo, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(cuerpo) > MAX_RESPALDO:
+        return {"error": "El respaldo pesa demasiado para guardarlo en Drive."}, 413
+    # el dia y la hora del consultorio: Lima va cinco horas detras de UTC
+    lima = time.gmtime(time.time() - 5 * 3600)
+    dia, hora = time.strftime("%Y-%m-%d", lima), time.strftime("%H%M", lima)
+    carpeta = _carpeta_de_respaldos(llave)
+    subido = _subir_archivo(
+        llave, f"respaldo-cm-odontologia-{dia}-{hora}.json", carpeta, "application/json", cuerpo,
+        {"rol": "respaldo", "dia": dia, "por": _texto(usuario.get("name"), 60)},
+    )
+    # se conservan las ultimas: las mas antiguas van a la papelera de su Drive
+    copias = _listar_respaldos(llave)
+    for vieja in copias[CUANTOS_RESPALDOS:]:
+        try:
+            _drive(llave, f"/files/{vieja['id']}?fields=id", "PATCH", {"trashed": True})
+        except DriveError:
+            pass
+    return {"copia": _a_copia({**subido, "size": subido.get("size") or len(cuerpo)}), "copias": copias[:CUANTOS_RESPALDOS]}, 200
 
 
 def vuelta_de_google(db, parametros, vuelta):

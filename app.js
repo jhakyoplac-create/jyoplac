@@ -10030,6 +10030,7 @@ function renderConfig() {
     form.services.value = state.services.filter((service) => service.active).map((service) => service.name).join(", ");
   }
   renderPreciosDeConfig();
+  window.RespaldoDrive?.render();
   renderUsers();
 }
 
@@ -12558,6 +12559,8 @@ function bindEvents() {
   });
 
   window.FotosDrive.iniciarFotos();
+  // el respaldo del consultorio en su Google Drive (respaldo-drive.js)
+  window.RespaldoDrive?.iniciar();
   $("#historySheetTabs")?.addEventListener("click", (event) => {
     const pestana = event.target.closest("[data-hoja]");
     if (!pestana) return;

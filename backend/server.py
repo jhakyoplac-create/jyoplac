@@ -1977,6 +1977,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             # Fotos y radiografias en el Google Drive del consultorio. Conectar,
             # desconectar y borrar: el dueño y el administrador. Subir y editar:
             # quien maneja lo clinico. Mirar: cualquiera que haya entrado.
+            # El respaldo del consultorio en ese mismo Drive: solo el
+            # administrador, igual que «Exportar respaldo».
             user = require_auth(self)
             if not user:
                 return
@@ -1985,6 +1987,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
             rol = normalize_role(user["role"])
             if accion in ("conectar", "desconectar", "borrar") and rol not in ("ADMIN", "DOCTOR"):
                 return send_json(self, {"error": "Solo el dueño o el administrador puede hacer esto."}, 403)
+            if accion.startswith("respaldo-") and rol != "ADMIN":
+                return send_json(self, {"error": "Solo el administrador puede manejar el respaldo."}, 403)
             if accion in ("subir", "editar") and rol not in ("ADMIN", "DOCTOR", "DOCTOR_ATENCION", "DOCTOR_TRABAJADOR", "RECEPCION"):
                 return send_json(self, {"error": "No tienes permiso para esta accion"}, 403)
             try:
@@ -2006,6 +2010,8 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 anotar(user, {"subir": "FOTO_SUBIDA", "borrar": "FOTO_BORRADA", "conectar": "DRIVE_CONECTAR", "desconectar": "DRIVE_DESCONECTADO"}[accion],
                        {"subir": "Subió una foto del paciente", "borrar": "Mandó una foto a la papelera del Drive", "conectar": "Abrió la conexión con Google Drive", "desconectar": "Desconectó el Google Drive del consultorio"}[accion],
                        str(((data.get("meta") or {}).get("paciente")) or ""))
+            if accion == "respaldo-guardar" and estado == 200:
+                anotar(user, "RESPALDO_DRIVE", "Guardó un respaldo del consultorio en Google Drive")
             return send_json(self, respuesta, estado)
 
         if parsed.path == "/api/logout":

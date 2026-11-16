@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" href="assets/app-icon-cm-apple-180.png" />
     <link rel="icon" href="assets/favicon.ico" sizes="any" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20261116-recordatorios-auto" />
+    <link rel="stylesheet" href="styles.css?v=20261116-respaldo-y-pdf" />
     <link rel="stylesheet" href="odontograma.css?v=20261010-color-al-lado-del-tipo" />
   </head>
   <body class="locked">
@@ -1154,6 +1154,12 @@
           </details>
           <button class="primary" type="submit">Guardar configuración</button>
         </form>
+        <!-- El respaldo del consultorio en su Google Drive: un desplegable.
+             Nace oculto: solo lo ve el administrador. -->
+        <details class="panel respaldo-drive" id="respaldoDrivePanel" hidden>
+          <summary><span>Respaldo consultorio</span></summary>
+          <div id="respaldoDriveCaja"></div>
+        </details>
         <div class="content-grid form-and-list user-admin-grid" id="userAdminPanel">
           <form class="panel form" id="userForm">
             <div class="panel-head">
@@ -1446,8 +1452,9 @@
     <script src="hojas-extra.js?v=20261104-una-hoja"></script>
     <script src="recetas.js?v=20261109-receta-mas"></script>
     <script src="dialogos.js?v=20261019-ventanas"></script>
-    <script src="fotos.js?v=20261115-fotos-drive"></script>
+    <script src="fotos.js?v=20261116-respaldo-y-pdf"></script>
+    <script src="respaldo-drive.js?v=20261116-respaldo-y-pdf"></script>
     <script src="precios-odontograma.js?v=20261115-precios-elegir"></script>
-    <script src="app.js?v=20261116-recordatorios-auto"></script>
+    <script src="app.js?v=20261116-respaldo-y-pdf"></script>
   </body>
 </html>

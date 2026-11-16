@@ -9,6 +9,8 @@
 
    Antes de subir, cada foto se achica aqui mismo (unos 300 KB; las
    radiografias con mas detalle) y se arma una miniatura para la galeria.
+   Tambien entran documentos en PDF (2026-11-16): el consentimiento firmado a
+   mano, resultados de laboratorio, informes. El PDF sube tal cual.
    Se apoya en lo que app.js deja a la vista: state, patientById, escapeHtml,
    todayISO, currentUser, canManageClinical, puedeAdministrarUsuarios y
    apiToken. */
@@ -18,9 +20,13 @@ const TIPOS_DE_FOTO = [
   ["intraoral", "Intraoral", "Intraorales"],
   ["extraoral", "Extraoral", "Extraorales"],
   ["antes-despues", "Antes / Después", "Antes / Después"],
+  ["consentimiento", "Consentimiento firmado", "Consentimientos"],
+  ["documento", "Documento", "Documentos"],
   ["otros", "Otros", "Otros"]
 ];
-const nombreDelTipo = (tipo) => (TIPOS_DE_FOTO.find(([clave]) => clave === tipo) || TIPOS_DE_FOTO[4])[1];
+const nombreDelTipo = (tipo) => (TIPOS_DE_FOTO.find(([clave]) => clave === tipo) || TIPOS_DE_FOTO[TIPOS_DE_FOTO.length - 1])[1];
+const MAX_PDF = 15 * 1024 * 1024;
+const esPdf = (archivo) => archivo.type === "application/pdf" || /\.pdf$/i.test(archivo.name || "");
 
 /* ---------- Conversacion con el servidor ---------- */
 async function pedir(accion, datos = {}, { binario = false } = {}) {
@@ -137,7 +143,7 @@ function sinConectar() {
 function tarjeta(foto) {
   const elegida = elegidas.includes(foto.id);
   return `<button class="foto-tarjeta${elegida ? " elegida" : ""}" type="button" data-foto-abrir="${escapeHtml(foto.id)}">
-    <span class="foto-cuadro"><img data-foto-mini="${escapeHtml(foto.id)}" alt="${escapeHtml(nombreDelTipo(foto.tipo))}" /></span>
+    <span class="foto-cuadro"><img data-foto-mini="${escapeHtml(foto.id)}" alt="${escapeHtml(nombreDelTipo(foto.tipo))}" />${foto.pdf ? `<span class="foto-pdf">PDF</span>` : ""}</span>
     <span class="foto-pie">
       <span class="foto-etiqueta tipo-${escapeHtml(foto.tipo)}">${escapeHtml(nombreDelTipo(foto.tipo))}</span>
       ${foto.nota ? `<span class="foto-nota">${escapeHtml(foto.nota)}</span>` : ""}
@@ -179,7 +185,7 @@ function hojaDeFotos(patientId, repintar) {
   const cuerpo = lista?.cargando && !fotos.length
     ? `<p class="muted fotos-cargando">Trayendo las fotos de ${escapeHtml(patient.name)}…</p>`
     : !fotos.length
-      ? `<div class="fotos-vacio"><p>${escapeHtml(patient.name)} todavía no tiene fotos.</p><p class="muted">Toca «+ Subir fotos» para agregar radiografías, fotos intraorales o del antes y después.</p></div>`
+      ? `<div class="fotos-vacio"><p>${escapeHtml(patient.name)} todavía no tiene fotos ni documentos.</p><p class="muted">Toca «+ Subir fotos o PDF» para agregar radiografías, fotos intraorales, el antes y después, o documentos en PDF como el consentimiento firmado.</p></div>`
       : [...porDia.entries()].map(([fecha, delDia]) => {
         const cita = citaDelDia(patientId, fecha);
         return `<section class="fotos-dia">
@@ -190,9 +196,9 @@ function hojaDeFotos(patientId, repintar) {
 
   return `<article class="fotos-hoja">
     <div class="fotos-barra">
-      ${canManageClinical() ? `<button class="primary" type="button" data-fotos-subir>+ Subir fotos</button>
-      <input type="file" id="fotosArchivos" accept="image/*" multiple hidden />` : ""}
-      ${fotos.length >= 2 ? `<button class="small-btn${comparando ? " activo" : ""}" type="button" data-fotos-comparar>${comparando ? "Cancelar comparación" : "Antes / Después"}</button>` : ""}
+      ${canManageClinical() ? `<button class="primary" type="button" data-fotos-subir>+ Subir fotos o PDF</button>
+      <input type="file" id="fotosArchivos" accept="image/*,application/pdf,.pdf" multiple hidden />` : ""}
+      ${fotos.filter((foto) => !foto.pdf).length >= 2 ? `<button class="small-btn${comparando ? " activo" : ""}" type="button" data-fotos-comparar>${comparando ? "Cancelar comparación" : "Antes / Después"}</button>` : ""}
       <div class="fotos-filtros">${fotos.length ? filtros : ""}</div>
       <div class="fotos-drive">
         <span>Google Drive · ${escapeHtml(drive.correo || "conectado")}</span>
@@ -247,6 +253,46 @@ function achicar(fuente, lado, calidad) {
   return new Promise((resolver, rechazar) => lienzo.toBlob((blob) => (blob ? resolver(blob) : rechazar(new Error("No se pudo preparar la foto."))), "image/jpeg", calidad));
 }
 
+/* La miniatura de un PDF: una hoja dibujada con el nombre del archivo. No se
+   abre el PDF para sacarle la primera pagina: haria falta una libreria entera
+   para una imagen que solo sirve para reconocerlo en la galeria. */
+function miniaturaDePdf(nombre) {
+  const lienzo = document.createElement("canvas");
+  lienzo.width = 420;
+  lienzo.height = 315;
+  const ctx = lienzo.getContext("2d");
+  ctx.fillStyle = "#eceae6";
+  ctx.fillRect(0, 0, 420, 315);
+  // la hoja, con la esquina doblada
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.moveTo(140, 34); ctx.lineTo(250, 34); ctx.lineTo(280, 64); ctx.lineTo(280, 214); ctx.lineTo(140, 214); ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#d9d6cf";
+  ctx.beginPath();
+  ctx.moveTo(250, 34); ctx.lineTo(250, 64); ctx.lineTo(280, 64); ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#d9d6cf";
+  [92, 112, 132].forEach((y) => ctx.fillRect(158, y, 104, 6));
+  ctx.fillStyle = "#c0392b";
+  ctx.fillRect(158, 160, 70, 34);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 22px system-ui, Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("PDF", 193, 178);
+  // el nombre, recortado a lo que entra
+  let texto = String(nombre || "documento.pdf").replace(/\.pdf$/i, "");
+  ctx.fillStyle = "#3a3f45";
+  ctx.font = "600 19px system-ui, Arial, sans-serif";
+  if (ctx.measureText(texto).width > 380) {
+    while (texto.length > 4 && ctx.measureText(`${texto}…`).width > 380) texto = texto.slice(0, -1);
+    texto = `${texto}…`;
+  }
+  ctx.fillText(texto, 210, 262);
+  return new Promise((resolver, rechazar) => lienzo.toBlob((blob) => (blob ? resolver(blob) : rechazar(new Error("No se pudo preparar el documento."))), "image/jpeg", 0.8));
+}
+
 /* ---------- Ventanas ---------- */
 let ventana = null;
 function cerrarVentana() {
@@ -270,12 +316,18 @@ const opcionesDeTipo = (actual) => TIPOS_DE_FOTO.map(([tipo, nombre]) => `<optio
 
 function ventanaDeSubida(patientId, archivos) {
   const patient = patientById(patientId);
-  const vistas = archivos.map((archivo) => URL.createObjectURL(archivo));
-  const caja = abrirVentana(`<div class="fotos-dialogo" role="dialog" aria-label="Subir fotos">
-    <h4>Subir ${archivos.length === 1 ? "1 foto" : `${archivos.length} fotos`} · ${escapeHtml(patient?.name || "")}</h4>
-    <div class="fotos-previas">${vistas.map((url) => `<img src="${url}" alt="" />`).join("")}</div>
+  const vistas = archivos.map((archivo) => (esPdf(archivo) ? "" : URL.createObjectURL(archivo)));
+  const soloPdf = archivos.every(esPdf);
+  const cuantos = soloPdf
+    ? (archivos.length === 1 ? "1 documento" : `${archivos.length} documentos`)
+    : archivos.some(esPdf)
+      ? `${archivos.length} archivos`
+      : (archivos.length === 1 ? "1 foto" : `${archivos.length} fotos`);
+  const caja = abrirVentana(`<div class="fotos-dialogo" role="dialog" aria-label="Subir fotos o documentos">
+    <h4>Subir ${cuantos} · ${escapeHtml(patient?.name || "")}</h4>
+    <div class="fotos-previas">${vistas.map((url, i) => (url ? `<img src="${url}" alt="" />` : `<span class="previa-pdf"><b>PDF</b><small>${escapeHtml(archivos[i].name)}</small></span>`)).join("")}</div>
     <div class="fotos-campos">
-      <label>Tipo<select id="fotosTipo">${opcionesDeTipo("intraoral")}</select></label>
+      <label>Tipo<select id="fotosTipo">${opcionesDeTipo(soloPdf ? "documento" : "intraoral")}</select></label>
       <label>Fecha<input type="date" id="fotosFecha" value="${todayISO()}" max="${todayISO()}" /></label>
       <label class="ancho">Nota (opcional)<input type="text" id="fotosNota" maxlength="300" placeholder="Ej.: control a los 3 meses" /></label>
     </div>
@@ -285,7 +337,7 @@ function ventanaDeSubida(patientId, archivos) {
       <button class="primary" type="button" data-fotos-confirmar>Subir</button>
     </div>
   </div>`);
-  const liberar = () => vistas.forEach((url) => URL.revokeObjectURL(url));
+  const liberar = () => vistas.forEach((url) => { if (url) URL.revokeObjectURL(url); });
   caja.querySelector("[data-fotos-cancelar]").addEventListener("click", () => { liberar(); cerrarVentana(); });
   caja.querySelector("[data-fotos-confirmar]").addEventListener("click", async (event) => {
     const boton = event.currentTarget;
@@ -300,11 +352,21 @@ function ventanaDeSubida(patientId, archivos) {
     for (let i = 0; i < archivos.length; i += 1) {
       progreso.textContent = `Subiendo ${i + 1} de ${archivos.length}…`;
       try {
-        const fuente = await abrirImagen(archivos[i]);
-        const radiografia = tipo === "radiografia";
-        const grande = await achicar(fuente, radiografia ? 2400 : 1800, radiografia ? 0.9 : 0.85);
-        const mini = await achicar(fuente, 420, 0.72);
-        fuente.close?.();
+        let grande;
+        let mini;
+        const pdf = esPdf(archivos[i]);
+        if (pdf) {
+          // el PDF sube tal cual: no se achica ni se toca
+          if (archivos[i].size > MAX_PDF) throw new Error("pesa más de 15 MB");
+          grande = archivos[i];
+          mini = await miniaturaDePdf(archivos[i].name);
+        } else {
+          const fuente = await abrirImagen(archivos[i]);
+          const radiografia = tipo === "radiografia";
+          grande = await achicar(fuente, radiografia ? 2400 : 1800, radiografia ? 0.9 : 0.85);
+          mini = await achicar(fuente, 420, 0.72);
+          fuente.close?.();
+        }
         const [fotoB64, miniB64] = await Promise.all([enBase64(grande), enBase64(mini)]);
         const { foto: subida } = await pedir("subir", { foto: fotoB64, mini: miniB64, meta: {
           paciente: patientId,
@@ -363,10 +425,10 @@ function pintarVisor() {
   const foto = (listas.get(visor.patientId)?.fotos || []).find((item) => item.id === visor.ids[visor.indice]);
   if (!foto) { cerrarVentana(); return; }
   const editable = canManageClinical();
-  const caja = abrirVentana(`<div class="fotos-visor" role="dialog" aria-label="Foto">
-    <div class="fotos-escenario">
+  const caja = abrirVentana(`<div class="fotos-visor" role="dialog" aria-label="${foto.pdf ? "Documento" : "Foto"}">
+    <div class="fotos-escenario${foto.pdf ? " es-pdf" : ""}">
       <img alt="${escapeHtml(nombreDelTipo(foto.tipo))}" />
-      <p class="fotos-cargando-grande">Cargando…</p>
+      ${foto.pdf ? `<button class="fotos-abrir-pdf" type="button" data-visor-abrir-pdf>Abrir el PDF</button>` : `<p class="fotos-cargando-grande">Cargando…</p>`}
       ${visor.ids.length > 1 ? `<button class="fotos-flecha izq" type="button" data-visor-paso="-1" aria-label="Anterior">‹</button>
       <button class="fotos-flecha der" type="button" data-visor-paso="1" aria-label="Siguiente">›</button>` : ""}
       <button class="fotos-cerrar" type="button" data-visor-cerrar aria-label="Cerrar">×</button>
@@ -382,15 +444,20 @@ function pintarVisor() {
       <label>Nota<textarea id="visorNota" rows="3" maxlength="1000"${editable ? "" : " disabled"}>${escapeHtml(foto.nota)}</textarea></label>
       ${foto.subio || foto.subidoEl ? `<p class="fotos-sub">Subió ${escapeHtml(foto.subio || "")} ${foto.subidoEl ? `· ${new Date(foto.subidoEl).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : ""}</p>` : ""}
       ${editable ? `<button class="small-btn" type="button" data-visor-guardar>Guardar cambios</button>` : ""}
-      ${puedeAdministrarUsuarios() ? `<button class="fotos-accion borrar" type="button" data-visor-borrar>Borrar foto</button>` : ""}
+      ${puedeAdministrarUsuarios() ? `<button class="fotos-accion borrar" type="button" data-visor-borrar>${foto.pdf ? "Borrar documento" : "Borrar foto"}</button>` : ""}
     </aside>
   </div>`, "visor");
   const img = caja.querySelector(".fotos-escenario img");
   const mini = imagenes.get(`${foto.id}|mini`);
   if (mini) img.src = mini;
-  imagen(foto.id, "grande")
-    .then((url) => { if (img.isConnected) { img.src = url; caja.querySelector(".fotos-cargando-grande")?.remove(); } })
-    .catch((error) => { const aviso = caja.querySelector(".fotos-cargando-grande"); if (aviso) aviso.textContent = error.message; });
+  // de un PDF se muestra su miniatura; el documento se abre aparte, con su boton
+  if (foto.pdf) {
+    if (!mini) imagen(foto.id, "mini").then((url) => { if (img.isConnected) img.src = url; }).catch(() => {});
+  } else {
+    imagen(foto.id, "grande")
+      .then((url) => { if (img.isConnected) { img.src = url; caja.querySelector(".fotos-cargando-grande")?.remove(); } })
+      .catch((error) => { const aviso = caja.querySelector(".fotos-cargando-grande"); if (aviso) aviso.textContent = error.message; });
+  }
 
   let inicio = null;
   const escenario = caja.querySelector(".fotos-escenario");
@@ -424,7 +491,23 @@ function pintarVisor() {
       boton.disabled = false;
       return;
     }
-    const nombre = `${(patient?.name || "paciente").replace(/[\\/:*?"<>|]/g, "")} - ${nombreDelTipo(foto.tipo).replace(/\//g, "-")} ${foto.fecha}.jpg`;
+    const nombre = `${(patient?.name || "paciente").replace(/[\\/:*?"<>|]/g, "")} - ${nombreDelTipo(foto.tipo).replace(/\//g, "-")} ${foto.fecha}.${foto.pdf ? "pdf" : "jpg"}`;
+    if (event.target.closest("[data-visor-abrir-pdf]")) {
+      /* La pestaña se abre en el mismo clic -si se abriera despues de traer
+         el archivo, el navegador la bloquearia- y se llena cuando llega. */
+      const pestana = window.open("about:blank", "_blank");
+      aviso.textContent = "Abriendo el documento…";
+      try {
+        const url = await imagen(foto.id, "grande");
+        if (pestana && !pestana.closed) pestana.location.href = url;
+        else { const enlace = document.createElement("a"); enlace.href = url; enlace.download = nombre; enlace.click(); }
+        aviso.textContent = "";
+      } catch (error) {
+        pestana?.close();
+        aviso.textContent = error.message;
+      }
+      return;
+    }
     const descargar = async () => {
       const url = await imagen(foto.id, "grande");
       const enlace = document.createElement("a");
@@ -437,20 +520,20 @@ function pintarVisor() {
       try {
         const url = await imagen(foto.id, "grande");
         const blob = await (await fetch(url)).blob();
-        const archivo = new File([blob], nombre, { type: blob.type || "image/jpeg" });
+        const archivo = new File([blob], nombre, { type: foto.pdf ? "application/pdf" : (blob.type || "image/jpeg") });
         if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
           await navigator.share({ files: [archivo], title: nombre }).catch((error) => { if (error?.name !== "AbortError") throw error; });
         } else {
           await descargar();
-          aviso.textContent = `Se descargó «${nombre}». Adjúntala en WhatsApp.`;
+          aviso.textContent = `Se descargó «${nombre}». Adjúntalo en WhatsApp.`;
         }
       } catch (error) {
-        aviso.textContent = error.message || "No se pudo compartir la foto.";
+        aviso.textContent = error.message || "No se pudo compartir el archivo.";
       }
       return;
     }
     if (event.target.closest("[data-visor-borrar]")) {
-      if (!(await window.uiConfirm?.("La foto se manda a la papelera del Google Drive del consultorio. Desde ahí se puede recuperar durante 30 días. ¿Borrarla?"))) return;
+      if (!(await window.uiConfirm?.(`${foto.pdf ? "El documento" : "La foto"} se manda a la papelera del Google Drive del consultorio. Desde ahí se puede recuperar durante 30 días. ¿Continuar?`))) return;
       try {
         await pedir("borrar", { id: foto.id });
         const lista = listas.get(visor.patientId);
@@ -498,7 +581,7 @@ function iniciarFotos() {
     history.replaceState(null, "", `${location.pathname}${parametros.toString() ? `?${parametros}` : ""}${location.hash}`);
     setTimeout(() => {
       window.uiAlert?.(resultado === "ok"
-        ? "Google Drive quedó conectado. Ya se pueden subir fotos desde Historial clínico › Fotos y radiografías."
+        ? "Google Drive quedó conectado. Ya se pueden subir fotos desde Historial clínico › Fotos y radiografías, y guardar el respaldo desde Configuración."
         : `No se pudo conectar Google Drive. ${motivo}`);
     }, 600);
   }
@@ -543,6 +626,8 @@ function iniciarFotos() {
     const abrir = event.target.closest("[data-foto-abrir]");
     if (abrir) {
       const id = abrir.dataset.fotoAbrir;
+      // un PDF no se compara: el antes y después es de fotos
+      if (comparando && (listas.get(patientId)?.fotos || []).find((foto) => foto.id === id)?.pdf) return;
       if (comparando) {
         elegidas = elegidas.includes(id) ? elegidas.filter((item) => item !== id) : [...elegidas, id].slice(-2);
         repintarHoja();
@@ -559,11 +644,11 @@ function iniciarFotos() {
   });
   caja.addEventListener("change", (event) => {
     if (event.target.id !== "fotosArchivos") return;
-    const archivos = [...(event.target.files || [])].filter((archivo) => /^image\//.test(archivo.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(archivo.name));
+    const archivos = [...(event.target.files || [])].filter((archivo) => /^image\//.test(archivo.type) || esPdf(archivo) || /\.(jpe?g|png|webp|heic|heif)$/i.test(archivo.name));
     event.target.value = "";
     const patientId = document.getElementById("historyPatientFilter")?.value || "";
     if (!archivos.length || !patientId) return;
-    if (archivos.length > 20) { window.uiAlert?.("Sube hasta 20 fotos a la vez."); return; }
+    if (archivos.length > 20) { window.uiAlert?.("Sube hasta 20 archivos a la vez."); return; }
     ventanaDeSubida(patientId, archivos);
   });
 }

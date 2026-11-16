@@ -8509,6 +8509,17 @@ dialog.ui-dialogo {
 .foto-etiqueta.tipo-intraoral { background: #fde8ec; color: #9b2c45; }
 .foto-etiqueta.tipo-extraoral { background: #eaf6ef; color: #23704a; }
 .foto-etiqueta.tipo-antes-despues { background: var(--green-soft); color: var(--brand-secondary, #0b6e8a); }
+.foto-etiqueta.tipo-consentimiento { background: #fff1d6; color: #8a5a00; }
+.foto-etiqueta.tipo-documento { background: #ece9f8; color: #4a3a8f; }
+/* Los documentos en PDF: la marca en la galeria, la previa al subir y el boton del visor */
+.foto-pdf { position: absolute; top: 6px; right: 6px; background: #c0392b; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .04em; padding: 2px 6px; border-radius: 5px; }
+.fotos-previas .previa-pdf { display: grid; place-items: center; align-content: center; gap: 4px; aspect-ratio: 1; padding: 6px; border-radius: 8px; background: #eceae6; overflow: hidden; text-align: center; }
+.fotos-previas .previa-pdf b { background: #c0392b; color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 5px; }
+.fotos-previas .previa-pdf small { font-size: 10.5px; line-height: 1.2; color: #3a3f45; word-break: break-word; max-height: 3.6em; overflow: hidden; }
+.fotos-escenario.es-pdf { background: #2b2d31; align-content: center; gap: 18px; }
+.fotos-escenario.es-pdf img { position: static; width: min(380px, 78%); height: auto; border-radius: 10px; }
+.fotos-abrir-pdf { position: relative; z-index: 1; border: 0; border-radius: 10px; padding: 12px 22px; font-size: 15px; font-weight: 700; cursor: pointer; background: #fff; color: #22262a; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
+.fotos-abrir-pdf:hover { background: #f1f1f1; }
 .foto-nota { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .foto-marca {
   position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%;
@@ -8638,3 +8649,28 @@ dialog.ui-dialogo {
   font-weight: 700;
   color: #6d5215;
 }
+/* Respaldo del consultorio en su Google Drive: un desplegable en Configuracion
+   (2026-11-16, igual que en EmpresaFacil). Cerrado solo se ve el titulo. */
+.respaldo-drive { margin-top: 18px; }
+.respaldo-drive > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; cursor: pointer; list-style: none; font-size: 18px; font-weight: 800; color: var(--ink); }
+.respaldo-drive > summary::-webkit-details-marker { display: none; }
+.respaldo-drive > summary::before { content: "▶"; font-size: 11px; color: var(--muted); transition: transform .15s; }
+.respaldo-drive[open] > summary::before { transform: rotate(90deg); }
+.respaldo-drive > summary span { flex: 1; }
+.respaldo-drive[open] > summary { margin-bottom: 10px; }
+.respaldo-drive p { margin: 0 0 10px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.respaldo-drive p strong { color: var(--ink); }
+.respaldo-cuenta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin: 2px 0 12px; }
+.respaldo-medidor { width: 90px; height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; display: inline-block; }
+.respaldo-medidor i { display: block; height: 100%; background: var(--brand-primary, #00a6d6); }
+.respaldo-botones { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
+.respaldo-drive .respaldo-aviso { margin: 0 0 12px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.respaldo-lista { list-style: none; margin: 0 0 4px; padding: 0; max-width: 760px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 13.5px; }
+.respaldo-lista li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.respaldo-lista li:last-child { border-bottom: 0; }
+.respaldo-lista li span { flex: 1; min-width: 0; }
+.respaldo-lista li small { color: var(--muted); }
+.respaldo-enlace { background: none; border: 0; padding: 0; color: var(--brand-secondary, #0b6e8a); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; white-space: nowrap; }
+.respaldo-enlace:disabled { opacity: .5; cursor: default; }
+.respaldo-drive .respaldo-vacio { margin: 0 0 4px; font-size: 13.5px; }
+.respaldo-drive .respaldo-pie { font-size: 12.5px; margin: 10px 0 0; }
