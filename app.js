@@ -5118,16 +5118,21 @@ function guardarCampoDeLaHoja(campo) {
   if (destino === "notanueva") {
     const paciente = patientById(registro);
     if (!paciente || !valor) return;
+    /* La cita de esta atencion, elegida igual que en el formulario.
+       Antes iba vacio para que el servidor no marcara ATENDIDAS todas las citas
+       del paciente de ese dia -una cancelada volvia como atendida-. Pero vaciarlo
+       dejaba la cita en RESERVADA, y escribir aqui es justamente como se registra
+       al paciente que ya adelanto el pago: se atiende, no paga nada hoy y la
+       unica constancia es esta nota. Quedaba sin pintar y parecia no atendido.
+       citaParaLaNota elige una sola cita y nunca una cancelada. */
+    const citaDeLaNota = citaParaLaNota(paciente.id, todayISO());
     const nueva = {
       id: uid("h"),
       patientId: paciente.id,
       date: todayISO(),
       attendedBy: paciente.doctor || currentUser()?.name || "",
       attended: true,
-      /* Sin cita a proposito: si la nota no dice a que cita va, el servidor
-         marca ATENDIDAS todas las del paciente ese dia, y en CM el estado de
-         una cita lo decide siempre una persona. Con "" no toca ninguna. */
-      appointmentId: "",
+      appointmentId: citaDeLaNota?.id || "",
       reason: "",
       procedure: "",
       agreedPrice: 0,
@@ -5138,8 +5143,11 @@ function guardarCampoDeLaHoja(campo) {
     };
     state.clinicalHistory.push(nueva);
     saveClinicalHistoryApi(nueva).catch((error) => uiAlert(error.message));
+    if (citaDeLaNota) citaDeLaNota.status = "ATENDIDA";
     if (!API_ENABLED) saveState();
-    renderClinicalHistory();
+    // render() y no renderClinicalHistory(): la agenda tambien cambio
+    if (citaDeLaNota) render();
+    else renderClinicalHistory();
     return;
   }
   const entrada = state.clinicalHistory.find((item) => item.id === registro);
