@@ -2959,9 +2959,9 @@ function citaAbiertaDelPaciente(patientId, date, hasta = "") {
    marcaba todas las citas del paciente ese dia: una cancelada volvia como
    atendida. Cada nota del dia explica una cita atendida; si ya hay tantas
    verdes como notas no se toca nada -asi editar una nota vieja no marca otra-.
-   Si falta, la primera cita abierta que ya empezo o empieza dentro de la hora
-   (el paciente que llega temprano); la de la tarde no se marca por la nota de
-   la manana. */
+   Si falta, la unica cita viva que tenga ese dia -aunque falten horas para su
+   turno-; con varias, la primera que ya empezo o empieza dentro de la hora,
+   para que la de la tarde no se marque con la nota de la manana. */
 function citaParaLaNota(patientId, date, notaId = "") {
   const hoy = todayISO();
   if (!patientId || !date || date > hoy) return null;
@@ -2973,7 +2973,23 @@ function citaParaLaNota(patientId, date, notaId = "") {
     entry.patientId === patientId && entry.date === date && entry.attended &&
     !esSoloDeuda(entry) && entry.id !== notaId).length + 1;
   if (atendidas >= notas) return null;
-  const hasta = date === hoy ? timeFromMinutes(minutes(new Date().toTimeString().slice(0, 5)) + 60) : "";
+  /* Las citas vivas del paciente ese dia. Las canceladas, las no asistidas y
+     las reprogramadas ya salieron de la agenda y liberaron el espacio, asi que
+     ni se consideran. */
+  const abiertas = state.appointments.filter((cita) => {
+    if (cita.patientId !== patientId || cita.date !== date) return false;
+    const status = String(cita.status || "").toUpperCase();
+    return !SLOT_FREE_STATUSES.includes(status) && status !== "ATENDIDA";
+  });
+  if (!abiertas.length) return null;
+  /* Con una sola cita viva no hay nada que confundir: es esa, aunque falten
+     horas para su turno. Es lo normal en el que ya adelanto el pago: se
+     atiende, hoy no paga nada y la nota es la unica constancia de que vino.
+     Con dos o mas se exige que ya haya empezado o empiece dentro de la hora,
+     para que la nota de la manana no se lleve la cita de la tarde. */
+  const hasta = date !== hoy || abiertas.length === 1
+    ? ""
+    : timeFromMinutes(minutes(new Date().toTimeString().slice(0, 5)) + 60);
   return citaAbiertaDelPaciente(patientId, date, hasta);
 }
 
