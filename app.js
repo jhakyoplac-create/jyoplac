@@ -11485,7 +11485,11 @@ function bindEvents() {
     if (!patient || !select) return;
     select.value = patient.id;
     const buscador = $("#historyPatientSearch");
-    if (buscador) buscador.value = patientOptionLabel(patient);
+    if (buscador) {
+      buscador.value = patientOptionLabel(patient);
+      // ya eligio: se suelta el foco para que en el celular se cierre el teclado
+      buscador.blur();
+    }
     const lista = $("#historyPatientSuggestions");
     if (lista) lista.innerHTML = "";
     select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -11534,6 +11538,14 @@ function bindEvents() {
       if (actual) event.target.value = patientOptionLabel(actual);
     }, 200);
   });
+  /* Al apretar sobre una sugerencia el buscador perdia el foco, y 200 ms despues
+     el blur borraba la lista y devolvia el nombre de antes. Con un raton eso no
+     se nota, pero en el trackpad de una laptop apretar y soltar tarda mas que
+     eso: el clic llegaba a una lista que ya no estaba y parecia que no
+     aceptaba. Frenar el mousedown deja el foco donde estaba, asi que no hay
+     blur ni carrera; de paso, apretar sobre el nombre ya no empieza a
+     seleccionar texto si el dedo se mueve un poco. */
+  $("#historyPatientSuggestions")?.addEventListener("mousedown", (event) => event.preventDefault());
   $("#historyPatientSuggestions")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-select-history-patient]");
     if (button) elegirPacienteDeHistoria(patientById(button.dataset.selectHistoryPatient));

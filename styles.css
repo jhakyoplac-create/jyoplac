@@ -891,6 +891,9 @@ label {
   color: var(--ink);
   text-align: left;
   cursor: pointer;
+  /* una sugerencia se toca, no se subraya: sin esto, apretar sobre el nombre
+     con el trackpad empezaba a seleccionar texto en vez de elegir */
+  user-select: none;
 }
 
 .patient-suggestions button:hover,
