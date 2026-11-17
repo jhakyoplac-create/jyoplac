@@ -3560,7 +3560,10 @@ function hydrateForms() {
   fillAppointmentPatientSelectForDate($('#historyForm select[name="patientId"]'), $('#historyForm input[name="date"]')?.value || todayISO(), $('#historyForm select[name="patientId"]')?.value || "");
   avisoDeDeudaDelDia();
   fillPaymentPatientSelect($('#paymentForm select[name="patientId"]'), $('#paymentForm select[name="patientId"]')?.value || "");
-  fillPatientSelect($("#historyPatientFilter"), $("#historyPatientFilter").value);
+  /* En blanco hasta que alguien busque: antes caia en el primer paciente por
+     orden alfabetico, un nombre al azar que ademas dejaba su hoja lista para
+     que se escribiera encima sin querer. */
+  fillPatientSelect($("#historyPatientFilter"), $("#historyPatientFilter").value, true);
   // el buscador de la historia muestra al paciente elegido, salvo mientras se escribe en el
   const buscadorDeHistoria = $("#historyPatientSearch");
   if (buscadorDeHistoria && document.activeElement !== buscadorDeHistoria) {
@@ -5455,7 +5458,7 @@ function renderClinicalHistory() {
   if (formularioDeNota) formularioDeNota.hidden = !canEditClinicalNote();
   const caja = $("#historyTimeline");
   if (!caja) return;
-  const patientId = $("#historyPatientFilter").value || state.patients[0]?.id || "";
+  const patientId = $("#historyPatientFilter").value || "";
   const hoja = historySheetTab || "historia";
   $("#historySheetTabs")?.querySelectorAll("[data-hoja]").forEach((boton) => {
     boton.classList.toggle("activa", boton.dataset.hoja === hoja);
@@ -5463,7 +5466,16 @@ function renderClinicalHistory() {
   /* La lista de copias acompana al odontograma y a nada mas: colgada debajo del
      historial de pagos no pinta nada. */
   const copias = document.querySelector(".odontogram-copies-panel");
-  if (copias) copias.hidden = hoja !== "odontograma";
+  if (copias) copias.hidden = hoja !== "odontograma" || !patientId;
+  /* Sin paciente elegido no hay hoja que mostrar. Las pestanas se quedan, que
+     son la estructura; el cuerpo solo pide que se busque a alguien. */
+  if (!patientId) {
+    caja.innerHTML = `<div class="history-empty">
+      <p class="history-empty-title">¿A quién buscamos?</p>
+      <p class="muted">Escribe su nombre, DNI o N.° de historia.</p>
+    </div>`;
+    return;
+  }
   caja.innerHTML = contenidoDeLaPestana(patientId);
   if (hoja === "ficha") window.HojasExtra.traerFotoDeLaFicha(patientId, renderClinicalHistory);
   if (hoja === "fotos") window.FotosDrive.despuesDePintarFotos(caja);
@@ -7697,7 +7709,7 @@ function volverAlOdontogramaActual() {
 function renderOdontogramSnapshots() {
   const caja = $("#odontogramSnapshots");
   if (!caja) return;
-  const patientId = $("#historyPatientFilter")?.value || state.patients[0]?.id || "";
+  const patientId = $("#historyPatientFilter")?.value || "";
   const copias = copiasDelOdontograma(patientId);
   if (!copias.length) {
     caja.innerHTML = `<p class="muted">Todavía no hay copias guardadas de este paciente. Se guardan desde la pantalla del Odontograma.</p>`;
@@ -11535,7 +11547,8 @@ function bindEvents() {
       const lista = $("#historyPatientSuggestions");
       if (lista) lista.innerHTML = "";
       const actual = patientById($("#historyPatientFilter")?.value || "");
-      if (actual) event.target.value = patientOptionLabel(actual);
+      // sin nadie elegido, lo escrito a medias no se queda colgado en la caja
+      event.target.value = actual ? patientOptionLabel(actual) : "";
     }, 200);
   });
   /* Al apretar sobre una sugerencia el buscador perdia el foco, y 200 ms despues

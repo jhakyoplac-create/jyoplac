@@ -8673,3 +8673,19 @@ dialog.ui-dialogo {
 .respaldo-enlace:disabled { opacity: .5; cursor: default; }
 .respaldo-drive .respaldo-vacio { margin: 0 0 4px; font-size: 13.5px; }
 .respaldo-drive .respaldo-pie { font-size: 12.5px; margin: 10px 0 0; }
+
+/* Historial clinico sin paciente elegido: el cuerpo de la hoja solo pide que se
+   busque a alguien. Antes aparecia el primer paciente por orden alfabetico. */
+.history-empty {
+  padding: 56px 16px 64px;
+  text-align: center;
+}
+.history-empty-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.history-empty .muted {
+  margin: 0;
+}
