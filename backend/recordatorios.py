@@ -54,7 +54,15 @@ TRAS_UN_FALLO = 180
 DIAS_HACIA_ATRAS = 2
 
 _candado = threading.Lock()
-_vuelta = {"proxima": 0.0, "corriendo": False, "servicio": None}
+_vuelta = {"proxima": 0.0, "corriendo": False, "servicio": None, "conectado": False}
+
+
+def _anotar(texto):
+    """Al registro de Render, y al instante. Sin flush los mensajes se quedan
+    en la memoria del proceso y salen todos juntos al reiniciarlo, con la hora
+    del reinicio: quince fallos de toda una tarde parecian de un mismo
+    segundo, y no habia forma de saber si el ultimo arreglo habia servido."""
+    print(f"[Recordatorios] {texto}", flush=True)
 
 
 def configurado():
@@ -228,11 +236,27 @@ def _dar_la_vuelta(db, hoy):
             # la medianoche es la hora 0, que no es lo mismo que «sin hora»
             "horaEnvio": int(hora) if hora is not None else 20,
         }
-        aplicar(db, datos.get("filas") or [])
+        filas = datos.get("filas") or []
+        cambios = aplicar(db, filas)
         _vuelta["servicio"] = servicio
         espera = CADA_ENCENDIDO if servicio["activo"] else CADA_APAGADO
+        # una linea al conectar y otra cada vez que algo cambia; no una cada
+        # cinco minutos diciendo que no paso nada
+        if not _vuelta["conectado"] or cambios:
+            _anotar(f"conectado: activo={servicio['activo']}, avisos recibidos={len(filas)}, citas actualizadas={cambios}")
+        _vuelta["conectado"] = True
+    except urllib.error.HTTPError as error:
+        # el cuerpo dice cual de las puertas del servicio rechazo la pregunta;
+        # "401 Unauthorized" a secas no distingue una clave mala de otra cosa
+        try:
+            cuerpo = error.read().decode("utf-8", "replace").strip()[:200]
+        except Exception:
+            cuerpo = ""
+        _vuelta["conectado"] = False
+        _anotar(f"no se pudo preguntar: HTTP {error.code} {cuerpo} (clave solo ASCII: {'si' if CLAVE.isascii() else 'no'})")
     except Exception as error:  # la agenda no puede caerse porque el aviso falle
-        print(f"[Recordatorios] no se pudo preguntar: {error}")
+        _vuelta["conectado"] = False
+        _anotar(f"no se pudo preguntar: {error}")
     finally:
         with _candado:
             _vuelta["proxima"] = time.time() + espera
