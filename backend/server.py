@@ -1555,6 +1555,16 @@ def list_bootstrap_appointments():
                 SELECT * FROM appointments
                 WHERE (date BETWEEN ? AND ?)
                    OR id IN (SELECT id FROM seguimiento_abierto)
+                   OR id IN (
+                        -- La cita a la que se paso cada una al reprogramarla, sea
+                        -- de la fecha que sea y este como este. Si la cancelaron y
+                        -- la cerraron a mano no entra por ningun otro lado, y sin
+                        -- ella el navegador no sabe en que termino la cadena: dejaba
+                        -- la reprogramada en la lista para siempre.
+                        SELECT a.new_appointment_id FROM appointments a
+                        WHERE a.id IN (SELECT id FROM seguimiento_abierto)
+                          AND COALESCE(a.new_appointment_id, '') <> ''
+                   )
                    OR (
                         -- Las citas futuras de quien esta en seguimiento: sin ellas
                         -- el navegador no puede saber que ya se reprogramo y lo deja

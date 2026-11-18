@@ -4708,10 +4708,34 @@ function nextAppointmentAfterFollowUp(appointment) {
 /* Una cita que se reprograma y vuelve a fallar deja dos filas: la vieja, que ya
    no aporta nada, y la nueva, que es el caso vivo. Con tres reprogramaciones son
    tres filas del mismo paciente. Solo interesa la ultima. */
+/* La cita a la que se paso esta al reprogramarla, si se conoce. */
+function citaNuevaDe(appointment) {
+  if (!appointment?.newAppointmentId) return null;
+  return state.appointments.find((item) => item.id === appointment.newAppointmentId) || null;
+}
+
+function citaQueFallo(appointment) {
+  return ["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(String(appointment?.status || "").toUpperCase());
+}
+
+/* Siguiendo las reprogramaciones desde una cita, ¿se llega a la otra? El orden
+   de una cadena lo da ese enlace y no el reloj: una cita se puede reprogramar
+   para media hora ANTES el mismo dia, y por la hora la vieja parecia la ultima. */
+function reprogramaHacia(desde, hasta) {
+  let paso = citaNuevaDe(desde);
+  for (let i = 0; paso && i < 12; i += 1) {
+    if (paso.id === hasta.id) return true;
+    paso = citaNuevaDe(paso);
+  }
+  return false;
+}
+
 function haySeguimientoMasReciente(appointment) {
   return state.appointments.some((item) => {
     if (item.id === appointment.id || item.patientId !== appointment.patientId) return false;
     if (appointmentSortKey(item) <= appointmentSortKey(appointment)) return false;
+    // la cita de la que viene esta no es "mas reciente", aunque su hora sea posterior
+    if (reprogramaHacia(item, appointment)) return false;
     if (String(item.followUpStatus || "").toUpperCase() === "CERRADO") return false;
     return ["CANCELADA", "NO_ASISTIO", "REPROGRAMADA"].includes(String(item.status || "").toUpperCase());
   });
@@ -4726,6 +4750,11 @@ function isFollowUpOpen(appointment) {
   if (String(appointment.status || "").toUpperCase() === "ATENDIDA") return false;
   if (attendedAfterFollowUp(appointment)) return false;
   if (haySeguimientoMasReciente(appointment)) return false;
+  /* Se reprogramo y la cita nueva tampoco se dio -la cancelaron, no vino o se
+     volvio a mover-: lo que vale es esa ultima, que tiene su propia fila. Esta
+     se quedaba en ambar diciendo "reprogramado" con una cita ya cancelada al
+     lado. Si la nueva la cerraron a mano, el caso esta cerrado para las dos. */
+  if (citaQueFallo(citaNuevaDe(appointment))) return false;
   if (status === "REPROGRAMADO") {
     const next = appointment.newAppointmentId ? state.appointments.find((item) => item.id === appointment.newAppointmentId) : null;
     return !next || next.status !== "ATENDIDA";
@@ -8793,7 +8822,7 @@ function renderAppointmentFollowUps() {
       <td><span class="status ${etiqueta === "REPROG." || pideWa ? "warn" : "danger"}">${escapeHtml(etiqueta)}</span></td>
       <td>${escapeHtml(followUpNextText(appointment))}</td>
       <td>${escapeHtml(comentario)}</td>
-      <td class="row-actions">
+      <td class="followup-acciones">
         ${canManageAppointments() ? `<button class="small-btn" data-followup-reschedule="${appointment.id}">Reprogramar</button>` : ""}
         ${waPhone ? `<a class="small-btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
         ${canManageAppointments() ? `<button class="small-btn ${pideWa ? "" : "danger-btn"}" data-followup-close="${appointment.id}">${pideWa ? "Atendido" : "Cerrar"}</button>` : ""}

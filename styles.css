@@ -1202,39 +1202,67 @@ tr.followup-pending td:first-child {
   border-left: 4px solid #ff6b6b;
 }
 
-#appointmentFollowUpsTable {
-  font-size: 12px;
-}
-
-#appointmentFollowUpsTable th,
+/* Seguimiento de citas: filas de dos renglones. El tamano va en la celda -una
+   regla sobre la tabla pierde contra el "td" general, y por eso la letra salia
+   grande aunque aqui dijera 12px-. La columna de botones es una celda de
+   verdad y no una caja flexible: con display:flex dejaba de medir lo que la
+   fila y quedaba un hueco blanco debajo de los botones. */
 #appointmentFollowUpsTable td {
-  padding: 6px 8px;
-  line-height: 1.2;
-  vertical-align: top;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.25;
+  vertical-align: middle;
 }
 
 #appointmentFollowUpsTable td strong {
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 #appointmentFollowUpsTable .muted {
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 #appointmentFollowUpsTable .status {
-  font-size: 9px;
+  font-size: 10px;
   padding: 3px 7px;
+  white-space: nowrap;
 }
 
-#appointmentFollowUpsTable .row-actions {
-  gap: 6px;
+#appointmentFollowUpsTable .followup-acciones {
+  text-align: right;
 }
 
 #appointmentFollowUpsTable .small-btn {
-  min-height: 30px;
-  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin: 2px 0 2px 4px;
+  padding: 4px 9px;
   font-size: 12px;
+}
+
+/* En pantalla ancha sobra sitio a los lados: la fecha, el celular, la proxima
+   cita y los botones van cada uno en un renglon, y lo que se estira es el
+   comentario. En el celular se deja partir, que ahi no hay ancho. */
+@media (min-width: 981px) {
+  #appointmentFollowUpsTable td:nth-child(1),
+  #appointmentFollowUpsTable td:nth-child(3),
+  #appointmentFollowUpsTable td:nth-child(5),
+  #appointmentFollowUpsTable .followup-acciones {
+    white-space: nowrap;
+  }
+
+  /* el nombre necesita ancho propio: sin el, la tabla se lo daba al comentario
+     -casi siempre vacio- y un nombre largo se partia en tres renglones */
+  #appointmentFollowUpsTable td:nth-child(2) {
+    min-width: 230px;
+  }
+}
+
+/* los titulos de la tabla, en un solo renglon */
+#seguimiento-citas th {
+  white-space: nowrap;
 }
 
 .slot.lunch {
