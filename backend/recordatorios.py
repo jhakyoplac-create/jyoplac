@@ -212,12 +212,17 @@ def _preguntar(hoy):
     desde = (date.fromisoformat(hoy) - timedelta(days=DIAS_HACIA_ATRAS)).isoformat()
     pedido = urllib.request.Request(
         URL,
-        data=json.dumps({"filas_de": ORIGEN, "desde": desde}).encode("utf-8"),
+        # La clave va tambien en el cuerpo: en la cabecera, una clave con tilde
+        # o con ñ llega cambiada al servicio y la rechaza con 401. El JSON la
+        # escribe con escapes y llega tal cual.
+        data=json.dumps({"filas_de": ORIGEN, "desde": desde, "clave": CLAVE}).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": "CM-Odontologia/1.0",
-            "x-recordatorios-clave": CLAVE,
+            # en la cabecera solo si es ASCII, que es cuando llega igual; con
+            # otras letras manda el cuerpo y aqui solo estorbaria
+            **({"x-recordatorios-clave": CLAVE} if CLAVE.isascii() else {}),
         },
         method="POST",
     )
