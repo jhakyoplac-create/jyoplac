@@ -11814,6 +11814,13 @@ function bindEvents() {
       reminderSentAt: existingAppointment?.reminderSentAt || "",
       reminderSentBy: existingAppointment?.reminderSentBy || ""
     };
+    /* Si la cita se mueve de dia, el recordatorio que tenia era de la fecha
+       vieja: se le quita la marca para que vuelva a la lista de Recordatorios
+       y el aviso automatico de WhatsApp le salga para la fecha nueva. */
+    if (existingAppointment && existingAppointment.date !== appointment.date) {
+      appointment.reminderSentAt = "";
+      appointment.reminderSentBy = "";
+    }
     if (["CANCELADA", "NO_ASISTIO"].includes(appointment.status)) {
       appointment.followUpStatus = "PENDIENTE_REPROGRAMAR";
       appointment.followUpComment = appointment.notes || existingAppointment?.followUpComment || "";

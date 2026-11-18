@@ -2385,6 +2385,14 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     reminder_sent_at = existing_appointment["reminder_sent_at"] or ""
                 if reminder_sent_by is None and existing_appointment:
                     reminder_sent_by = existing_appointment["reminder_sent_by"] or ""
+                # La cita cambio de dia: el recordatorio que tenia hablaba de la
+                # fecha vieja. Con la marca puesta, el servicio de WhatsApp la
+                # daba por avisada y el paciente no recibia nada para la fecha
+                # nueva. Se compara contra lo guardado y no contra lo que manda
+                # el navegador, que puede traer una copia atrasada.
+                if existing_appointment and str(existing_appointment["date"] or "")[:10] != str(data.get("date") or "")[:10]:
+                    reminder_sent_at = ""
+                    reminder_sent_by = ""
                 if data.get("status") not in free_statuses:
                     duplicate_patient = conn.execute(
                         """
