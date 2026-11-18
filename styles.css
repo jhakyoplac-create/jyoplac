@@ -1965,8 +1965,11 @@ th {
   gap: 10px;
 }
 
+/* Tarjetas mas chicas: con los avisos automaticos hay muchas mas que antes y
+   cada una trae lo que contesto el paciente. Mismos tamanos que en el dental
+   de EmpresaFacil, que es como se ve bien. */
 #recordatorios .campaign-card {
-  padding: 11px 12px;
+  padding: 9px 11px;
 }
 
 #recordatorios .card-title {
@@ -1974,27 +1977,39 @@ th {
 }
 
 #recordatorios .card-title strong {
-  font-size: 14px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 #recordatorios .campaign-card p {
-  margin: 7px 0;
-  font-size: 14px;
+  margin: 5px 0;
+  font-size: 13px;
 }
 
 #recordatorios .campaign-card .muted {
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
-#recordatorios .wa-estado {
+/* con "p" en el selector: sin eso la regla de arriba le ganaba y la pastilla
+   salia con la letra del nombre en vez de la suya */
+#recordatorios .campaign-card p.wa-estado {
   margin: 6px 0 5px;
-  padding: 5px 8px;
-  font-size: 11.5px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+#recordatorios .campaign-card .small-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
 }
 
 #recordatorios .campaign-card .primary {
-  padding: 9px 12px;
-  font-size: 13px;
+  padding: 7px 12px;
+  font-size: 12.5px;
 }
 
 .summary-row {

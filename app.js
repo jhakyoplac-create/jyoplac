@@ -1665,6 +1665,14 @@ function reminderTimeLabel(time) {
   return `${String(displayHour).padStart(2, "0")}:${minuteText.padStart(2, "0")} ${suffix}`;
 }
 
+/* La hora como se lee en las tarjetas de Recordatorios: "5:00 p. m." y no
+   "05:00 p. m.". Con el cero, "Enviado 05:00 p. m. · Confirmó 09:32 p. m." no
+   entraba en un renglon. El texto del recordatorio que se manda a mano usa la
+   otra y se queda como esta. */
+function horaDeTarjeta(time) {
+  return reminderTimeLabel(time).replace(/^0/, "");
+}
+
 function politeGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Buenos días";
@@ -4637,7 +4645,7 @@ function horaDelAviso(iso) {
   if (!iso) return "";
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return "";
-  return reminderTimeLabel(`${String(fecha.getHours()).padStart(2, "0")}:${String(fecha.getMinutes()).padStart(2, "0")}`);
+  return horaDeTarjeta(`${String(fecha.getHours()).padStart(2, "0")}:${String(fecha.getMinutes()).padStart(2, "0")}`);
 }
 
 /* Para la tarjeta de Recordatorios: una frase corta con lo que paso. */
@@ -9014,7 +9022,7 @@ function renderReminders() {
     resumen.hidden = !pendientes.length && !automaticas.length && !automatico;
     const partes = [`Por enviar: hoy ${porDia(startDate)} · mañana ${porDia(addDaysISO(startDate, 1))} · pasado mañana ${porDia(endDate)}. Total ${pendientes.length}.`];
     if (automatico) {
-      const hora = reminderTimeLabel(`${String(whatsappAutomatico.horaEnvio ?? 20).padStart(2, "0")}:00`);
+      const hora = horaDeTarjeta(`${String(whatsappAutomatico.horaEnvio ?? 20).padStart(2, "0")}:00`);
       // «08:00 p. m.» ya termina en punto: no se le pone otro
       partes.push(`Los recordatorios de mañana salen solos por WhatsApp desde las ${hora.replace(/\.$/, "")}.`);
     }
@@ -9037,7 +9045,7 @@ function renderReminders() {
       : `<button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>`;
     return `<article class="campaign-card">
       <div class="card-title">
-        <strong>${formatDate(appointment.date)} ${reminderTimeLabel(appointment.time)}</strong>
+        <strong>${formatDate(appointment.date)} ${horaDeTarjeta(appointment.time)}</strong>
         <span class="status">${escapeHtml(appointment.status)}</span>
       </div>
       <p>${escapeHtml(friendlyName(patient?.name || ""))}</p>
