@@ -172,9 +172,15 @@ def aplicar(db, filas):
             # La marca de «ya se le aviso» es la que saca a la cita de la lista
             # de Recordatorios por enviar. Si un equipo con la copia vieja la
             # guardo encima y la borro, se vuelve a poner.
+            # Tambien se pone cuando la cita traia una marca mas vieja que este
+            # aviso -la que quedo al agendar, o de un recordatorio a mano de
+            # hace dias-. Antes esa marca vieja mandaba: el WhatsApp habia
+            # salido y hasta lo habian confirmado, pero la tarjeta seguia con
+            # «Enviar recordatorio» y parecia que a ese paciente no le llego.
+            # Una marca posterior al aviso es de recepcion y se respeta.
             enviado_at = cita["reminder_sent_at"] or ""
             enviado_por = None
-            if nuevo["entrega"] != "fallido" and nuevo["enviadoAt"] and not enviado_at:
+            if nuevo["entrega"] != "fallido" and nuevo["enviadoAt"] and str(enviado_at)[:19] < str(nuevo["enviadoAt"])[:19]:
                 enviado_at, enviado_por = nuevo["enviadoAt"], ENVIADO_POR
             if previo == nuevo and not enviado_por:
                 continue
