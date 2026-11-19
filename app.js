@@ -4653,7 +4653,13 @@ function resumenWhatsapp(cita) {
   const info = whatsappDeCita(cita);
   if (!info) return null;
   if (info.entrega === "fallido") {
-    return { clase: "wa-fallido", texto: `No se pudo enviar${info.error ? `: ${info.error}` : ""}` };
+    /* Lo que devuelve Meta viene en ingles y no le dice nada a recepcion.
+       «Message undeliverable» es el de siempre: ese numero no tiene WhatsApp,
+       lo tiene sin actualizar o bloqueo a los negocios. */
+    const motivo = /undeliverable/i.test(info.error || "")
+      ? "el número no tiene WhatsApp o lo tiene desactualizado"
+      : info.error || "";
+    return { clase: "wa-fallido", texto: `WhatsApp no pudo entregarlo${motivo ? `: ${motivo}` : ""}. Avísale a mano.` };
   }
   const envio = `Enviado ${horaDelAviso(info.enviadoAt)}`;
   if (info.respuesta === "CONFIRMA") return { clase: "wa-confirma", texto: `${envio} · Confirmó ${horaDelAviso(info.respondidoAt)}` };
@@ -9039,10 +9045,14 @@ function renderReminders() {
     const text = appointmentReminderMessage(appointment, patient);
     const wa = `https://wa.me/51${patient?.phone || ""}?text=${encodeURIComponent(text)}`;
     const estado = avisadoHacePoco(appointment) ? resumenWhatsapp(appointment) : null;
+    /* El aviso automatico salio pero WhatsApp no pudo entregarlo: la cita sigue
+       por avisar, y la tarjeta lo dice. Sin esa linea solo se veia el boton y
+       parecia que el sistema se habia saltado a ese paciente (2026-11-18). */
+    const fallo = !estado && whatsappDeCita(appointment)?.entrega === "fallido" ? resumenWhatsapp(appointment) : null;
     const accion = estado
       ? `<p class="wa-estado ${estado.clase}">${escapeHtml(estado.texto)}</p>
          <a class="ghost small-btn" href="${escapeHtml(wa)}" target="_blank" rel="noopener">Escribir</a>`
-      : `<button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>`;
+      : `${fallo ? `<p class="wa-estado ${fallo.clase}">${escapeHtml(fallo.texto)}</p>` : ""}<button class="primary" type="button" data-send-reminder="${appointment.id}" data-wa="${escapeHtml(wa)}">Enviar recordatorio</button>`;
     return `<article class="campaign-card">
       <div class="card-title">
         <strong>${formatDate(appointment.date)} ${horaDeTarjeta(appointment.time)}</strong>
