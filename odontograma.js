@@ -1496,9 +1496,18 @@
         "<div>Firma del paciente</div></div></body></html>"
       );
       w.document.close();
-      // las imagenes deben estar cargadas antes de mandar a imprimir
-      w.onload = function () { w.focus(); w.print(); };
-      setTimeout(function () { try { w.focus(); w.print(); } catch (e) { } }, 1200);
+      /* Las imagenes deben estar cargadas antes de mandar a imprimir; el
+         temporizador es por si el aviso de carga no llega. Solo se manda una
+         vez: antes imprimian los dos, y al cerrar el dialogo de impresion
+         aparecia otro. */
+      var impreso = false;
+      var mandar = function () {
+        if (impreso) return;
+        impreso = true;
+        try { w.focus(); w.print(); } catch (e) { }
+      };
+      w.onload = mandar;
+      setTimeout(mandar, 1200);
     }
 
     /* Se reutilizan las hojas de estilo de la pagina para que el grafico salga

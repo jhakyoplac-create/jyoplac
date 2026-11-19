@@ -6315,6 +6315,30 @@ body.ficha-en-dos-columnas #patientIllnessDetail > .inline-fields {
   text-align: right;
 }
 
+/* el aviso de que el odontograma tiene algo que la historia todavia no */
+.hc-odo-pendiente {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hc-odo-pendiente p {
+  margin: 0;
+}
+
+.hc-odo-pendiente .small-btn {
+  flex: none;
+}
+
+@media (max-width: 640px) {
+  .hc-odo-pendiente {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ---- El sello del profesional ----
    Se sube en su usuario y sale bajo su firma en la historia. Es de la
    persona, no del consultorio: con varios doctores, cada hoja lleva el

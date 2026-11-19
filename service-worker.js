@@ -1,18 +1,18 @@
-const CACHE_NAME = "cm-dental-shell-v269";
+const CACHE_NAME = "cm-dental-shell-v270";
 const SHELL_FILES = [
   "/",
   "/index.html",
-  "/styles.css?v=20261118-tarjetas-recordatorio",
+  "/styles.css?v=20261118-odontograma-sin-guardar",
   "/odontograma.css?v=20261010-color-al-lado-del-tipo",
   "/precios-odontograma.js?v=20261115-precios-elegir",
-  "/app.js?v=20261118-aviso-fallido",
+  "/app.js?v=20261118-odontograma-sin-guardar",
   "/fotos.js?v=20261116-respaldo-y-pdf",
   "/respaldo-drive.js?v=20261116-respaldo-y-pdf",
   "/dialogos.js?v=20261019-ventanas",
   "/hojas-extra.js?v=20261104-una-hoja",
   "/recetas.js?v=20261103-receta-editar",
   "/ver-contrasena.js?v=20261005-ojo-contrasena",
-  "/odontograma.js?v=20261019-ventanas",
+  "/odontograma.js?v=20261118-una-impresion",
   "/assets/dientes/incisivo.png",
   "/assets/dientes/canino.png",
   "/assets/dientes/premolar.png",

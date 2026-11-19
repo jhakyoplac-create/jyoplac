@@ -5950,7 +5950,20 @@ function hojaDelOdontograma(patientId, { pantalla = true } = {}) {
       </p>`
     : "";
   const unaSola = inicial && ultima && inicial.id === ultima.id;
+  /* Esta hoja y su impresion solo muestran copias. Lo marcado despues de la
+     ultima -o sin haber guardado nunca- no sale, y en el dental de EmpresaFacil
+     dos consultorios creyeron que se habia perdido. El aviso lo dice aqui
+     mismo y deja guardarlo sin ir a la otra pantalla (2026-11-18). */
+  const sinGuardar = pantalla && hojasSinGuardarDelOdontograma(patientId).length
+    ? `<div class="notice hc-odo-pendiente">
+        <p>${copias.length
+          ? "El odontograma tiene cambios que todavía no están en la historia: no salen en esta hoja ni al imprimirla."
+          : "El odontograma de este paciente ya tiene piezas marcadas, pero todavía no se guardó en la historia: no sale en esta hoja ni se puede imprimir desde aquí."}</p>
+        ${canEditOdontogram() ? `<button class="small-btn" type="button" data-guardar-odontograma-historia="${patientId}">Guardar en la historia</button>` : ""}
+      </div>`
+    : "";
   return `<article class="hc-hoja hc-hoja-odontograma">
+    ${sinGuardar}
     ${bloqueDelOdontograma("ODONTOGRAMA INICIAL", inicial, { completo: !pantalla })}
     ${bloqueDelOdontograma("ODONTOGRAMA DE EVOLUCIÓN", ultima, {
       completo: !pantalla,
@@ -7631,17 +7644,22 @@ async function guardarCopiaDelOdontograma(nota) {
     uiAlert("El odontograma está vacío: no hay nada que guardar.");
     return false;
   }
-  /* Una copia por paciente, hoja y dia: guardar otra vez hoy reemplaza la
-     copia de hoy. La nota nueva manda, y si viene vacia se conserva la que ya
-     tenia. */
+  if (!(await anotarCopiaDelOdontograma(odontogramPatientId, odontogramSheet, ficha, nota))) return false;
+  if (!API_ENABLED) saveState();
+  return true;
+}
+
+/* Una copia por paciente, hoja y dia: guardar otra vez hoy reemplaza la copia
+   de hoy. La nota nueva manda, y si viene vacia se conserva la que ya tenia. */
+async function anotarCopiaDelOdontograma(patientId, sheet, ficha, nota = "", savedAt = new Date().toISOString()) {
   const hoy = todayISO();
-  const delDia = copiasDelOdontograma(odontogramPatientId).find((item) => item.sheet === odontogramSheet && item.date === hoy);
+  const delDia = copiasDelOdontograma(patientId).find((item) => item.sheet === sheet && item.date === hoy);
   const copia = {
     id: delDia?.id || uid("odocopia"),
-    patientId: odontogramPatientId,
-    sheet: odontogramSheet,
+    patientId,
+    sheet,
     date: hoy,
-    savedAt: new Date().toISOString(),
+    savedAt,
     doctor: currentUser()?.name || "",
     note: String(nota || "").trim() || delDia?.note || "",
     ficha: JSON.stringify(ficha)
@@ -7656,8 +7674,64 @@ async function guardarCopiaDelOdontograma(nota) {
   const previa = (state.odontogramSnapshots || []).find((item) => item.id === copia.id) || delDia;
   if (previa) Object.assign(previa, copia);
   else state.odontogramSnapshots.push(copia);
-  if (!API_ENABLED) saveState();
   return true;
+}
+
+/* Que hojas del odontograma -inicial, evolucion- tienen algo marcado que su
+   ultima copia no trae. Se comparan las dos fichas ya normalizadas y con las
+   claves en orden, para que el mismo dibujo guardado por dos caminos no
+   parezca distinto. La observacion queda fuera de la comparacion: aqui solo
+   vive en la copia -no en las filas del odontograma-, asi que siempre
+   saldria distinta. Una hoja vacia no cuenta: no hay nada que guardar. */
+function fichaEnOrden(valor) {
+  if (Array.isArray(valor)) return valor.map(fichaEnOrden);
+  if (!valor || typeof valor !== "object") return valor;
+  return Object.keys(valor).sort().reduce((salida, clave) => {
+    salida[clave] = fichaEnOrden(valor[clave]);
+    return salida;
+  }, {});
+}
+
+function huellaDeLaFicha(ficha) {
+  const { obs, ...loDibujado } = fichaCompacta(ficha);
+  return JSON.stringify(fichaEnOrden(loDibujado));
+}
+
+function hojasSinGuardarDelOdontograma(patientId) {
+  if (!patientId || typeof Odontograma === "undefined") return [];
+  const copias = copiasDelOdontograma(patientId);
+  return ["inicial", "evolucion"].filter((sheet) => {
+    const viva = fichaCompacta(odontogramFichaFor(patientId, sheet));
+    if (!Object.keys(viva.dientes).length && !viva.spans.length && !viva.esp) return false;
+    const copia = copias.find((item) => (item.sheet === "evolucion" ? "evolucion" : "inicial") === sheet);
+    return !copia || huellaDeLaFicha(fichaDeLaCopia(copia)) !== huellaDeLaFicha(viva);
+  });
+}
+
+/* El boton del aviso en Historial clinico: guarda como copia de hoy lo que el
+   odontograma tiene y la historia todavia no. Es lo mismo que "Guardar en la
+   historia" de la pantalla del Odontograma, sin tener que ir hasta alla. Si
+   hoy ya habia una copia, se conserva la observacion que tenia. */
+async function guardarEnLaHistoriaLoPendiente(patientId) {
+  if (!canEditOdontogram()) {
+    uiAlert("Tu usuario no puede guardar copias del odontograma.");
+    return false;
+  }
+  // lo que quedo a medio escribir en la otra pantalla se baja antes de comparar
+  await odontogramFlush();
+  const hojas = hojasSinGuardarDelOdontograma(patientId);
+  const hoy = todayISO();
+  const ahora = Date.now();
+  let guardadas = 0;
+  // la inicial primero: si hay dos, la de evolucion queda como la mas nueva
+  for (const [indice, sheet] of hojas.entries()) {
+    const ficha = fichaCompacta(odontogramFichaFor(patientId, sheet));
+    const delDia = copiasDelOdontograma(patientId).find((item) => item.sheet === sheet && item.date === hoy);
+    if (delDia) ficha.obs = fichaDeLaCopia(delDia).obs || "";
+    if (await anotarCopiaDelOdontograma(patientId, sheet, ficha, "", new Date(ahora + indice).toISOString())) guardadas += 1;
+  }
+  if (guardadas && !API_ENABLED) saveState();
+  return guardadas > 0;
 }
 
 /* Volver atras no borra la copia: escribe la ficha guardada encima del
@@ -12682,7 +12756,20 @@ function bindEvents() {
       return;
     }
     const imprimir = event.target.closest("[data-imprimir-odontograma]");
-    if (imprimir) imprimirOdontogramas(imprimir.dataset.imprimirOdontograma);
+    if (imprimir) {
+      imprimirOdontogramas(imprimir.dataset.imprimirOdontograma);
+      return;
+    }
+    const guardarOdo = event.target.closest("[data-guardar-odontograma-historia]");
+    if (guardarOdo) {
+      guardarOdo.disabled = true;
+      guardarOdo.textContent = "Guardando...";
+      (async () => {
+        await guardarEnLaHistoriaLoPendiente(guardarOdo.dataset.guardarOdontogramaHistoria);
+        // la hoja se vuelve a pintar: sin nada pendiente, el aviso ya no sale
+        render();
+      })();
+    }
   });
 
   /* ---------- Plan de tratamiento ---------- */
