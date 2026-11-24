@@ -13355,6 +13355,10 @@ function bindEvents() {
     if (!selectorDoctor || !botonDoctor || !listaDoctor) return;
     const elegido = selectorDoctor.value;
     $("#doctorPickerNombre").textContent = elegido || "Doctor";
+    /* Un nombre largo -con el cargo y la especialidad- no entra en la letra de
+       siempre: va mas chico y en dos renglones, para leerse entero sin ensanchar
+       el formulario. Los nombres cortos no cambian. */
+    botonDoctor.parentElement?.classList.toggle("nombre-largo", elegido.length > 24);
     listaDoctor.innerHTML = [...selectorDoctor.options].map((opcion) => `<li role="option" data-doctor="${escapeHtml(opcion.value)}" aria-selected="${opcion.value === elegido}">
         <span>${escapeHtml(opcion.textContent)}</span>
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>

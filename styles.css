@@ -7637,6 +7637,51 @@ input[type="number"] {
 .doctor-picker {
   position: relative;
   max-width: 60%;
+  min-width: 0;
+}
+
+/* Un nombre de doctor largo -«Dr. Residente en cirugia y traumatologia...»-
+   ensanchaba todo el formulario de cobro: el nombre no se parte, y como nada
+   en el camino podia encogerse, la columna del formulario crecia hasta
+   contenerlo entero y los campos se salian del recuadro, encima de «Caja y
+   saldos» (visto en Oral Clinik el 2026-11-24). Con min-width: 0 el nombre se
+   corta con puntos suspensivos en su 60 % y el formulario conserva su ancho. */
+#paymentForm .payment-notes-field,
+#paymentForm .payment-notes-head {
+  min-width: 0;
+}
+
+.doctor-picker-boton,
+.doctor-picker-boton span {
+  min-width: 0;
+}
+
+/* el nombre largo: letra mas chica, hasta dos renglones, pegado a la derecha;
+     si aun asi no entra, termina en puntos suspensivos */
+.doctor-picker.nombre-largo {
+  max-width: 84%;
+}
+
+.doctor-picker.nombre-largo .doctor-picker-boton {
+  font-size: 10.5px;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.doctor-picker.nombre-largo .doctor-picker-boton span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+/* en la lista si se lee entero: se parte en renglones en vez de salirse */
+.doctor-picker-lista {
+  max-width: min(340px, 86vw);
+}
+
+.doctor-picker-lista li {
+  white-space: normal;
 }
 
 #paymentForm #paymentAttendedBy {
