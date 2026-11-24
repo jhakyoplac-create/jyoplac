@@ -4080,6 +4080,52 @@ menu {
 .history-patient-search .patient-suggestions {
   text-align: left;
 }
+/* el triangulo que abre la lista de todos los pacientes, para elegir sin
+   escribir (2026-11-24). Va dentro de la caja, a la derecha; la caja le deja
+   su sitio para que la equis de borrar no quede debajo. */
+.history-patient-search input {
+  padding-right: 42px;
+}
+.history-patient-todos {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 36px;
+  height: calc(100% - 2px);
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.history-patient-todos::before {
+  content: "";
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid var(--muted);
+}
+.history-patient-todos:hover,
+.history-patient-todos:focus-visible {
+  background: rgba(28, 31, 35, 0.06);
+  outline: none;
+}
+.history-patient-todos:hover::before {
+  border-top-color: var(--ink);
+}
+.patient-suggestions.lista-completa {
+  max-height: 320px;
+}
+.patient-suggestions .lista-vacia {
+  margin: 0;
+  padding: 10px 11px;
+  color: var(--muted);
+  font-size: 13px;
+}
 /* el CSV y el icono del ano, juntos a la derecha del grafico de atenciones */
 .care-chart-tools {
   display: flex;

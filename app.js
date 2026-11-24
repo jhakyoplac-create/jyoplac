@@ -11624,7 +11624,7 @@ function bindEvents() {
       buscador.blur();
     }
     const lista = $("#historyPatientSuggestions");
-    if (lista) lista.innerHTML = "";
+    if (lista) { lista.innerHTML = ""; lista.classList.remove("lista-completa"); }
     select.dispatchEvent(new Event("change", { bubbles: true }));
   };
   /* Tambien por numero de historia (pedido del 2026-11-15): "6", "0006" o
@@ -11647,12 +11647,14 @@ function bindEvents() {
     const resto = numeroConDni !== null ? [] : receivablePatientMatches(escrito).filter((patient) => !porHistoria.includes(patient));
     return [...porHistoria, ...resto].slice(0, 12);
   };
+  const filaDePacienteDeHistoria = (patient) =>
+    `<button type="button" data-select-history-patient="${patient.id}"><strong>${escapeHtml(patient.name)}</strong><span>${patient.historiaNumero ? `${escapeHtml(numeroDeHistoria(patient.historiaNumero))} · ` : ""}${escapeHtml(patient.dni || "")}${patient.phone ? ` · ${escapeHtml(patient.phone)}` : ""}</span></button>`;
   const sugerirPacientesDeHistoria = () => {
     const buscador = $("#historyPatientSearch");
     const lista = $("#historyPatientSuggestions");
     if (!buscador || !lista) return;
-    lista.innerHTML = coincidenciasDeHistoria(buscador.value).map((patient) =>
-      `<button type="button" data-select-history-patient="${patient.id}"><strong>${escapeHtml(patient.name)}</strong><span>${patient.historiaNumero ? `${escapeHtml(numeroDeHistoria(patient.historiaNumero))} · ` : ""}${escapeHtml(patient.dni || "")}${patient.phone ? ` · ${escapeHtml(patient.phone)}` : ""}</span></button>`).join("");
+    lista.classList.remove("lista-completa");
+    lista.innerHTML = coincidenciasDeHistoria(buscador.value).map(filaDePacienteDeHistoria).join("");
   };
   on("#historyPatientSearch", "input", sugerirPacientesDeHistoria);
   on("#historyPatientSearch", "focus", (event) => { event.target.select(); sugerirPacientesDeHistoria(); });
@@ -11666,7 +11668,7 @@ function bindEvents() {
     // un momento, por si el clic fue sobre una sugerencia; si no eligio nada, vuelve el paciente actual
     setTimeout(() => {
       const lista = $("#historyPatientSuggestions");
-      if (lista) lista.innerHTML = "";
+      if (lista) { lista.innerHTML = ""; lista.classList.remove("lista-completa"); }
       const actual = patientById($("#historyPatientFilter")?.value || "");
       // sin nadie elegido, lo escrito a medias no se queda colgado en la caja
       event.target.value = actual ? patientOptionLabel(actual) : "";
@@ -11683,6 +11685,34 @@ function bindEvents() {
   $("#historyPatientSuggestions")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-select-history-patient]");
     if (button) elegirPacienteDeHistoria(patientById(button.dataset.selectHistoryPatient));
+  });
+  /* El triangulo de la caja (pedido 2026-11-24): abre la lista de todos los
+     pacientes, por orden alfabetico, para elegir sin escribir. No le da el foco
+     a la caja -en el celular abriria el teclado encima de la lista-, asi que se
+     cierra al elegir, al tocar fuera o al volver a apretarlo. Escribir en la
+     caja la reemplaza por las coincidencias de siempre. */
+  const listaCompletaAbierta = () => {
+    const lista = $("#historyPatientSuggestions");
+    return Boolean(lista && lista.classList.contains("lista-completa") && lista.childElementCount);
+  };
+  const cerrarListaCompletaDeHistoria = () => {
+    if (!listaCompletaAbierta()) return;
+    const lista = $("#historyPatientSuggestions");
+    lista.classList.remove("lista-completa");
+    lista.innerHTML = "";
+  };
+  $("#historyPatientTodosBtn")?.addEventListener("mousedown", (event) => event.preventDefault());
+  $("#historyPatientTodosBtn")?.addEventListener("click", () => {
+    const lista = $("#historyPatientSuggestions");
+    if (!lista) return;
+    if (listaCompletaAbierta()) { cerrarListaCompletaDeHistoria(); return; }
+    const todos = [...state.patients].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "es"));
+    lista.innerHTML = todos.map(filaDePacienteDeHistoria).join("") || `<p class="lista-vacia">Todavía no hay pacientes registrados.</p>`;
+    lista.classList.add("lista-completa");
+    lista.scrollTop = 0;
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!event.target.closest?.(".history-patient-search")) cerrarListaCompletaDeHistoria();
   });
   on("#historyPatientFilter", "change", () => {
     // el consentimiento abierto era de ese paciente, no del siguiente
