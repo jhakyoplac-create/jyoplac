@@ -1325,6 +1325,47 @@ def dias_de_control(tratamiento):
     return None
 
 
+def list_deleted_patients():
+    """Pacientes eliminados que tenian pagos: solo el nombre y el DNI.
+
+    El paciente ya no sale en ninguna lista, pero sus cobros se quedan en caja
+    y tienen que seguir diciendo de quien fueron."""
+    with db() as conn:
+        filas = conn.execute(
+            "SELECT id, name, dni FROM patients WHERE status = 'ELIMINADO' ORDER BY name ASC"
+        ).fetchall()
+    return [{"id": fila["id"], "name": fila["name"], "dni": fila["dni"]} for fila in filas]
+
+
+def paciente_inactivo(conn, patient_id):
+    """Sin cita por venir y sin atenderse ni pagar desde hace mas del limite."""
+    hoy = today_lima()
+    por_venir = conn.execute(
+        "SELECT COUNT(*) AS total FROM appointments WHERE patient_id = ? AND date >= ? "
+        "AND status IN ('RESERVADA', 'CONFIRMADA', 'EN_ATENCION', 'REPROGRAMADA')",
+        (patient_id, hoy),
+    ).fetchone()
+    if int(por_venir["total"] or 0) > 0:
+        return False
+    atendida = conn.execute(
+        "SELECT MAX(date) AS ultima FROM appointments WHERE patient_id = ? AND status = 'ATENDIDA'", (patient_id,)
+    ).fetchone()["ultima"]
+    pago = conn.execute(
+        "SELECT MAX(date) AS ultima FROM payments WHERE patient_id = ?", (patient_id,)
+    ).fetchone()["ultima"]
+    fechas = [str(valor)[:10] for valor in (atendida, pago) if valor]
+    if not fechas:
+        return True
+    try:
+        limite = int(str(app_config().get("inactiveDays", "30")).strip('" '))
+    except (TypeError, ValueError):
+        limite = 30
+    try:
+        return (date.fromisoformat(hoy) - date.fromisoformat(max(fechas))).days > limite
+    except ValueError:
+        return False
+
+
 def list_patients():
     """Pacientes con su ultima atencion y su proxima cita ya calculadas.
 
@@ -1347,7 +1388,7 @@ def list_patients():
                    (SELECT COUNT(*) FROM appointments a
                      WHERE a.patient_id = p.id) AS total_appointments
               FROM patients p
-             WHERE p.id <> 'mostrador'
+             WHERE p.id <> 'mostrador' AND p.status <> 'ELIMINADO'
              ORDER BY p.name ASC
             """,
             (hoy,),
@@ -1430,7 +1471,7 @@ def seguimiento_de_pacientes():
                      WHERE a.patient_id = p.id AND a.date < ?
                        AND a.status IN ('REPROGRAMADA', 'CANCELADA', 'NO_ASISTIO')) AS ultima_fallida
               FROM patients p
-             WHERE p.id <> 'mostrador'
+             WHERE p.id <> 'mostrador' AND p.status <> 'ELIMINADO'
              ORDER BY p.name ASC
             """,
             (hoy, hoy),
@@ -1805,6 +1846,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             return send_json(self, {
                 "user": user,
                 "patients": list_patients(),
+                "deletedPatients": list_deleted_patients(),
                 "appointments": list_bootstrap_appointments(),
                 "clinicalHistory": list_table("clinical_history", "date DESC"),
                 "treatments": list_table("treatments", "created_at DESC"),
@@ -1846,6 +1888,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 return send_json(self, {"error": "Solo el administrador puede exportar el respaldo completo."}, 403)
             return send_json(self, {
                 "patients": list_patients(),
+                "deletedPatients": list_deleted_patients(),
                 "appointments": list_table("appointments", "date DESC, time DESC"),
                 "clinicalHistory": list_table("clinical_history", "date DESC"),
                 "treatments": list_table("treatments", "created_at DESC"),
@@ -1873,7 +1916,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 "config": app_config(),
             })
         if parsed.path == "/api/patients":
-            return send_json(self, {"patients": list_patients()})
+            return send_json(self, {"patients": list_patients(), "deletedPatients": list_deleted_patients()})
         if parsed.path == "/api/appointments":
             # Cada equipo pide la agenda cada pocos segundos: de paso, si ya
             # toca, se le pregunta al servicio de recordatorios que contestaron
@@ -2180,21 +2223,46 @@ class DentalHandler(SimpleHTTPRequestHandler):
                     row = conn.execute("SELECT id, name, dni FROM patients WHERE id = ?", (item_id,)).fetchone()
                     if not row:
                         return send_json(self, {"error": "Paciente no encontrado."}, 404)
-                    # Borrar al paciente se lleva en cadena sus pagos: ese dinero
-                    # desapareceria de la caja y los cierres dejarian de cuadrar.
-                    # Con pagos registrados no se elimina (igual que en EmpresaFacil).
+                    # Borrar la fila del paciente se lleva en cadena sus pagos: ese
+                    # dinero desapareceria de la caja y los cierres dejarian de
+                    # cuadrar. Por eso, con pagos, el paciente no se borra: se
+                    # marca ELIMINADO -deja de salir en todas las listas- y se
+                    # quitan sus citas, su historia y su odontograma. Los pagos y
+                    # los comprobantes no se tocan. Y solo si ya esta inactivo
+                    # (pedido 2026-11-25): al que sigue viniendo no se le elimina.
                     pagos = conn.execute(
                         "SELECT COUNT(*) AS total, COALESCE(SUM(amount), 0) AS suma FROM payments WHERE patient_id = ?",
                         (item_id,),
                     ).fetchone()
                     if int(pagos["total"] or 0) > 0:
                         cuantos = int(pagos["total"])
-                        return send_json(self, {"error": (
-                            f"No se puede eliminar: este paciente tiene {cuantos} pago{'s' if cuantos != 1 else ''} "
-                            f"por S/ {float(pagos['suma'] or 0):.2f} ya registrado{'s' if cuantos != 1 else ''} en caja.\n\n"
-                            "Si se borra, ese dinero desaparece de la caja y los cierres dejan de cuadrar.\n\n"
-                            "Si el problema es que el nombre esta mal escrito, editalo con el boton Editar."
-                        )}, 409)
+                        if not paciente_inactivo(conn, item_id):
+                            return send_json(self, {"error": (
+                                f"No se puede eliminar todavia: este paciente tiene {cuantos} pago{'s' if cuantos != 1 else ''} "
+                                f"por S/ {float(pagos['suma'] or 0):.2f} en caja y sigue activo.\n\n"
+                                "Un paciente con pagos se puede eliminar cuando pase a INACTIVO; sus pagos se quedan en caja.\n\n"
+                                "Si el problema es que el nombre esta mal escrito, editalo con el boton Editar."
+                            )}, 409)
+                        citas = conn.execute(
+                            "SELECT COUNT(*) AS total FROM appointments WHERE patient_id = ?", (item_id,)
+                        ).fetchone()
+                        for tabla in ("appointments", "clinical_history", "odontogram", "odontogram_snapshots",
+                                      "proformas", "consentimientos", "patient_photos"):
+                            conn.execute(f"DELETE FROM {tabla} WHERE patient_id = ?", (item_id,))
+                        conn.execute(
+                            "UPDATE patients SET status = 'ELIMINADO', phone = '', notes = '' WHERE id = ?", (item_id,)
+                        )
+                        n_citas = int(citas["total"] or 0)
+                        add_audit_event(
+                            conn,
+                            user,
+                            "PATIENT_DELETED",
+                            f"Elimino paciente: {row['name']} ({row['dni'] or 'sin DNI'})"
+                            + (f" con {n_citas} cita{'s' if n_citas != 1 else ''}" if n_citas else "")
+                            + ("; su pago se queda en caja" if cuantos == 1 else f"; sus {cuantos} pagos se quedan en caja"),
+                            "",
+                        )
+                        return send_json(self, {"ok": True, "id": item_id, "conservaPagos": True})
                     citas = conn.execute(
                         "SELECT COUNT(*) AS total FROM appointments WHERE patient_id = ?", (item_id,)
                     ).fetchone()
@@ -2217,7 +2285,7 @@ class DentalHandler(SimpleHTTPRequestHandler):
             with db() as conn:
                 existing_patient = conn.execute("SELECT id, name, hide_from_reception_new FROM patients WHERE id = ?", (item_id,)).fetchone()
                 duplicate_dni = conn.execute(
-                    "SELECT id FROM patients WHERE dni = ? AND id <> ?",
+                    "SELECT id FROM patients WHERE dni = ? AND id <> ? AND status <> 'ELIMINADO'",
                     (patient_values["dni"], item_id),
                 ).fetchone()
                 if duplicate_dni:

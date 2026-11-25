@@ -870,6 +870,7 @@ function parseApiServices(value, fallback) {
 
 function applyApiBootstrap(payload) {
   state.patients = (payload.patients || []).map(mapApiPatient);
+  state.deletedPatients = Array.isArray(payload.deletedPatients) ? payload.deletedPatients : (state.deletedPatients || []);
   state.appointments = (payload.appointments || []).map(mapApiAppointment);
   state.clinicalHistory = (payload.clinicalHistory || []).map(mapApiClinicalHistory);
   state.treatments = (payload.treatments || []).map(mapApiTreatment);
@@ -1355,6 +1356,7 @@ async function refreshPatientsApi() {
   if (Array.isArray(result.patients)) {
     state.patients = result.patients.map(mapApiPatient);
   }
+  if (Array.isArray(result.deletedPatients)) state.deletedPatients = result.deletedPatients;
 }
 
 async function deletePatientApi(id) {
@@ -1759,8 +1761,12 @@ function patientAgeGroup(patient, referenceDate = todayISO()) {
   return "Adultos mayores 60+";
 }
 
+/* Si no esta entre los pacientes se busca entre los eliminados que dejaron
+   pagos: de ellos queda el nombre y el DNI, para que la caja siga diciendo de
+   quien fue cada cobro. No vuelven a salir en ninguna lista de pacientes. */
 function patientById(id) {
-  return state.patients.find((patient) => patient.id === id);
+  return state.patients.find((patient) => patient.id === id)
+    || (state.deletedPatients || []).find((patient) => patient.id === id);
 }
 
 function serviceByName(name) {
@@ -10830,35 +10836,55 @@ function resetPatientFormMode() {
   if (submitButton) submitButton.textContent = "Guardar paciente";
 }
 
-async function deletePatientRecord(id) {
-  /* Con pagos registrados no se elimina: el servidor borraba al paciente con
-     sus pagos en cadena, y ese dinero desaparecia de la caja sin dejar rastro.
-     El servidor tambien lo impide; aqui se dice antes de preguntar nada. */
+/* Por que un paciente no se puede eliminar; "" si se puede.
+   Con pagos solo se elimina al que ya esta INACTIVO (pedido 2026-11-25), y sus
+   pagos no se tocan: se quedan en caja. Antes el servidor borraba al paciente
+   con sus pagos en cadena y ese dinero desaparecia de la caja. El servidor
+   aplica la misma regla; aqui se dice antes de preguntar nada. */
+function motivoParaNoEliminar(id) {
+  const paciente = state.patients.find((item) => item.id === id);
+  if (!paciente) return "";
   const pagos = state.payments.filter((pago) => pago.patientId === id);
-  if (pagos.length) {
+  if (pagos.length && patientStatus(paciente) !== "INACTIVO") {
     const total = pagos.reduce((suma, pago) => suma + Number(pago.amount || 0), 0);
-    uiAlert(
-      `No se puede eliminar: este paciente tiene ${pagos.length} pago${pagos.length === 1 ? "" : "s"} ` +
-      `por S/ ${total.toLocaleString("es-PE")} ya registrado${pagos.length === 1 ? "" : "s"} en caja.
+    return `No se puede eliminar todavía: este paciente tiene ${pagos.length} pago${pagos.length === 1 ? "" : "s"} ` +
+      `por S/ ${total.toLocaleString("es-PE")} en caja y sigue activo.\n\n` +
+      `Un paciente con pagos se puede eliminar cuando pase a INACTIVO (más de ${Number(state.config.inactiveDays) || 30} días sin venir); sus pagos se quedan en caja.\n\n` +
+      `Si el problema es que el nombre está mal escrito, edítalo con el botón Editar.`;
+  }
+  const saldo = Number(patientDebt(id) || 0);
+  if (saldo > 0) {
+    return `No se puede eliminar: este paciente tiene un saldo pendiente de S/ ${saldo.toLocaleString("es-PE")}.\n\n` +
+      `Cóbralo o anúlalo en Cuentas por cobrar y vuelve a intentar: si se elimina ahora, esa deuda desaparece con su historia.`;
+  }
+  return "";
+}
 
-` +
-      `Si se borra, ese dinero desaparece de la caja y los cierres dejan de cuadrar.
-
-` +
-      `Si el problema es que el nombre esta mal escrito, editalo con el boton Editar.`
-    );
+async function deletePatientRecord(id) {
+  const impedimento = motivoParaNoEliminar(id);
+  if (impedimento) {
+    uiAlert(impedimento);
     return false;
   }
+  const eliminado = state.patients.find((item) => item.id === id);
+  const conPagos = state.payments.some((pago) => pago.patientId === id);
   try {
     await deletePatientApi(id);
   } catch (error) {
     uiAlert(error.message);
     return false;
   }
+  /* De quien fue cada cobro que queda en caja: solo el nombre y el DNI. */
+  if (conPagos && eliminado) {
+    state.deletedPatients = [
+      ...(state.deletedPatients || []).filter((item) => item.id !== id),
+      { id, name: eliminado.name, dni: eliminado.dni || "" }
+    ];
+  }
   state.patients = state.patients.filter((item) => item.id !== id);
   state.appointments = state.appointments.filter((item) => item.patientId !== id);
-  state.treatments = state.treatments.filter((item) => item.patientId !== id);
-  state.payments = state.payments.filter((item) => item.patientId !== id);
+  // con pagos, ni los pagos ni sus tratamientos se tocan: lo cobrado se queda en caja
+  if (!conPagos) state.treatments = state.treatments.filter((item) => item.patientId !== id);
   state.clinicalHistory = state.clinicalHistory.filter((item) => item.patientId !== id);
   state.odontogram = state.odontogram.filter((item) => item.patientId !== id);
   if (!API_ENABLED) saveState();
@@ -12326,12 +12352,17 @@ function bindEvents() {
       }
       const patient = patientById(del.dataset.deletePatient);
       if (!patient) return;
-      /* El aviso ya no ofrece borrar los pagos: si los tiene, no se elimina. */
-      if (state.payments.some((pago) => pago.patientId === patient.id)) {
-        await deletePatientRecord(patient.id);
+      /* Primero se dice si no se puede, y por que; recien despues se pregunta. */
+      const impedimento = motivoParaNoEliminar(patient.id);
+      if (impedimento) {
+        uiAlert(impedimento);
         return;
       }
-      if (!(await uiConfirm(`¿Eliminar paciente ${patient.name} y sus citas, historial y odontograma?`))) return;
+      const susPagos = state.payments.filter((pago) => pago.patientId === patient.id);
+      const quedan = susPagos.length
+        ? `\n\n${susPagos.length === 1 ? "Su pago" : `Sus ${susPagos.length} pagos`} por S/ ${susPagos.reduce((suma, pago) => suma + Number(pago.amount || 0), 0).toLocaleString("es-PE")} ${susPagos.length === 1 ? "se queda en caja tal como está" : "se quedan en caja tal como están"}.`
+        : "";
+      if (!(await uiConfirm(`¿Eliminar paciente ${patient.name} y sus citas, historial y odontograma?${quedan}`))) return;
       await deletePatientRecord(patient.id);
     }
   });
