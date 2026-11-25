@@ -1980,6 +1980,10 @@ class DentalHandler(SimpleHTTPRequestHandler):
             detalle = str(data.get("detail") or "").strip()[:300]
             if not accion or not detalle:
                 return send_json(self, {"error": "Actividad incompleta."}, 400)
+            # Estas ya las anota el servidor al guardar el paciente o la cita:
+            # si ademas entran por aqui, cada una sale dos veces en el registro.
+            if accion in {"PATIENT_CREATED", "PATIENT_UPDATED", "APPOINTMENT_CREATED"}:
+                return send_json(self, {"ok": True})
             anotar(user, accion, detalle, str(data.get("patientId") or ""))
             return send_json(self, {"ok": True})
 
@@ -2173,10 +2177,38 @@ class DentalHandler(SimpleHTTPRequestHandler):
                 if not item_id:
                     return send_json(self, {"error": "Paciente no indicado."}, 400)
                 with db() as conn:
-                    row = conn.execute("SELECT id FROM patients WHERE id = ?", (item_id,)).fetchone()
+                    row = conn.execute("SELECT id, name, dni FROM patients WHERE id = ?", (item_id,)).fetchone()
                     if not row:
                         return send_json(self, {"error": "Paciente no encontrado."}, 404)
+                    # Borrar al paciente se lleva en cadena sus pagos: ese dinero
+                    # desapareceria de la caja y los cierres dejarian de cuadrar.
+                    # Con pagos registrados no se elimina (igual que en EmpresaFacil).
+                    pagos = conn.execute(
+                        "SELECT COUNT(*) AS total, COALESCE(SUM(amount), 0) AS suma FROM payments WHERE patient_id = ?",
+                        (item_id,),
+                    ).fetchone()
+                    if int(pagos["total"] or 0) > 0:
+                        cuantos = int(pagos["total"])
+                        return send_json(self, {"error": (
+                            f"No se puede eliminar: este paciente tiene {cuantos} pago{'s' if cuantos != 1 else ''} "
+                            f"por S/ {float(pagos['suma'] or 0):.2f} ya registrado{'s' if cuantos != 1 else ''} en caja.\n\n"
+                            "Si se borra, ese dinero desaparece de la caja y los cierres dejan de cuadrar.\n\n"
+                            "Si el problema es que el nombre esta mal escrito, editalo con el boton Editar."
+                        )}, 409)
+                    citas = conn.execute(
+                        "SELECT COUNT(*) AS total FROM appointments WHERE patient_id = ?", (item_id,)
+                    ).fetchone()
                     conn.execute("DELETE FROM patients WHERE id = ?", (item_id,))
+                    # Queda anotado quien lo elimino: antes no dejaba ninguna linea.
+                    n_citas = int(citas["total"] or 0)
+                    add_audit_event(
+                        conn,
+                        user,
+                        "PATIENT_DELETED",
+                        f"Elimino paciente: {row['name']} ({row['dni'] or 'sin DNI'})"
+                        + (f" con {n_citas} cita{'s' if n_citas != 1 else ''}" if n_citas else ""),
+                        "",
+                    )
                 return send_json(self, {"ok": True, "id": item_id})
             item_id = data.get("id") or now_id("p")
             validation_errors, patient_values = validate_patient_payload(data)

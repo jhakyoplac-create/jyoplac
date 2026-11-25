@@ -10831,6 +10831,24 @@ function resetPatientFormMode() {
 }
 
 async function deletePatientRecord(id) {
+  /* Con pagos registrados no se elimina: el servidor borraba al paciente con
+     sus pagos en cadena, y ese dinero desaparecia de la caja sin dejar rastro.
+     El servidor tambien lo impide; aqui se dice antes de preguntar nada. */
+  const pagos = state.payments.filter((pago) => pago.patientId === id);
+  if (pagos.length) {
+    const total = pagos.reduce((suma, pago) => suma + Number(pago.amount || 0), 0);
+    uiAlert(
+      `No se puede eliminar: este paciente tiene ${pagos.length} pago${pagos.length === 1 ? "" : "s"} ` +
+      `por S/ ${total.toLocaleString("es-PE")} ya registrado${pagos.length === 1 ? "" : "s"} en caja.
+
+` +
+      `Si se borra, ese dinero desaparece de la caja y los cierres dejan de cuadrar.
+
+` +
+      `Si el problema es que el nombre esta mal escrito, editalo con el boton Editar.`
+    );
+    return false;
+  }
   try {
     await deletePatientApi(id);
   } catch (error) {
@@ -12307,7 +12325,13 @@ function bindEvents() {
         return;
       }
       const patient = patientById(del.dataset.deletePatient);
-      if (!patient || !(await uiConfirm(`¿Eliminar paciente ${patient.name} y sus citas, historial, odontograma y pagos?`))) return;
+      if (!patient) return;
+      /* El aviso ya no ofrece borrar los pagos: si los tiene, no se elimina. */
+      if (state.payments.some((pago) => pago.patientId === patient.id)) {
+        await deletePatientRecord(patient.id);
+        return;
+      }
+      if (!(await uiConfirm(`¿Eliminar paciente ${patient.name} y sus citas, historial y odontograma?`))) return;
       await deletePatientRecord(patient.id);
     }
   });
