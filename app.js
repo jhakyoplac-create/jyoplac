@@ -2940,8 +2940,16 @@ function fillAppointmentPatientSelectForDate(select, date, selected = "") {
       map[appointment.patientId] = (map[appointment.patientId] || 0) + 1;
       return map;
     }, {});
+  /* Quien todavia tiene una cita sin atender ese dia sale siempre. Contar notas
+     no alcanza: escribir en la hoja de la historia o aceptar un presupuesto
+     abren una atencion del dia sin tocar la cita, y con eso el paciente dejaba
+     de salir aqui con su cita todavia reservada -no habia como anotarlo-. */
+  const conCitaSinAtender = new Set(state.appointments
+    .filter((appointment) => appointment.date === date && isSlotBlockingAppointment(appointment)
+      && String(appointment.status || "").toUpperCase() !== "ATENDIDA")
+    .map((appointment) => appointment.patientId));
   const ids = Object.entries(appointmentCountByPatient)
-    .filter(([patientId, count]) => Number(count) > Number(historyCountByPatient[patientId] || 0))
+    .filter(([patientId, count]) => conCitaSinAtender.has(patientId) || Number(count) > Number(historyCountByPatient[patientId] || 0))
     .map(([patientId]) => patientId);
   const patients = state.patients
     .filter((patient) => ids.includes(patient.id))
@@ -2952,6 +2960,19 @@ function fillAppointmentPatientSelectForDate(select, date, selected = "") {
   if (selected && patients.some((patient) => patient.id === selected)) select.value = selected;
   else if (patients[0]) select.value = patients[0].id;
   syncAssignedDoctor();
+}
+
+/* La atencion que abrio la hoja de la historia al escribirle el primer dato:
+   no tiene motivo -el formulario lo exige-, ni procedimiento, ni cobro, ni
+   deuda, ni pagos. La Nota clinica de ese dia la completa en vez de abrir otra
+   al lado: una sola atencion por visita, con lo clinico y el motivo juntos. */
+function atencionAbiertaPorLaHoja(patientId, date) {
+  const vacio = (valor) => !String(valor || "").trim();
+  return state.clinicalHistory.find((entry) =>
+    entry.patientId === patientId && entry.date === date && entry.attended
+    && vacio(entry.reason) && vacio(entry.procedure)
+    && !Number(entry.agreedPrice || 0) && !Number(entry.planBudget || 0) && !entry.creditPending
+    && !state.payments.some((payment) => payment.historyId === entry.id || payment.treatmentId === entry.id)) || null;
 }
 
 /* La cita "abierta" del paciente en una fecha: se dejan fuera las canceladas,
@@ -12649,6 +12670,8 @@ function bindEvents() {
     /* La historia clinica se escribe sobre su hoja, no aqui; el tratamiento y
        su costo, en la pestana Plan de tratamiento. La nota los arrastra tal
        cual para no borrarlos al corregir el motivo o el cobro. */
+    // si la hoja ya abrio la atencion de ese dia, la nota la completa
+    if (!data.id) data.id = atencionAbiertaPorLaHoja(data.patientId, data.date)?.id || "";
     const anterior = data.id ? state.clinicalHistory.find((item) => item.id === data.id) : null;
     const entry = {
       id: data.id || uid("h"),
